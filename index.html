@@ -3,348 +3,360 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Mini App</title>
+    <title>SnapPages</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .hidden { display: none !important; }
-        .tab-content { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .bottom-nav { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); }
-        .dark-mode .bottom-nav { background: rgba(30,30,30,0.85); border-color: #374151; }
-        .highlight-post { border: 2px solid #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); transition: 1s; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        /* Animated Small Bottom Nav */
+        .bottom-nav { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); width: 220px; transition: 0.3s; }
+        .dark-mode .bottom-nav { background: rgba(30,30,30,0.9); border-color: #374151; }
+        .nav-btn.active { color: #3b82f6; transform: scale(1.1); }
+        
+        /* Image Slider */
+        .img-slider { scroll-snap-type: x mandatory; overflow-x: auto; scrollbar-width: none; }
+        .img-slider::-webkit-scrollbar { display: none; }
+        .img-snap { scroll-snap-align: center; }
+
+        /* Bottom Sheet Modals */
+        .bottom-sheet { transform: translateY(100%); transition: transform 0.3s ease-in-out; }
+        .bottom-sheet.open { transform: translateY(0); }
+        .blur-bg { backdrop-filter: blur(8px); background: rgba(0,0,0,0.5); }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-900 transition-colors duration-300 pb-24 font-sans">
+<body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
 
-    <!-- Top Header -->
-    <header class="p-4 bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-10 font-bold text-lg flex justify-between items-center transition-colors" id="headerContainer">
-        <span id="headerTitle">Home</span>
-        <!-- Search bar (Only shows in Search Tab) -->
-        <input type="text" id="searchInput" class="hidden w-2/3 p-2 bg-gray-100 rounded-lg outline-none text-sm focus:ring-2 focus:ring-blue-500" placeholder="Search posts...">
+    <!-- Header -->
+    <header class="p-4 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm">
+        <span id="headerTitle">SnapPages</span>
     </header>
 
-    <!-- ================= TABS ================= -->
-    
-    <!-- 1. HOME TAB -->
-    <main id="tab-home" class="tab-content p-4 space-y-4 max-w-lg mx-auto">
-        <div id="feed" class="space-y-4">
-            <div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i><p class="mt-2 text-sm">Loading amazing posts...</p></div>
-        </div>
-        
-        <!-- FAB Create Post Button -->
-        <button id="openPostBtn" class="fixed bottom-24 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105 transition">
-            <i class="fas fa-pen"></i>
-        </button>
+    <!-- MAIN TABS -->
+    <main id="tab-home" class="p-4 max-w-lg mx-auto space-y-4 fade-in">
+        <div id="feed" class="space-y-4"><div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div></div>
+        <button onclick="openModal('postModal')" class="fixed bottom-20 right-4 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105"><i class="fas fa-plus"></i></button>
     </main>
 
-    <!-- 2. SEARCH TAB -->
-    <main id="tab-search" class="tab-content hidden p-4 max-w-lg mx-auto space-y-4">
-        <div id="searchFeed" class="space-y-4"></div>
-    </main>
-
-    <!-- 3. SETTINGS TAB -->
-    <main id="tab-settings" class="tab-content hidden p-4 max-w-lg mx-auto space-y-4">
-        <div class="bg-white p-4 rounded-xl shadow-sm flex items-center space-x-4 mb-2 transition-colors">
-            <div id="setProfilePic" class="w-16 h-16 bg-blue-500 text-white rounded-full flex items-center justify-center text-3xl font-bold">U</div>
-            <div>
-                <h2 class="font-bold text-xl" id="setUserName">Loading...</h2>
-                <p class="text-sm text-gray-500" id="setLevel">Level: 1 | <i class="fas fa-users"></i> <span id="setReferrals">0</span></p>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden transition-colors">
-            <button class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
+    <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
+        <!-- Settings Menu -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <button onclick="loadMyPosts()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-layer-group w-6 text-blue-500"></i> My Posts</span>
             </button>
-            <button id="referBtn" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
-                <span><i class="fas fa-link w-6 text-green-500"></i> Copy Referral Link</span>
+            <button onclick="openModal('channelModal')" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
+                <span><i class="fas fa-robot w-6 text-purple-500"></i> Set Auto Post Channels</span>
             </button>
-            <div class="p-4 border-b flex items-center justify-between">
-                <span><i class="fas fa-bell w-6 text-yellow-500"></i> Notifications</span>
-                <input type="checkbox" id="notifToggle" checked class="w-5 h-5 accent-blue-500">
-            </div>
-            <a href="https://t.me/telegram" target="_blank" class="block w-full text-left p-4 flex items-center justify-between hover:bg-gray-50 text-blue-500 font-bold">
-                <span><i class="fas fa-headset w-6"></i> Support</span>
+            <button onclick="copyRefer()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
+                <span><i class="fas fa-link w-6 text-green-500"></i> Refer Link</span>
+            </button>
+            <a href="https://t.me/+GyFgfeJIub81MDg9" target="_blank" class="block w-full p-4 hover:bg-gray-50 text-blue-600 font-bold">
+                <i class="fas fa-headset w-6"></i> Support
             </a>
         </div>
     </main>
 
-    <!-- ================= CAPSULE BOTTOM NAV ================= -->
-    <nav class="fixed bottom-4 left-4 right-4 max-w-md mx-auto bottom-nav shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full flex justify-around items-center p-2 z-50 border border-gray-200">
-        <button onclick="switchTab('home')" class="p-3 text-gray-500 hover:text-blue-600 transition w-16 text-center text-blue-600" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
-        <button onclick="switchTab('search')" class="p-3 text-gray-500 hover:text-blue-600 transition w-16 text-center" id="nav-search"><i class="fas fa-search text-2xl"></i></button>
-        <button onclick="switchTab('settings')" class="p-3 text-gray-500 hover:text-blue-600 transition w-16 text-center" id="nav-settings"><i class="fas fa-user text-2xl"></i></button>
+    <!-- SMALL ANIMATED BOTTOM NAV -->
+    <nav class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
+        <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
+        <button onclick="switchTab('search')" class="nav-btn text-gray-400 transition"><i class="fas fa-search text-2xl"></i></button>
+        <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
+            <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
+        </button>
     </nav>
 
-    <!-- ================= CREATE POST MODAL ================= -->
-    <div id="postModal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-end justify-center p-2 backdrop-blur-sm">
-        <div class="bg-white w-full max-w-lg rounded-t-2xl p-5 mb-0 transform transition-transform transition-colors">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-lg">Create New Post</h3>
-                <button onclick="document.getElementById('postModal').classList.add('hidden')"><i class="fas fa-times text-gray-500 text-xl"></i></button>
-            </div>
-            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-28 mb-3 outline-none resize-none border border-gray-200 focus:border-blue-500 transition-colors" placeholder="What's on your mind?"></textarea>
-            
-            <input type="file" id="imageUpload" accept="image/*" class="hidden">
-            <button onclick="document.getElementById('imageUpload').click()" class="border border-blue-500 text-blue-500 px-4 py-2 rounded-full text-sm mb-4 flex items-center hover:bg-blue-50 transition"><i class="fas fa-image mr-2"></i> Add Photo</button>
-            
-            <img id="previewImg" class="hidden w-full h-40 object-cover rounded-lg mb-4 border shadow-sm">
+    <!-- ================= MODALS & BOTTOM SHEETS ================= -->
 
-            <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg hover:bg-blue-700 transition shadow-lg">Post Now</button>
+    <!-- CREATE POST (Multi Image) -->
+    <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl">
+            <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Create Post</h3><button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button></div>
+            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" placeholder="What's on your mind?"></textarea>
+            
+            <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
+            <button onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
+            
+            <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
+            <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Post</button>
         </div>
+    </div>
+
+    <!-- COMMENTS BOTTOM SHEET -->
+    <div id="commentModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[70vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b pb-2"><h3 class="font-bold">Comments</h3><button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button></div>
+            <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3"></div>
+            <div class="flex gap-2">
+                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none" placeholder="Write a comment...">
+                <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MY POSTS MODAL -->
+    <div id="myPostsModal" class="hidden fixed inset-0 bg-white z-50 flex flex-col">
+        <div class="p-4 shadow-sm flex items-center gap-4 bg-white"><button onclick="closeModal('myPostsModal')"><i class="fas fa-arrow-left text-xl"></i></button><h2 class="font-bold text-lg">My Posts</h2></div>
+        <div id="myPostsList" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"></div>
+    </div>
+
+    <!-- SETUP CHANNEL MODAL -->
+    <div id="channelModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="channelSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[70vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Auto Post Channels</h3><button onclick="closeSheet('channelModalBg', 'channelSheet')"><i class="fas fa-times"></i></button></div>
+            <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel!</p>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Channel username or link">
+                <button id="setupChannelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">SetUp</button>
+            </div>
+            <div id="channelList" class="flex-1 overflow-y-auto space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- IMAGE LIGHTBOX -->
+    <div id="lightbox" class="hidden fixed inset-0 bg-black/95 z-[60] flex items-center justify-center">
+        <button onclick="closeModal('lightbox')" class="absolute top-5 right-5 text-white text-3xl"><i class="fas fa-times"></i></button>
+        <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
     <!-- ================= JAVASCRIPT ================= -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-        // ⚠️ আপনার Supabase URL ও Key এখানে অবশ্যই বসাবেন
-        const SUPABASE_URL = 'https://znecyxkatbuzgnvcwitm.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2';
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
+        const supabase = createClient('https://znecyxkatbuzgnvcwitm.supabase.co', 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2'); // ⚠️ Update this!
+        
         const tg = window.Telegram.WebApp;
         let currentUser = null;
-        let base64Image = null;
+        let imagesArray = [];
+        let currentPostIdForComment = null;
 
-        // 1. Initialize & Full Screen
-        tg.ready();
-        try { if(tg.requestFullscreen) tg.requestFullscreen(); else tg.expand(); } catch(e) { tg.expand(); }
+        tg.expand();
+        if(tg.colorScheme === 'dark') document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
 
-        // 2. Dynamic Theme Engine
-        const applyTheme = () => {
-            const isDark = tg.colorScheme === 'dark';
-            if (isDark) {
-                document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
-                document.body.classList.remove('bg-gray-100', 'text-gray-900');
-                document.querySelectorAll('.bg-white, .bg-gray-50').forEach(el => { el.classList.add('bg-gray-800', 'border-gray-700'); el.classList.remove('bg-white', 'bg-gray-50'); });
-            } else {
-                document.body.classList.remove('bg-gray-900', 'text-white', 'dark-mode');
-                document.body.classList.add('bg-gray-100', 'text-gray-900');
-                // Removed dynamic light reset for simplicity, rely on Tailwind defaults
-            }
-        };
-        applyTheme();
-        tg.onEvent('themeChanged', applyTheme);
+        // Auth & Get Profile Data
+        async function initApp() {
+            const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData }) });
+            const data = await res.json();
+            currentUser = data.user;
+            document.getElementById('navProfilePic').src = currentUser.photo_url || `https://ui-avatars.com/api/?name=${currentUser.name}`;
+            loadPosts();
+        }
 
-        // 3. Tab Navigation Logic
+        // Navigation
         window.switchTab = (tab) => {
-            ['home', 'search', 'settings'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`nav-${t}`).classList.remove('text-blue-600');
-            });
+            ['home', 'settings'].forEach(t => document.getElementById(`tab-${t}`).classList.add('hidden'));
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`nav-${tab}`).classList.add('text-blue-600');
             
-            const header = document.getElementById('headerTitle');
-            const searchInput = document.getElementById('searchInput');
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active', 'text-blue-600'));
+            const activeBtn = document.getElementById(`nav-${tab}`);
+            if(activeBtn) activeBtn.classList.add('active', 'text-blue-600');
             
-            if(tab === 'search') {
-                header.classList.add('hidden');
-                searchInput.classList.remove('hidden');
-            } else {
-                header.classList.remove('hidden');
-                searchInput.classList.add('hidden');
-                header.innerText = tab.charAt(0).toUpperCase() + tab.slice(1);
-            }
+            if(tab === 'settings') document.getElementById('navProfilePic').classList.add('border-blue-600');
+            else document.getElementById('navProfilePic').classList.remove('border-blue-600');
         };
 
-        // 4. Authenticate via Backend API
-        async function authenticate() {
-            try {
-                // এখানে সরাসরি /api/auth কল করা হয়েছে (যেহেতু একই সার্ভারে হোস্ট করা)
-                const res = await fetch('/api/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ initData: tg.initData })
-                });
-                
-                const data = await res.json();
-                if (data.success) {
-                    currentUser = data.user;
-                    // Update Settings UI
-                    document.getElementById('setUserName').innerText = currentUser.name;
-                    document.getElementById('setProfilePic').innerText = currentUser.name.charAt(0);
-                    document.getElementById('setLevel').innerHTML = `Level: ${currentUser.level || 1} | <i class="fas fa-users"></i> ${currentUser.refer_count || 0}`;
-                    document.getElementById('notifToggle').checked = currentUser.push_notif !== false;
-                } else {
-                    tg.showAlert("Authentication Failed! Please open from Telegram.");
-                }
-            } catch (err) {
-                console.error("Auth Error:", err);
-            }
+        // UI Helpers
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+        window.closeSheet = (bg, sheet) => {
+            document.getElementById(sheet).classList.remove('open');
+            setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
         }
+        window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
-        // 5. Fetch and Render Posts
-        async function loadPosts(queryText = '') {
-            const feed = document.getElementById(queryText ? 'searchFeed' : 'feed');
-            
-            let query = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(20);
-            if (queryText) query = query.ilike('text', `%${queryText}%`);
-            
-            const { data: posts, error } = await query;
-            if (error) { feed.innerHTML = '<p class="text-center text-red-500">Error loading posts!</p>'; return; }
-
-            feed.innerHTML = '';
-            
-            if (posts.length === 0) {
-                feed.innerHTML = '<p class="text-center text-gray-400 py-10">No posts found.</p>';
-                return;
-            }
-
-            for(let post of posts) {
-                const likesCount = post.likes ? post.likes.length : 0;
-                const isLiked = post.likes && post.likes.includes(currentUser?.tg_id?.toString() || currentUser?.id?.toString());
-                
-                let badge = post.type === 'channel' ? `<span class="bg-gray-200 text-gray-700 text-xs px-2 py-0.5 rounded ml-2">Channel</span>` : '';
-                
-                // Fetch User Level for Blue Badge
-                if (post.type === 'user') {
-                    const { data: u } = await supabase.from('users').select('level').eq('tg_id', post.author_id).single();
-                    if (u?.level === 5) badge = `<span class="text-blue-500 ml-1 text-sm"><i class="fas fa-check-circle"></i></span>`;
-                }
-
-                const postEl = document.createElement('div');
-                postEl.className = `p-4 rounded-xl shadow-sm border mb-4 ${tg.colorScheme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`;
-                postEl.id = `post_${post.id}`;
-
-                postEl.innerHTML = `
-                    <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('tg://user?id=${post.author_id}')">
-                        <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">${post.author_name.charAt(0)}</div>
-                        <div>
-                            <h3 class="font-bold flex items-center text-sm">${post.author_name} ${badge}</h3>
-                            <p class="text-xs text-gray-400">Just now</p>
-                        </div>
-                    </div>
-                    <p class="mb-3 whitespace-pre-wrap text-sm">${post.text}</p>
-                    ${post.image_url ? `<img src="${post.image_url}" class="w-full rounded-lg mb-3 object-cover max-h-64 border">` : ''}
-                    
-                    <div class="flex justify-between items-center text-gray-500 text-sm border-t ${tg.colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-100'} pt-3 mt-2">
-                        <button onclick="interact('${post.id}', 'like', '${post.author_id}')" class="flex items-center gap-1 hover:text-red-500 transition ${isLiked ? 'text-red-500' : ''}">
-                            <i class="fas fa-heart"></i> <span id="like_${post.id}">${likesCount}</span>
-                        </button>
-                        <button class="flex items-center gap-1 hover:text-blue-500 transition"><i class="fas fa-comment"></i></button>
-                        <button class="flex items-center gap-1 hover:text-green-500 transition"><i class="fas fa-share"></i></button>
-                        <button class="flex items-center gap-1 hover:text-blue-500 font-bold transition"><i class="fas fa-user-plus"></i> Follow</button>
-                    </div>
-                `;
-                feed.appendChild(postEl);
-            }
-
-            // Deep Linking Handler (Scrolls to post if opened from Notification)
-            const startParam = tg.initDataUnsafe?.start_param;
-            if (startParam && startParam.startsWith('post_') && !queryText) {
-                setTimeout(() => {
-                    const target = document.getElementById(startParam);
-                    if (target) {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        target.classList.add('highlight-post');
-                        setTimeout(() => target.classList.remove('highlight-post'), 2500);
-                    }
-                }, 800);
-            }
-        }
-
-        // 6. Like Action API
-        window.interact = async (postId, action, authorId) => {
-            try {
-                // UI Instant Update
-                const likeIcon = document.querySelector(`#like_${postId}`).previousElementSibling;
-                const likeCountSpan = document.getElementById(`like_${postId}`);
-                let currentCount = parseInt(likeCountSpan.innerText);
-
-                if(likeIcon.classList.contains('text-red-500')) {
-                    likeIcon.classList.remove('text-red-500');
-                    likeCountSpan.innerText = currentCount - 1;
-                } else {
-                    likeIcon.classList.add('text-red-500');
-                    likeCountSpan.innerText = currentCount + 1;
-                }
-
-                // Backend Request
-                await fetch('/api/interact', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ initData: tg.initData, postId, action, targetUserId: authorId })
-                });
-            } catch (err) {
-                console.error("Action Error", err);
-            }
-        };
-
-        // 7. Image Upload Logic (Base64)
+        // Multi Image Upload Logic
         document.getElementById('imageUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if(file) {
+            const files = Array.from(e.target.files);
+            if (imagesArray.length + files.length > 4) return tg.showAlert("Maximum 4 images allowed!");
+            
+            files.forEach(file => {
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                    base64Image = event.target.result;
-                    document.getElementById('previewImg').src = base64Image;
-                    document.getElementById('previewImg').classList.remove('hidden');
+                reader.onload = (ev) => {
+                    imagesArray.push(ev.target.result);
+                    renderPreviews();
                 };
                 reader.readAsDataURL(file);
-            }
-        });
-
-        // 8. Create Post Call
-        document.getElementById('openPostBtn').onclick = () => document.getElementById('postModal').classList.remove('hidden');
-        
-        document.getElementById('submitPostBtn').addEventListener('click', async () => {
-            const text = document.getElementById('postText').value;
-            if(!text && !base64Image) return tg.showAlert("Please write something or upload a photo!");
-            
-            const btn = document.getElementById('submitPostBtn');
-            btn.innerText = "Posting..."; 
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/api/createPost', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ initData: tg.initData, text, imageBase64: base64Image })
-                });
-                
-                const data = await res.json();
-                if (data.error) {
-                    tg.showAlert("Error: " + data.error);
-                } else {
-                    document.getElementById('postModal').classList.add('hidden');
-                    document.getElementById('postText').value = '';
-                    document.getElementById('previewImg').classList.add('hidden');
-                    base64Image = null;
-                    loadPosts(); // Reload feed
-                }
-            } catch (err) {
-                tg.showAlert("Network Error! Please try again.");
-            }
-            
-            btn.innerText = "Post Now"; 
-            btn.disabled = false;
-        });
-
-        // 9. Extra Features (Search, Referral, Settings)
-        document.getElementById('searchInput').addEventListener('input', (e) => loadPosts(e.target.value));
-
-        document.getElementById('notifToggle').addEventListener('change', (e) => {
-            fetch('/api/updateSettings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData: tg.initData, push_notif: e.target.checked })
             });
         });
 
-        document.getElementById('referBtn').onclick = () => {
-            const botUsername = "SnapPagesBot"; // ⚠️ আপনার টেলিগ্রাম বটের ইউজারনেম এখানে দিন
-            const id = currentUser?.tg_id || currentUser?.id;
-            const link = `https://t.me/${botUsername}?start=${id}`;
-            navigator.clipboard.writeText(link).then(() => tg.showAlert("Referral Link Copied!"));
+        function renderPreviews() {
+            const c = document.getElementById('imgPreviewContainer');
+            c.innerHTML = '';
+            imagesArray.forEach((src, idx) => {
+                c.innerHTML += `<div class="relative min-w-[80px] h-20 rounded-lg overflow-hidden border">
+                    <img src="${src}" class="w-full h-full object-cover">
+                    <button onclick="removeImg(${idx})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"><i class="fas fa-times"></i></button>
+                </div>`;
+            });
+        }
+        window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
+
+        // Create Post
+        document.getElementById('submitPostBtn').addEventListener('click', async () => {
+            const text = document.getElementById('postText').value;
+            if(!text && imagesArray.length===0) return;
+            const btn = document.getElementById('submitPostBtn');
+            btn.innerText = "Posting..."; btn.disabled = true;
+
+            await fetch('/api/createPost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, text, imagesBase64: imagesArray }) });
+            
+            closeModal('postModal');
+            document.getElementById('postText').value = '';
+            imagesArray = []; renderPreviews();
+            btn.innerText = "Post"; btn.disabled = false;
+            loadPosts();
+        });
+
+        // Load Feed
+        async function loadPosts() {
+            const { data: posts } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(30);
+            const feed = document.getElementById('feed');
+            feed.innerHTML = '';
+            
+            posts.forEach(async post => {
+                // Determine Author Photo
+                let authPhoto = 'https://ui-avatars.com/api/?name=' + post.author_name;
+                if(post.type === 'user') {
+                    const { data: u } = await supabase.from('users').select('photo_url').eq('tg_id', post.author_id).single();
+                    if(u?.photo_url) authPhoto = u.photo_url;
+                } else {
+                    const { data: u } = await supabase.from('users').select('channels').contains('channels', [{id: post.author_id}]);
+                    if(u && u.length > 0) {
+                        const ch = u[0].channels.find(c => c.id === post.author_id);
+                        if(ch && ch.photo) authPhoto = ch.photo;
+                    }
+                }
+
+                // Render Image Slider
+                let imgHtml = '';
+                if(post.image_urls && post.image_urls.length > 0) {
+                    imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg">`;
+                    post.image_urls.forEach(url => {
+                        imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
+                    });
+                    imgHtml += `</div>`;
+                    if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe for more images <i class="fas fa-exchange-alt"></i></p>`;
+                }
+
+                feed.innerHTML += `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border ${document.body.classList.contains('dark-mode') ? 'bg-gray-800 border-gray-700' : ''}">
+                        <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+post.author_id.replace('-100','') : 'tg://user?id='+post.author_id}')">
+                            <img src="${authPhoto}" class="w-10 h-10 rounded-full object-cover">
+                            <h3 class="font-bold text-sm">${post.author_name}</h3>
+                        </div>
+                        <p class="mb-3 text-sm whitespace-pre-wrap">${post.text}</p>
+                        ${imgHtml}
+                        <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
+                            <button class="hover:text-red-500"><i class="fas fa-heart"></i></button>
+                            <button onclick="openComments('${post.id}')" class="hover:text-blue-500"><i class="fas fa-comment"></i> Comment</button>
+                            <button onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent('https://t.me/SnapPagesBot/app?startapp=post_'+post.id)}')" class="hover:text-green-500"><i class="fas fa-share"></i> Share</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // ================= Comments Logic =================
+        window.openComments = async (postId) => {
+            currentPostIdForComment = postId;
+            document.getElementById('commentModalBg').classList.remove('hidden');
+            setTimeout(() => document.getElementById('commentSheet').classList.add('open'), 10);
+            fetchComments();
+        }
+        window.closeComment = () => closeSheet('commentModalBg', 'commentSheet');
+
+        async function fetchComments() {
+            const list = document.getElementById('commentList');
+            list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading...</p>';
+            const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
+            const comments = await res.json();
+            list.innerHTML = '';
+            comments.forEach(c => {
+                const isMine = c.author_id === currentUser.tg_id;
+                list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
+                    <span class="font-bold">${c.author_name}</span>: ${c.text}
+                    ${isMine ? `<button onclick="delComment('${c.id}')" class="absolute top-2 right-2 text-red-400"><i class="fas fa-trash"></i></button>` : ''}
+                </div>`;
+            });
+        }
+
+        document.getElementById('sendCommentBtn').onclick = async () => {
+            const text = document.getElementById('commentInput').value;
+            if(!text) return;
+            await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text }) });
+            document.getElementById('commentInput').value = '';
+            fetchComments();
         };
 
-        // App Initializer Start
-        authenticate().then(() => loadPosts());
+        window.delComment = async (id) => {
+            await fetch('/api/deleteComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, commentId: id }) });
+            fetchComments();
+        }
 
+        // ================= My Posts =================
+        window.loadMyPosts = async () => {
+            openModal('myPostsModal');
+            const list = document.getElementById('myPostsList');
+            list.innerHTML = 'Loading...';
+            const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
+            list.innerHTML = '';
+            data.forEach(p => {
+                list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center">
+                    <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
+                    <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
+                </div>`;
+            });
+        };
+        window.deletePost = async (id) => {
+            if(confirm("Delete post?")) {
+                await fetch('/api/deletePost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: id }) });
+                loadMyPosts(); loadPosts();
+            }
+        };
+
+        // ================= Channel Setup =================
+        document.querySelector('[onclick="openModal(\'channelModal\')"]').onclick = () => {
+            document.getElementById('channelModalBg').classList.remove('hidden');
+            setTimeout(() => document.getElementById('channelSheet').classList.add('open'), 10);
+            renderChannels();
+        };
+
+        function renderChannels() {
+            const list = document.getElementById('channelList');
+            list.innerHTML = '';
+            (currentUser.channels || []).forEach(c => {
+                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border">
+                    <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
+                    <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
+                </div>`;
+            });
+        }
+
+        document.getElementById('setupChannelBtn').onclick = async () => {
+            const input = document.getElementById('channelInput').value;
+            if(!input) return;
+            const btn = document.getElementById('setupChannelBtn');
+            btn.innerText = "...";
+            const res = await fetch('/api/addChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelInput: input }) });
+            const data = await res.json();
+            btn.innerText = "SetUp";
+            if(data.error) tg.showAlert(data.error);
+            else { currentUser.channels = data.channels; renderChannels(); document.getElementById('channelInput').value=''; }
+        };
+
+        window.removeChannel = async (id) => {
+            const res = await fetch('/api/removeChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelId: id }) });
+            const data = await res.json();
+            currentUser.channels = data.channels; renderChannels();
+        };
+
+        // Extra
+        window.copyRefer = () => {
+            navigator.clipboard.writeText(`https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`);
+            tg.showAlert("Referral link copied!");
+        };
+
+        initApp();
     </script>
 </body>
 </html>
