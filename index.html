@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>.hidden { display: none !important; } .modal-bg { background-color: rgba(0, 0, 0, 0.6); }</style>
+</head>
+<body class="bg-gray-50 text-gray-900 transition-colors duration-300 font-sans">
+
+    <nav id="navbar" class="sticky top-0 z-10 p-4 shadow-sm flex justify-between items-center bg-white">
+        <div class="flex items-center space-x-2">
+            <div><h1 class="font-bold text-lg" id="userName">Loading...</h1></div>
+        </div>
+        <button id="settingsBtn" class="p-2 bg-gray-100 rounded-full">⚙️</button>
+    </nav>
+
+    <div id="feed" class="p-4 pb-24 max-w-lg mx-auto space-y-4">
+        <div class="text-center text-gray-500 mt-10">Loading...</div>
+    </div>
+
+    <button id="openPostModalBtn" class="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg z-20">✍️ Post</button>
+
+    <!-- Create Post Modal -->
+    <div id="postModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bg p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+            <button id="closePostModalBtn" class="absolute top-4 right-4 text-gray-500">✖</button>
+            <h2 class="text-xl font-bold mb-4">Create Post</h2>
+            <textarea id="postText" class="w-full border rounded-lg p-3 h-28 mb-3" placeholder="What's on your mind?"></textarea>
+            <input type="url" id="postImageUrl" class="w-full border rounded-lg p-3 mb-4" placeholder="Image URL (Optional)">
+            <button id="submitPostBtn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Submit</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // ⚠️ আপনার Supabase Project Settings > API থেকে এগুলো দিন 
+        const supabaseUrl = 'YOUR_SUPABASE_URL';
+        const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        if(tg.initDataUnsafe?.user) {
+            document.getElementById('userName').innerText = tg.initDataUnsafe.user.first_name;
+        }
+
+        async function loadPosts() {
+            const feed = document.getElementById('feed');
+            
+            // Fetch top 20 posts for fast loading
+            const { data: posts, error } = await supabase
+                .from('posts')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(20);
+                
+            feed.innerHTML = '';
+            
+            if(posts) {
+                for(let post of posts) {
+                    // Check badge for users
+                    let badgeHTML = post.type === 'channel' ? `<span class="bg-gray-200 text-xs px-2 py-0.5 rounded ml-2">Channel</span>` : '';
+                    if(post.type === 'user') {
+                        const { data: user } = await supabase.from('users').select('level').eq('tg_id', post.author_id).single();
+                        if(user && user.level === 5) badgeHTML = `<span class="text-blue-500 ml-1">✔️</span>`;
+                    }
+
+                    const postEl = document.createElement('div');
+                    postEl.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100";
+                    postEl.id = `post_${post.id}`;
+                    
+                    postEl.innerHTML = `
+                        <a href="${post.type === 'user' ? `tg://user?id=${post.author_id}` : '#'}" class="flex items-center space-x-3 mb-3">
+                            <div><h3 class="font-bold flex items-center">${post.author_name} ${badgeHTML}</h3></div>
+                        </a>
+                        <p class="text-gray-800 mb-3 whitespace-pre-wrap">${post.text}</p>
+                        ${post.image_url ? `<img src="${post.image_url}" class="w-full rounded-lg object-cover">` : ''}
+                    `;
+                    feed.appendChild(postEl);
+                }
+            }
+        }
+
+        document.getElementById('submitPostBtn').addEventListener('click', async () => {
+            const text = document.getElementById('postText').value;
+            const imageUrl = document.getElementById('postImageUrl').value;
+            const btn = document.getElementById('submitPostBtn');
+            btn.innerText = "Posting...";
+
+            const response = await fetch('/api/createPost', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData: tg.initData, text, imageUrl })
+            });
+
+            if(response.ok) {
+                tg.showAlert("Posted successfully!");
+                document.getElementById('postModal').classList.add('hidden');
+                loadPosts();
+            }
+            btn.innerText = "Submit";
+        });
+
+        document.getElementById('openPostModalBtn').onclick = () => document.getElementById('postModal').classList.remove('hidden');
+        document.getElementById('closePostModalBtn').onclick = () => document.getElementById('postModal').classList.add('hidden');
+
+        loadPosts();
+    </script>
+</body>
+</html>
