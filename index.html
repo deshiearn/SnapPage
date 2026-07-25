@@ -3,281 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Telegram Pro App</title>
+    <title>Pro Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .hidden { display: none !important; }
-        .tab-content { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Capsule Bottom Nav */
-        .bottom-nav { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); }
-        .dark-mode .bottom-nav { background: rgba(30,30,30,0.85); }
+        /* Smooth Fade In */
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        /* Deep link Highlight */
+        .highlight-post { border: 2px solid #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); transition: 1s; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-900 transition-colors duration-300 pb-20">
+<body class="bg-gray-50 text-gray-900 transition-colors duration-300 pb-20 fade-in">
 
-    <!-- Top Header -->
-    <header class="p-4 bg-white shadow-sm sticky top-0 z-10 font-bold text-lg" id="headerTitle">Home</header>
+    <!-- Search Header -->
+    <header class="sticky top-0 bg-white/90 backdrop-blur-md p-4 shadow-sm z-40 flex items-center gap-3">
+        <input type="text" id="searchInput" placeholder="Search posts..." class="w-full bg-gray-100 rounded-full px-4 py-2 outline-none border border-transparent focus:border-blue-500 transition">
+    </header>
 
-    <!-- ================= TABS ================= -->
-    
-    <!-- 1. HOME TAB -->
-    <main id="tab-home" class="tab-content p-4 space-y-4 max-w-lg mx-auto">
-        <div id="feed"></div>
-        <button id="openPostBtn" class="fixed bottom-24 right-6 bg-blue-500 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40"><i class="fas fa-pen"></i></button>
-    </main>
+    <!-- Main Feed -->
+    <main id="feed" class="p-4 max-w-lg mx-auto space-y-4"></main>
 
-    <!-- 2. SEARCH TAB -->
-    <main id="tab-search" class="tab-content hidden p-4 max-w-lg mx-auto">
-        <input type="text" class="w-full p-3 rounded-lg border mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Search posts..." id="searchInput">
-        <h3 class="font-bold mb-3 text-gray-500" id="txtTrending">🔥 Trending Posts</h3>
-        <div id="trendingFeed" class="space-y-4"></div>
-    </main>
+    <!-- Create Post FAB -->
+    <button onclick="document.getElementById('postModal').classList.remove('hidden')" class="fixed bottom-24 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105 transition"><i class="fas fa-plus"></i></button>
 
-    <!-- 3. SETTINGS TAB -->
-    <main id="tab-settings" class="tab-content hidden p-4 max-w-lg mx-auto space-y-3">
-        <div class="bg-white p-4 rounded-xl shadow-sm flex items-center space-x-4 mb-6">
-            <img id="setProfilePic" src="https://via.placeholder.com/60" class="w-16 h-16 rounded-full object-cover">
-            <div>
-                <h2 class="font-bold text-xl" id="setUserName">Name</h2>
-                <p class="text-sm text-gray-500" id="setLevel">Level: 1</p>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <button class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
-                <span><i class="fas fa-layer-group w-6 text-blue-500"></i> <span class="lang-myposts">My Posts</span></span>
-            </button>
-            <button id="referBtn" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
-                <span><i class="fas fa-users w-6 text-green-500"></i> <span class="lang-refer">Referrals</span></span>
-            </button>
-            <div class="p-4 border-b flex items-center justify-between">
-                <span><i class="fas fa-bell w-6 text-yellow-500"></i> <span class="lang-notif">Notifications</span></span>
-                <input type="checkbox" id="notifToggle" class="w-5 h-5 accent-blue-500">
-            </div>
-            <div class="p-4 border-b flex justify-between items-center">
-                <span><i class="fas fa-language w-6 text-purple-500"></i> <span class="lang-lang">Language</span></span>
-                <select id="langSelect" class="bg-gray-100 border-none rounded p-1 text-sm outline-none">
-                    <option value="en">English</option>
-                    <option value="ru">Русский</option>
-                    <option value="bn">বাংলা</option>
-                </select>
-            </div>
-            <a href="https://t.me/telegram" target="_blank" class="block w-full text-left p-4 flex items-center justify-between hover:bg-gray-50 text-blue-500 font-bold">
-                <span><i class="fas fa-headset w-6"></i> Support</span>
-            </a>
-        </div>
-    </main>
-
-    <!-- ================= CAPSULE BOTTOM NAV ================= -->
-    <nav class="fixed bottom-4 left-4 right-4 max-w-md mx-auto bottom-nav shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-full flex justify-around items-center p-2 z-50 border border-gray-200">
-        <button onclick="switchTab('home')" class="p-3 text-gray-500 hover:text-blue-500 transition w-16 text-center" id="nav-home"><i class="fas fa-home text-xl"></i></button>
-        <button onclick="switchTab('search')" class="p-3 text-gray-500 hover:text-blue-500 transition w-16 text-center" id="nav-search"><i class="fas fa-search text-xl"></i></button>
-        <button onclick="switchTab('settings')" class="p-2 transition w-16 flex justify-center" id="nav-settings">
-            <img id="navProfilePic" src="https://via.placeholder.com/40" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
-        </button>
+    <!-- Bottom Capsule Nav -->
+    <nav class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-xl shadow-xl rounded-full flex gap-8 px-8 py-3 z-50 border border-gray-200">
+        <button class="text-blue-600"><i class="fas fa-home text-xl"></i></button>
+        <button class="text-gray-400 hover:text-blue-500"><i class="fas fa-user-circle text-xl"></i></button>
+        <button class="text-gray-400 hover:text-blue-500"><i class="fas fa-cog text-xl"></i></button>
     </nav>
 
-    <!-- Post Create Modal -->
-    <div id="postModal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-end justify-center p-2">
-        <div class="bg-white w-full max-w-lg rounded-t-2xl p-5 mb-0 transform transition-transform">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-lg lang-createpost">Create Post</h3>
-                <button onclick="document.getElementById('postModal').classList.add('hidden')"><i class="fas fa-times text-gray-500"></i></button>
-            </div>
-            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none resize-none" placeholder="What's on your mind?"></textarea>
-            
-            <input type="file" id="imageUpload" accept="image/*" class="hidden">
-            <button onclick="document.getElementById('imageUpload').click()" class="border border-blue-500 text-blue-500 px-4 py-2 rounded-full text-sm mb-4 flex items-center"><i class="fas fa-image mr-2"></i> Add Photo</button>
-            <img id="previewImg" class="hidden w-full h-32 object-cover rounded-lg mb-4">
-
-            <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg">Post</button>
-        </div>
-    </div>
-
-    <!-- Script (Supabase, Telegram Logic) -->
+    <!-- Scripts -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-        // ⚠️ আপনার Supabase URL & Key দিন
         const supabase = createClient('https://znecyxkatbuzgnvcwitm.supabase.co', 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2');
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-
-        const user = tg.initDataUnsafe?.user;
-        const photoUrl = user?.photo_url || 'https://via.placeholder.com/150';
-        let currentLang = 'en';
-
-        // UI Setup
-        document.getElementById('setUserName').innerText = user?.first_name || 'User';
-        document.getElementById('setProfilePic').src = photoUrl;
-        document.getElementById('navProfilePic').src = photoUrl;
-
-        // --- Translations ---
-        const dict = {
-            en: { myposts: "My Posts", refer: "Referrals", notif: "Notifications", lang: "Language", createpost: "Create Post" },
-            ru: { myposts: "Мои посты", refer: "Рефералы", notif: "Уведомления", lang: "Язык", createpost: "Создать пост" },
-            bn: { myposts: "আমার পোস্ট", refer: "রেফারেল", notif: "নোটিফিকেশন", lang: "ভাষা", createpost: "পোস্ট করুন" }
-        };
-        const applyLang = (lang) => {
-            currentLang = lang;
-            document.querySelectorAll('.lang-myposts').forEach(e => e.innerText = dict[lang].myposts);
-            document.querySelectorAll('.lang-refer').forEach(e => e.innerText = dict[lang].refer);
-            document.querySelectorAll('.lang-notif').forEach(e => e.innerText = dict[lang].notif);
-            document.querySelectorAll('.lang-lang').forEach(e => e.innerText = dict[lang].lang);
-        };
-        document.getElementById('langSelect').addEventListener('change', (e) => applyLang(e.target.value));
-
-        // --- Tab Switching ---
-        window.switchTab = (tab) => {
-            ['home', 'search', 'settings'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`nav-${t}`).classList.remove('text-blue-500');
-            });
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            
-            if(tab === 'settings') {
-                document.getElementById('navProfilePic').classList.add('border-blue-500');
-                document.getElementById('headerTitle').innerText = "Settings";
-            } else {
-                document.getElementById('navProfilePic').classList.remove('border-blue-500');
-                document.getElementById(`nav-${tab}`).classList.add('text-blue-500');
-                document.getElementById('headerTitle').innerText = tab.charAt(0).toUpperCase() + tab.slice(1);
-            }
-        };
-        switchTab('home');
-
-        // --- Fetch & Render Posts ---
-        async function loadPosts(containerId, isTrending = false) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
-            
-            let query = supabase.from('posts').select('*').order(isTrending ? 'likes' : 'created_at', { ascending: false }).limit(20);
-            const { data: posts } = await query;
-            
-            container.innerHTML = '';
-            if (posts) {
-                posts.forEach(post => {
-                    const likesCount = post.likes ? post.likes.length : 0;
-                    const isLiked = post.likes && post.likes.includes(user?.id.toString());
-                    const profileLink = post.author_name ? `https://t.me/${post.author_name}` : '#';
-
-                    container.innerHTML += `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100" id="post_${post.id}">
-                            <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('${profileLink}')">
-                                <div class="w-10 h-10 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">${post.author_name.charAt(0)}</div>
-                                <div>
-                                    <h3 class="font-bold text-sm">${post.author_name}</h3>
-                                    <p class="text-xs text-gray-400">Just now</p>
-                                </div>
-                            </div>
-                            <p class="mb-3 text-sm">${post.text}</p>
-                            ${post.image_url ? `<img src="${post.image_url}" class="w-full rounded-lg mb-3 object-cover">` : ''}
-                            
-                            <!-- Action Bar -->
-                            <div class="flex justify-between items-center text-gray-500 text-sm border-t pt-3 mt-2">
-                                <button onclick="interact('${post.id}', 'like', '${post.author_id}')" class="flex items-center space-x-1 ${isLiked ? 'text-red-500' : ''}">
-                                    <i class="fas fa-heart"></i> <span id="like_${post.id}">${likesCount}</span>
-                                </button>
-                                <button class="flex items-center space-x-1 hover:text-blue-500"><i class="fas fa-comment"></i> <span>Comment</span></button>
-                                <button onclick="interact('${post.id}', 'share', '${post.author_id}')" class="flex items-center space-x-1 hover:text-green-500"><i class="fas fa-share"></i></button>
-                                <button onclick="interact('${post.id}', 'report', '${post.author_id}')" class="flex items-center space-x-1 hover:text-orange-500"><i class="fas fa-flag"></i></button>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
-        }
-
-        // --- Interaction Logic (Like, Share) ---
-        window.interact = async (postId, action, authorId) => {
-            if(action === 'like') {
-                const icon = document.querySelector(`#like_${postId}`).previousElementSibling;
-                icon.classList.toggle('text-red-500');
-            }
-            fetch('/api/interact', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData: tg.initData, postId, action, targetUserId: authorId })
-            }).then(res => res.json()).then(data => {
-                if(data.likes !== undefined) document.getElementById(`like_${postId}`).innerText = data.likes;
-                if(action === 'share') tg.openTelegramLink(`https://t.me/share/url?url=Check out this post!`);
-                if(action === 'report') tg.showAlert("Post reported successfully!");
-            });
-        };
-
-        // --- Image Base64 Upload Setup ---
-        let base64Image = null;
-        document.getElementById('imageUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if(file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    base64Image = event.target.result;
-                    document.getElementById('previewImg').src = base64Image;
-                    document.getElementById('previewImg').classList.remove('hidden');
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // --- Submit Post ---
-        document.getElementById('openPostBtn').onclick = () => document.getElementById('postModal').classList.remove('hidden');
         
-        document.getElementById('submitPostBtn').addEventListener('click', async () => {
-            const text = document.getElementById('postText').value;
-            if(!text && !base64Image) return tg.showAlert("Write something or upload a photo!");
-            
-            const btn = document.getElementById('submitPostBtn');
-            btn.innerText = "Posting..."; btn.disabled = true;
+        const tg = window.Telegram.WebApp;
+        
+        // 1. Full Screen Mode Integration
+        tg.ready();
+        try {
+            if (tg.requestFullscreen) tg.requestFullscreen(); // New API
+            else tg.expand(); // Fallback
+        } catch (e) { tg.expand(); }
 
-            await fetch('/api/createPost', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData: tg.initData, text, imageBase64: base64Image })
-            });
-
-            document.getElementById('postModal').classList.add('hidden');
-            btn.innerText = "Post"; btn.disabled = false;
-            document.getElementById('postText').value = '';
-            document.getElementById('previewImg').classList.add('hidden');
-            base64Image = null;
-            loadPosts('feed');
-        });
-
-        // --- Save Settings / Load App ---
-        document.getElementById('notifToggle').addEventListener('change', (e) => {
-            fetch('/api/updateSettings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData: tg.initData, push_notif: e.target.checked, lang: currentLang, photo_url: photoUrl })
-            });
-        });
-
-        document.getElementById('referBtn').onclick = () => {
-            tg.showAlert(`Share this link: https://t.me/YOUR_BOT_USERNAME?start=${user?.id}`);
-        }
-
-        // Init
-        loadPosts('feed');
-        loadPosts('trendingFeed', true); // Search tab data
-
-        // Theme Support
+        // 2. Dynamic Theme
         const applyTheme = () => {
-            if(tg.colorScheme === 'dark') {
-                document.body.classList.add('bg-gray-900', 'text-white');
-                document.body.classList.remove('bg-gray-100', 'text-gray-900');
-                document.querySelectorAll('.bg-white').forEach(el => {
-                    el.classList.add('bg-gray-800', 'border-gray-700');
-                    el.classList.remove('bg-white', 'border-gray-100');
-                });
-            }
+            const isDark = tg.colorScheme === 'dark';
+            document.body.className = isDark ? 'bg-gray-900 text-white pb-20' : 'bg-gray-50 text-gray-900 pb-20';
+            document.querySelector('header').className = isDark ? 'sticky top-0 bg-gray-900/90 backdrop-blur-md p-4 shadow-sm z-40 flex items-center gap-3 border-b border-gray-800' : 'sticky top-0 bg-white/90 backdrop-blur-md p-4 shadow-sm z-40 flex items-center gap-3';
+            document.querySelector('nav').className = isDark ? 'fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800/90 backdrop-blur-xl shadow-xl rounded-full flex gap-8 px-8 py-3 z-50 border border-gray-700' : 'fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-xl shadow-xl rounded-full flex gap-8 px-8 py-3 z-50 border border-gray-200';
         };
         applyTheme();
         tg.onEvent('themeChanged', applyTheme);
 
+        // 3. Backend Verification & Auto Welcome Call
+        let currentUserData = null;
+        async function authenticate() {
+            const res = await fetch('YOUR_RENDER_URL/api/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData: tg.initData })
+            });
+            const data = await res.json();
+            currentUserData = data.user;
+        }
+
+        // 4. Feed Render & Deep Linking logic
+        async function loadPosts(searchQuery = '') {
+            const feed = document.getElementById('feed');
+            let query = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(20);
+            
+            if (searchQuery) query = query.ilike('text', `%${searchQuery}%`);
+            
+            const { data: posts } = await query;
+            feed.innerHTML = '';
+
+            posts.forEach(async post => {
+                // UI Level Badge Logic
+                let badge = post.type === 'channel' ? `<span class="bg-gray-200 text-gray-700 text-xs px-2 py-0.5 rounded ml-2">Channel</span>` : '';
+                if (post.type === 'user') {
+                    const { data: u } = await supabase.from('users').select('level').eq('tg_id', post.author_id).single();
+                    if (u?.level === 5) badge = `<span class="text-blue-500 ml-1 text-sm"><i class="fas fa-check-circle"></i></span>`;
+                }
+
+                const postEl = document.createElement('div');
+                postEl.className = `p-4 rounded-xl shadow-sm border ${tg.colorScheme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`;
+                postEl.id = `post_${post.id}`;
+
+                postEl.innerHTML = `
+                    <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('tg://user?id=${post.author_id}')">
+                        <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">${post.author_name.charAt(0)}</div>
+                        <div>
+                            <h3 class="font-bold flex items-center">${post.author_name} ${badge}</h3>
+                        </div>
+                    </div>
+                    <p class="mb-3 whitespace-pre-wrap text-sm">${post.text}</p>
+                    ${post.image_url ? `<img src="${post.image_url}" class="w-full rounded-lg mb-3 object-cover">` : ''}
+                    
+                    <div class="flex justify-between items-center text-gray-500 text-sm border-t ${tg.colorScheme === 'dark' ? 'border-gray-700' : ''} pt-3 mt-2">
+                        <button class="hover:text-red-500"><i class="fas fa-heart"></i> ${post.likes.length}</button>
+                        <button class="hover:text-blue-500"><i class="fas fa-comment"></i></button>
+                        <button class="hover:text-green-500"><i class="fas fa-share"></i></button>
+                        <button class="hover:text-blue-500 font-bold"><i class="fas fa-user-plus"></i> Follow</button>
+                    </div>
+                `;
+                feed.appendChild(postEl);
+            });
+
+            // Deep Link Handler (startapp=post_12345)
+            const startParam = tg.initDataUnsafe?.start_param;
+            if (startParam && startParam.startsWith('post_') && !searchQuery) {
+                setTimeout(() => {
+                    const target = document.getElementById(startParam);
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        target.classList.add('highlight-post');
+                        setTimeout(() => target.classList.remove('highlight-post'), 2000);
+                    }
+                }, 1000); // Wait for render
+            }
+        }
+
+        // Search Listener
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            loadPosts(e.target.value);
+        });
+
+        // Initialize App
+        authenticate().then(() => loadPosts());
     </script>
 </body>
 </html>
