@@ -30,14 +30,18 @@
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
 
-    <!-- Header -->
-    <header class="p-4 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm">
+    <!-- Header (Smaller size: Reduced padding to py-2 px-4 and text to text-base) -->
+    <header class="py-2 px-4 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-semibold text-base flex items-center justify-between shadow-sm">
         <span id="headerTitle">SnapPages</span>
     </header>
 
     <!-- MAIN TABS -->
     <main id="tab-home" class="p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <div id="feed" class="space-y-4"><div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div></div>
+        <div id="feed" class="space-y-4">
+            <div class="text-center text-gray-400 py-10">
+                <i class="fas fa-spinner fa-spin text-3xl"></i>
+            </div>
+        </div>
         <button onclick="openModal('postModal')" class="fixed bottom-20 right-4 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105"><i class="fas fa-plus"></i></button>
     </main>
 
@@ -136,10 +140,14 @@
 
         // Auth & Get Profile Data
         async function initApp() {
-            const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData }) });
-            const data = await res.json();
-            currentUser = data.user;
-            document.getElementById('navProfilePic').src = currentUser.photo_url || `https://ui-avatars.com/api/?name=${currentUser.name}`;
+            try {
+                const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData }) });
+                const data = await res.json();
+                currentUser = data.user;
+                document.getElementById('navProfilePic').src = currentUser.photo_url || `https://ui-avatars.com/api/?name=${currentUser.name || 'U'}`;
+            } catch(e) {
+                console.error("Auth Error", e);
+            }
             loadPosts();
         }
 
@@ -208,52 +216,74 @@
             loadPosts();
         });
 
-        // Load Feed
+        // Load Feed (FIXED: Used Promise.all to avoid InnerHTML Race Conditions)
         async function loadPosts() {
-            const { data: posts } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(30);
             const feed = document.getElementById('feed');
-            feed.innerHTML = '';
+            feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
             
-            posts.forEach(async post => {
-                // Determine Author Photo
-                let authPhoto = 'https://ui-avatars.com/api/?name=' + post.author_name;
-                if(post.type === 'user') {
-                    const { data: u } = await supabase.from('users').select('photo_url').eq('tg_id', post.author_id).single();
-                    if(u?.photo_url) authPhoto = u.photo_url;
-                } else {
-                    const { data: u } = await supabase.from('users').select('channels').contains('channels', [{id: post.author_id}]);
-                    if(u && u.length > 0) {
-                        const ch = u[0].channels.find(c => c.id === post.author_id);
-                        if(ch && ch.photo) authPhoto = ch.photo;
+            try {
+                const { data: posts, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(30);
+                
+                if(error) throw error;
+
+                if (!posts || posts.length === 0) {
+                    feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts available.</div>';
+                    return;
+                }
+
+                const postPromises = posts.map(async post => {
+                    // Determine Author Photo
+                    let authPhoto = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(post.author_name || 'User');
+                    try {
+                        if(post.type === 'user') {
+                            const { data: u } = await supabase.from('users').select('photo_url').eq('tg_id', post.author_id).single();
+                            if(u?.photo_url) authPhoto = u.photo_url;
+                        } else if(post.type === 'channel') {
+                            const { data: u } = await supabase.from('users').select('channels').contains('channels', [{id: post.author_id}]);
+                            if(u && u.length > 0) {
+                                const ch = u[0].channels.find(c => c.id === post.author_id);
+                                if(ch && ch.photo) authPhoto = ch.photo;
+                            }
+                        }
+                    } catch(err) {
+                        console.error('Error fetching photo for user', err);
                     }
-                }
 
-                // Render Image Slider
-                let imgHtml = '';
-                if(post.image_urls && post.image_urls.length > 0) {
-                    imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg">`;
-                    post.image_urls.forEach(url => {
-                        imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
-                    });
-                    imgHtml += `</div>`;
-                    if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe for more images <i class="fas fa-exchange-alt"></i></p>`;
-                }
+                    // Render Image Slider
+                    let imgHtml = '';
+                    if(post.image_urls && post.image_urls.length > 0) {
+                        imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg">`;
+                        post.image_urls.forEach(url => {
+                            imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
+                        });
+                        imgHtml += `</div>`;
+                        if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe for more images <i class="fas fa-exchange-alt"></i></p>`;
+                    }
 
-                feed.innerHTML += `
-                    <div class="bg-white p-4 rounded-xl shadow-sm border ${document.body.classList.contains('dark-mode') ? 'bg-gray-800 border-gray-700' : ''}">
-                        <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+post.author_id.replace('-100','') : 'tg://user?id='+post.author_id}')">
-                            <img src="${authPhoto}" class="w-10 h-10 rounded-full object-cover">
-                            <h3 class="font-bold text-sm">${post.author_name}</h3>
-                        </div>
-                        <p class="mb-3 text-sm whitespace-pre-wrap">${post.text}</p>
-                        ${imgHtml}
-                        <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
-                            <button class="hover:text-red-500"><i class="fas fa-heart"></i></button>
-                            <button onclick="openComments('${post.id}')" class="hover:text-blue-500"><i class="fas fa-comment"></i> Comment</button>
-                            <button onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent('https://t.me/SnapPagesBot/app?startapp=post_'+post.id)}')" class="hover:text-green-500"><i class="fas fa-share"></i> Share</button>
-                        </div>
-                    </div>`;
-            });
+                    return `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border ${document.body.classList.contains('dark-mode') ? 'bg-gray-800 border-gray-700' : ''}">
+                            <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+String(post.author_id).replace('-100','') : 'tg://user?id='+post.author_id}')">
+                                <img src="${authPhoto}" class="w-10 h-10 rounded-full object-cover">
+                                <h3 class="font-bold text-sm">${post.author_name || 'Unknown'}</h3>
+                            </div>
+                            <p class="mb-3 text-sm whitespace-pre-wrap">${post.text || ''}</p>
+                            ${imgHtml}
+                            <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
+                                <button class="hover:text-red-500"><i class="fas fa-heart"></i></button>
+                                <button onclick="openComments('${post.id}')" class="hover:text-blue-500"><i class="fas fa-comment"></i> Comment</button>
+                                <button onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent('https://t.me/SnapPagesBot/app?startapp=post_'+post.id)}')" class="hover:text-green-500"><i class="fas fa-share"></i> Share</button>
+                            </div>
+                        </div>`;
+                });
+
+                // Resolve all async mappings and update the DOM exactly once
+                const htmlArray = await Promise.all(postPromises);
+                feed.innerHTML = htmlArray.join('');
+
+            } catch (err) {
+                console.error("Supabase Error:", err);
+                feed.innerHTML = '<div class="text-center text-red-400 py-10">Failed to load posts. Check Database connection.</div>';
+            }
         }
 
         // ================= Comments Logic =================
@@ -268,16 +298,20 @@
         async function fetchComments() {
             const list = document.getElementById('commentList');
             list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading...</p>';
-            const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
-            const comments = await res.json();
-            list.innerHTML = '';
-            comments.forEach(c => {
-                const isMine = c.author_id === currentUser.tg_id;
-                list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
-                    <span class="font-bold">${c.author_name}</span>: ${c.text}
-                    ${isMine ? `<button onclick="delComment('${c.id}')" class="absolute top-2 right-2 text-red-400"><i class="fas fa-trash"></i></button>` : ''}
-                </div>`;
-            });
+            try {
+                const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
+                const comments = await res.json();
+                list.innerHTML = '';
+                comments.forEach(c => {
+                    const isMine = currentUser && c.author_id === currentUser.tg_id;
+                    list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
+                        <span class="font-bold">${c.author_name}</span>: ${c.text}
+                        ${isMine ? `<button onclick="delComment('${c.id}')" class="absolute top-2 right-2 text-red-400"><i class="fas fa-trash"></i></button>` : ''}
+                    </div>`;
+                });
+            } catch (e) {
+                 list.innerHTML = '<p class="text-center text-gray-400 text-sm">Failed to load comments</p>';
+            }
         }
 
         document.getElementById('sendCommentBtn').onclick = async () => {
@@ -298,15 +332,24 @@
             openModal('myPostsModal');
             const list = document.getElementById('myPostsList');
             list.innerHTML = 'Loading...';
-            const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
-            list.innerHTML = '';
-            data.forEach(p => {
-                list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center">
-                    <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
-                    <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
-                </div>`;
-            });
+            try {
+                const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
+                list.innerHTML = '';
+                if(!data || data.length === 0) {
+                    list.innerHTML = '<p class="text-center mt-5 text-gray-500">No posts found</p>';
+                    return;
+                }
+                data.forEach(p => {
+                    list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center">
+                        <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
+                        <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
+                    </div>`;
+                });
+            } catch(e) {
+                list.innerHTML = 'Error loading posts';
+            }
         };
+        
         window.deletePost = async (id) => {
             if(confirm("Delete post?")) {
                 await fetch('/api/deletePost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: id }) });
@@ -324,6 +367,7 @@
         function renderChannels() {
             const list = document.getElementById('channelList');
             list.innerHTML = '';
+            if(!currentUser || !currentUser.channels) return;
             (currentUser.channels || []).forEach(c => {
                 list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border">
                     <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
@@ -352,8 +396,10 @@
 
         // Extra
         window.copyRefer = () => {
-            navigator.clipboard.writeText(`https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`);
-            tg.showAlert("Referral link copied!");
+            if(currentUser) {
+                navigator.clipboard.writeText(`https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`);
+                tg.showAlert("Referral link copied!");
+            }
         };
 
         initApp();
