@@ -63,7 +63,7 @@
         // 3. Backend Verification & Auto Welcome Call
         let currentUserData = null;
         async function authenticate() {
-            const res = await fetch('YOUR_RENDER_URL/api/auth', {
+            const res = await fetch('https://snappage-h0fa.onrender.com/api/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ initData: tg.initData })
