@@ -9,134 +9,102 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Image base64 রিসিভ করার জন্য লিমিট বাড়ানো হলো
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
-// Supabase & Bot Setup
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
-// Level Logic
-const getLevelDetails = (referCount) => {
-    if (referCount >= 10) return { level: 5, limit: 9999, channels: 5 };
-    if (referCount >= 8) return { level: 4, limit: 9, channels: 1 };
-    if (referCount >= 6) return { level: 3, limit: 7, channels: 1 };
-    if (referCount >= 4) return { level: 2, limit: 4, channels: 1 };
-    return { level: 1, limit: 2, channels: 1 };
-};
-
-// Bot /start Command
-bot.start(async (ctx) => {
-    const tgId = ctx.from.id.toString();
-    const referId = ctx.message.text.split(' ')[1];
-
-    const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgId).single();
-
-    if (!user) {
-        await supabase.from('users').insert([{ tg_id: tgId, name: ctx.from.first_name }]);
-
-        // Referral Logic
-        if (referId && referId !== tgId) {
-            const { data: referrer } = await supabase.from('users').select('refer_count').eq('tg_id', referId).single();
-            if (referrer) {
-                const newCount = referrer.refer_count + 1;
-                const { level } = getLevelDetails(newCount);
-                await supabase.from('users').update({ refer_count: newCount, level }).eq('tg_id', referId);
-                ctx.telegram.sendMessage(referId, `🎉 নতুন একজন আপনার লিংকে জয়েন করেছে!`);
+// --- Notification Function ---
+async function sendNotification(targetUserId, message, postId) {
+    const { data: user } = await supabase.from('users').select('push_notif').eq('tg_id', targetUserId).single();
+    if (user && user.push_notif) {
+        bot.telegram.sendMessage(targetUserId, message, {
+            reply_markup: {
+                inline_keyboard: [[ { text: 'Check Post 👀', web_app: { url: `${process.env.MINI_APP_URL}?startapp=post_${postId}` } } ]]
             }
-        }
+        }).catch(e => console.log("Bot blocked by user"));
     }
+}
 
-    ctx.reply('Welcome! Open the Mini App 👇', Markup.inlineKeyboard([
-        Markup.button.webApp('Launch App 🚀', process.env.MINI_APP_URL)
-    ]));
-});
-
-// Channel Auto Post Logic
-bot.on('channel_post', async (ctx) => {
-    const channelId = ctx.update.channel_post.chat.id.toString();
-    const message = ctx.update.channel_post;
-
-    // Check if channel is added by any user
-    const { data: users } = await supabase.from('users').select('tg_id').contains('added_channels', [channelId]);
-    if (!users || users.length === 0) return;
-
-    if (message.photo) {
-        const fileId = message.photo[message.photo.length - 1].file_id;
-        const fileLink = await ctx.telegram.getFileLink(fileId);
-        
-        try {
-            const imgbbRes = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}&image=${encodeURIComponent(fileLink)}`);
-            const imageUrl = imgbbRes.data.data.url;
-
-            const { data: postData } = await supabase.from('posts').insert([{
-                author_id: channelId,
-                author_name: ctx.update.channel_post.chat.title,
-                type: 'channel',
-                text: message.caption || "",
-                image_url: imageUrl
-            }]).select();
-
-            // Notify Followers
-            const { data: follows } = await supabase.from('follows').select('follower_id').eq('following_id', channelId);
-            if (follows) {
-                follows.forEach(async (f) => {
-                    const { data: u } = await supabase.from('users').select('push_notif').eq('tg_id', f.follower_id).single();
-                    if(u && u.push_notif) {
-                        ctx.telegram.sendMessage(f.follower_id, `🔔 **${ctx.update.channel_post.chat.title}** নতুন একটি পোস্ট করেছে!`, {
-                            parse_mode: 'Markdown',
-                            reply_markup: {
-                                inline_keyboard: [[ { text: 'View Post 👀', web_app: { url: `${process.env.MINI_APP_URL}?startapp=post_${postData[0].id}` } } ]]
-                            }
-                        });
-                    }
-                });
-            }
-        } catch (error) {
-            console.error("Error:", error);
-        }
-    }
-});
-
-// Create Post API from Frontend
+// --- Create Post & ImgBB Upload ---
 app.post('/api/createPost', async (req, res) => {
-    const { initData, text, imageUrl } = req.body;
+    const { initData, text, imageBase64 } = req.body;
+    const user = JSON.parse(new URLSearchParams(initData).get('user'));
     
-    // Telegram Security Verification
-    const urlParams = new URLSearchParams(initData);
-    const hash = urlParams.get('hash');
-    urlParams.delete('hash');
-    urlParams.sort();
-    let dataCheckString = '';
-    for (const [key, value] of urlParams.entries()) dataCheckString += `${key}=${value}\n`;
-    dataCheckString = dataCheckString.slice(0, -1);
-    
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(process.env.BOT_TOKEN).digest();
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+    let imageUrl = '';
+    if (imageBase64) {
+        try {
+            // ImgBB তে Base64 আপলোড
+            const form = new URLSearchParams();
+            form.append('image', imageBase64.split(',')[1]); 
+            const imgbbRes = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form);
+            imageUrl = imgbbRes.data.data.url;
+        } catch (e) { return res.status(500).json({ error: 'Image upload failed' }); }
+    }
 
-    if (calculatedHash !== hash) return res.status(403).json({ error: 'Unauthorized' });
-
-    const user = JSON.parse(urlParams.get('user'));
-    
-    // Insert Post
-    await supabase.from('posts').insert([{
+    const { data, error } = await supabase.from('posts').insert([{
         author_id: user.id.toString(),
         author_name: user.first_name,
         type: 'user',
-        text,
+        text: text,
         image_url: imageUrl
-    }]);
+    }]).select();
 
+    if(error) return res.status(500).json({ error: error.message });
+    res.json({ success: true, post: data[0] });
+});
+
+// --- Interact API (Like, Share, Report) ---
+app.post('/api/interact', async (req, res) => {
+    const { initData, postId, action, targetUserId } = req.body;
+    const user = JSON.parse(new URLSearchParams(initData).get('user'));
+    const userId = user.id.toString();
+
+    if (action === 'like') {
+        const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
+        let likes = post.likes || [];
+        if (!likes.includes(userId)) {
+            likes.push(userId);
+            await supabase.from('posts').update({ likes }).eq('id', postId);
+            if(userId !== targetUserId) sendNotification(targetUserId, `❤️ **${user.first_name}** liked your post!`, postId);
+        } else {
+            likes = likes.filter(id => id !== userId);
+            await supabase.from('posts').update({ likes }).eq('id', postId);
+        }
+        res.json({ success: true, likes: likes.length });
+    }
+    
+    else if (action === 'share') {
+        const { data: post } = await supabase.from('posts').select('shares').eq('id', postId).single();
+        await supabase.from('posts').update({ shares: post.shares + 1 }).eq('id', postId);
+        if(userId !== targetUserId) sendNotification(targetUserId, `🔄 **${user.first_name}** shared your post!`, postId);
+        res.json({ success: true });
+    }
+
+    else if (action === 'report') {
+        await supabase.from('reports').insert([{ post_id: postId, reporter_id: userId }]);
+        res.json({ success: true });
+    }
+});
+
+// --- Settings Updates API ---
+app.post('/api/updateSettings', async (req, res) => {
+    const { initData, push_notif, lang, photo_url, username } = req.body;
+    const user = JSON.parse(new URLSearchParams(initData).get('user'));
+    
+    await supabase.from('users').upsert({
+        tg_id: user.id.toString(),
+        name: user.first_name,
+        username: username || '',
+        photo_url: photo_url || '',
+        lang: lang,
+        push_notif: push_notif
+    });
     res.json({ success: true });
 });
 
-// Serve Frontend
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.use(bot.webhookCallback('/webhook'));
-app.listen(process.env.PORT || 3000, async () => {
-    console.log('Server is running!');
-    await bot.telegram.setWebhook(`${process.env.RENDER_EXTERNAL_URL}/webhook`);
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.listen(process.env.PORT || 3000, () => console.log('Server running!'));
