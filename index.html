@@ -49,7 +49,7 @@
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
 
     <!-- Header (No SnapPages Text, dynamic safe spacing) -->
-    <header class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm">
+    <header class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
         <span id="headerTitle"></span>
         <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="openModal('adminModal')">
             <i class="fas fa-user-shield"></i> Admin
@@ -88,7 +88,17 @@
 
     <!-- Settings Tab -->
     <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <!-- Live User Profile Card -->
+        <div class="bg-white rounded-xl p-4 shadow-sm border flex items-center space-x-4">
+            <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-16 h-16 rounded-full border-2 border-blue-500 object-cover">
+            <div>
+                <h3 id="settingsProfileName" class="font-bold text-base text-gray-900">Telegram User</h3>
+                <p id="settingsProfileUsername" class="text-xs text-gray-500">@username</p>
+                <span id="settingsProfileLevel" class="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level 1</span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden border">
             <button onclick="loadMyPosts()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-layer-group w-6 text-blue-500"></i> My Posts</span>
             </button>
@@ -120,12 +130,12 @@
 
     <!-- CREATE / EDIT POST MODAL -->
     <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none">
             <div class="flex justify-between items-center mb-4">
                 <h3 id="postModalTitle" class="font-bold">Create Post</h3>
                 <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
             </div>
-            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none animate-none" placeholder="What's on your mind?"></textarea>
+            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" placeholder="What's on your mind?"></textarea>
             
             <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
             <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
@@ -135,13 +145,11 @@
         </div>
     </div>
 
-    <!-- POST OPTIONS BOTTOM SHEET (Three-dot options) -->
+    <!-- POST OPTIONS BOTTOM SHEET -->
     <div id="optionsModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="optionsSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet flex flex-col shadow-2xl">
+        <div id="optionsSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet flex flex-col shadow-2xl animate-none">
             <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
-            <div id="optionsContent" class="space-y-3">
-                <!-- Dynamically populated options -->
-            </div>
+            <div id="optionsContent" class="space-y-3"></div>
             <button onclick="closeSheet('optionsModalBg', 'optionsSheet')" class="w-full mt-4 py-3 bg-gray-100 rounded-xl font-bold">Cancel</button>
         </div>
     </div>
@@ -153,9 +161,9 @@
                 <h3 class="font-bold">Comments</h3>
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
             </div>
-            <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3"></div>
+            <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
             <div class="flex gap-2">
-                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none" placeholder="Write a comment...">
+                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
@@ -172,7 +180,7 @@
                 <div class="p-4 bg-gray-50 rounded-xl border">
                     <label class="text-xs text-gray-500 font-bold block mb-1">YOUR REFERRAL LINK</label>
                     <div class="flex gap-2">
-                        <input type="text" id="referInputLink" readonly class="flex-1 bg-white border rounded-lg px-3 py-2 text-xs outline-none" value="">
+                        <input type="text" id="referInputLink" readonly class="flex-1 bg-white border rounded-lg px-3 py-2 text-xs outline-none text-gray-900" value="">
                         <button onclick="copyReferLinkDirect()" class="bg-blue-600 text-white px-4 rounded-lg flex items-center gap-1 text-sm font-semibold">
                             <i class="fas fa-copy"></i> Copy
                         </button>
@@ -211,17 +219,17 @@
             <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Auto Post Channels</h3><button onclick="closeSheet('channelModalBg', 'channelSheet')"><i class="fas fa-times"></i></button></div>
             <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel with post permissions!</p>
             <div class="flex gap-2 mb-4">
-                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Username, @channel, or link">
+                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm text-gray-900" placeholder="Username, @channel, or link">
                 <button id="setupChannelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">SetUp</button>
             </div>
-            <div id="channelList" class="flex-1 overflow-y-auto space-y-2"></div>
+            <div id="channelList" class="flex-1 overflow-y-auto space-y-2 animate-none"></div>
         </div>
     </div>
 
     <!-- MY POSTS MODAL -->
     <div id="myPostsModal" class="hidden fixed inset-0 bg-white z-50 flex flex-col">
         <div class="p-4 shadow-sm flex items-center gap-4 bg-white"><button onclick="closeModal('myPostsModal')"><i class="fas fa-arrow-left text-xl"></i></button><h2 class="font-bold text-lg">My Posts</h2></div>
-        <div id="myPostsList" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"></div>
+        <div id="myPostsList" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 animate-none"></div>
     </div>
 
     <!-- IMAGE LIGHTBOX -->
@@ -253,7 +261,7 @@
                     <div id="adminStatChannels" class="text-xl font-bold">0</div>
                 </div>
             </div>
-            <div class="bg-white p-4 rounded-xl border space-y-3">
+            <div class="bg-white p-4 rounded-xl border space-y-3 animate-none">
                 <h4 class="font-bold text-sm text-blue-600"><i class="fas fa-bullhorn"></i> Global Broadcast</h4>
                 <textarea id="adminBroadcastText" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Write message..."></textarea>
                 <button onclick="sendGlobalBroadcast()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Send</button>
@@ -355,8 +363,16 @@
             
             currentUser = dbUser;
 
-            document.getElementById('navProfilePic').src = currentUser.photo_url;
+            // Update Navigation profile picture
+            const safePhoto = currentUser.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}`;
+            document.getElementById('navProfilePic').src = safePhoto;
             
+            // Update Me/Settings Tab Profile Card elements
+            document.getElementById('settingsProfilePic').src = safePhoto;
+            document.getElementById('settingsProfileName').innerText = currentUser.name || "Telegram User";
+            document.getElementById('settingsProfileUsername').innerText = currentUser.username ? `@${currentUser.username}` : '';
+            document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+
             if (currentUser.is_admin) {
                 document.getElementById('adminBadge').classList.remove('hidden');
                 document.getElementById('adminPanelBtn').classList.remove('hidden');
@@ -389,6 +405,7 @@
         window.openModal = (id) => {
             document.getElementById(id).classList.remove('hidden');
             if(id === 'adminModal') loadAdminPanel();
+            if(id === 'channelModal') renderChannels(); // FIXED: Dynamically renders user auto-channels when opened
             if(id === 'postModal') {
                 document.getElementById('postModalTitle').innerText = "Create Post";
                 editModePostId = null;
@@ -404,13 +421,10 @@
         // Caption URL restriction logic based on level
         function formatCaption(text, level) {
             if (!text) return '';
-            // Match any standard URLs
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             if (level >= 3) {
-                // Render Clickable anchor tag link
                 return text.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-blue-500 underline">${url}</a>`);
             } else {
-                // Keep purely as raw unclickable text
                 return text.replace(urlRegex, (url) => `<span>${url}</span>`);
             }
         }
@@ -451,14 +465,12 @@
 
             try {
                 if (editModePostId) {
-                    // Update mode
                     await supabase.from('posts').update({
                         text: text,
                         image_urls: imagesArray
                     }).eq('id', editModePostId);
                     tg.showAlert("Post edited successfully!");
                 } else {
-                    // Create mode
                     await supabase.from('posts').insert([{
                         author_id: currentUser.tg_id,
                         author_name: currentUser.name,
@@ -482,7 +494,7 @@
             loadPosts();
         });
 
-        // Load Posts Feed with targeted unique post loading (Direct routing via parameter)
+        // Load Posts Feed with safety checks (FIXED: Prevented endless loading when database is empty)
         async function loadPosts() {
             const feed = document.getElementById('feed');
             feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
@@ -491,18 +503,21 @@
                 let { data: posts, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
                 if (error) throw error;
 
+                // Safe fallback if posts return null
+                if (!posts) posts = [];
+
                 // Handle unique link direct opening highlighting matching ID
                 const startParam = tg.initDataUnsafe?.start_param || "";
-                if (startParam.startsWith("post_")) {
+                if (startParam.startsWith("post_") && posts.length > 0) {
                     const postId = startParam.replace("post_", "");
                     const targetIdx = posts.findIndex(p => String(p.id) === postId);
                     if (targetIdx !== -1) {
                         const targetPost = posts.splice(targetIdx, 1)[0];
-                        posts.unshift(targetPost); // Push target to top
+                        posts.unshift(targetPost); 
                     }
                 }
 
-                if (!posts || posts.length === 0) {
+                if (posts.length === 0) {
                     feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
                     return;
                 }
@@ -516,7 +531,6 @@
                             const { data: u } = await supabase.from('users').select('photo_url, tg_id').eq('tg_id', post.author_id).maybeSingle();
                             if(u?.photo_url) authPhoto = u.photo_url;
                             
-                            // Fetch referrals to calculate their live levels
                             const { count: uRef } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
                             calculatedAuthorLevel = calculateLevel(uRef || 0);
                         }
@@ -563,14 +577,12 @@
             }
         }
 
-        // Share post directly into telegram forward screen
         window.sharePostDirectly = (id) => {
             const forwardLink = `https://t.me/SnapPagesBot/app?startapp=post_${id}`;
             const text = "Check out this amazing post on SnapPages!";
             tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent(text)}`);
         }
 
-        // Like local state handler
         window.likePost = (btn) => {
             btn.classList.toggle('text-red-500');
             const icon = btn.querySelector('i');
@@ -640,7 +652,7 @@
             }
         }
 
-        // ================= Comments Logic (Safe link rendering) =================
+        // ================= Comments Logic =================
         window.openComments = async (postId) => {
             currentPostIdForComment = postId;
             document.getElementById('commentModalBg').classList.remove('hidden');
@@ -653,25 +665,28 @@
             const list = document.getElementById('commentList');
             list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading comments...</p>';
             
-            const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
-            const comments = await res.json();
-            list.innerHTML = '';
-            
-            comments.forEach(c => {
-                const isMine = String(c.author_id) === String(currentUser.tg_id);
-                // Sanitize/replace HTML tags to prevent execution, rendering strictly as text
-                const safeCommentText = (c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                const likeCount = c.likes_count || 0;
+            try {
+                const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
+                const comments = await res.json();
+                list.innerHTML = '';
+                
+                comments.forEach(c => {
+                    const isMine = String(c.author_id) === String(currentUser.tg_id);
+                    const safeCommentText = (c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const likeCount = c.likes_count || 0;
 
-                list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
-                    <span class="font-bold text-gray-900">${c.author_name}</span>
-                    <p class="mt-1 text-gray-800">${safeCommentText}</p>
-                    <div class="mt-2 flex gap-4 text-xs text-gray-500">
-                        <button onclick="likeComment(this, '${c.id}')" class="hover:text-red-500 flex items-center gap-1"><i class="fas fa-heart"></i> ${likeCount} Like</button>
-                        ${isMine ? `<button onclick="removeCommentDirect('${c.id}')" class="text-red-400 hover:text-red-600 flex items-center gap-1"><i class="fas fa-trash-alt"></i> Delete</button>` : ''}
-                    </div>
-                </div>`;
-            });
+                    list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
+                        <span class="font-bold text-gray-900">${c.author_name}</span>
+                        <p class="mt-1 text-gray-800">${safeCommentText}</p>
+                        <div class="mt-2 flex gap-4 text-xs text-gray-500">
+                            <button onclick="likeComment(this, '${c.id}')" class="hover:text-red-500 flex items-center gap-1"><i class="fas fa-heart"></i> ${likeCount} Like</button>
+                            ${isMine ? `<button onclick="removeCommentDirect('${c.id}')" class="text-red-400 hover:text-red-600 flex items-center gap-1"><i class="fas fa-trash-alt"></i> Delete</button>` : ''}
+                        </div>
+                    </div>`;
+                });
+            } catch(e) {
+                list.innerHTML = '<p class="text-center text-red-400 text-sm">Error loading comments.</p>';
+            }
         }
 
         document.getElementById('sendCommentBtn').onclick = async () => {
@@ -683,7 +698,6 @@
         };
 
         window.likeComment = async (btn, commentId) => {
-            // Simulated local comment like clicker
             btn.classList.toggle('text-red-500');
         }
 
@@ -750,10 +764,17 @@
             }
         };
 
+        // FIXED: Universal clipboard copy selection fallback mechanism
         window.copyReferLinkDirect = () => {
-            const link = document.getElementById('referInputLink').value;
-            navigator.clipboard.writeText(link);
-            tg.showAlert("Link copied!");
+            const input = document.getElementById('referInputLink');
+            input.select();
+            input.setSelectionRange(0, 99999); 
+            try {
+                navigator.clipboard.writeText(input.value);
+            } catch (err) {
+                document.execCommand('copy');
+            }
+            tg.showAlert("Referral link copied!");
         }
 
         // ================= Auto Posting Channel Admin Check setup =================
@@ -773,7 +794,6 @@
             channelHandle = channelHandle.replace('@', '');
 
             try {
-                // Request channel verification logic from server api
                 const res = await fetch('/api/addChannel', { 
                     method: 'POST', 
                     headers: {'Content-Type':'application/json'}, 
@@ -849,7 +869,7 @@
             }
             history.forEach(h => {
                 list.innerHTML += `<span class="bg-gray-100 text-xs px-3 py-1.5 rounded-full flex items-center gap-2">
-                    <span class="cursor-pointer" onclick="document.getElementById('searchInput').value='${h}'; performSearch('${h}')">${h}</span>
+                    <span class="cursor-pointer text-gray-900 dark:text-white" onclick="document.getElementById('searchInput').value='${h}'; performSearch('${h}')">${h}</span>
                     <button onclick="removeHistoryItem('${h}')" class="text-red-400"><i class="fas fa-times-circle"></i></button>
                 </span>`;
             });
@@ -894,6 +914,39 @@
             });
         }
 
+        // ================= My Posts Modal =================
+        window.loadMyPosts = async () => {
+            openModal('myPostsModal');
+            const list = document.getElementById('myPostsList');
+            list.innerHTML = 'Loading...';
+            try {
+                const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
+                list.innerHTML = '';
+                if(!data || data.length === 0) {
+                    list.innerHTML = '<p class="text-center text-gray-400 py-6">No posts found.</p>';
+                    return;
+                }
+                data.forEach(p => {
+                    list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center text-gray-900">
+                        <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
+                        <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
+                    </div>`;
+                });
+            } catch(e) {
+                list.innerHTML = 'Error loading personal posts';
+            }
+        };
+
+        window.deletePost = async (id) => {
+            tg.showConfirm("Are you sure you want to delete this post?", async (ok) => {
+                if(ok) {
+                    await supabase.from('posts').delete().eq('id', id);
+                    loadMyPosts(); 
+                    loadPosts();
+                }
+            });
+        };
+
         // ================= Admin Controller =================
         async function loadAdminStats() {
             try {
@@ -913,7 +966,7 @@
             if(users) {
                 users.forEach(u => {
                     usersContainer.innerHTML += `
-                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1">
+                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1 text-gray-900">
                         <div>
                             <span class="font-bold">${u.name}</span>
                             <span class="text-gray-400 text-[10px] block">ID: ${u.tg_id}</span>
