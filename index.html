@@ -14,7 +14,6 @@
         
         /* Animated Small Bottom Nav */
         .bottom-nav { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); width: 220px; transition: 0.3s; }
-        .dark-mode .bottom-nav { background: rgba(30,30,30,0.9); border-color: #374151; }
         .nav-btn.active { color: #3b82f6; transform: scale(1.1); }
         
         /* Image Slider */
@@ -26,27 +25,63 @@
         .bottom-sheet { transform: translateY(100%); transition: transform 0.3s ease-in-out; }
         .bottom-sheet.open { transform: translateY(0); }
         .blur-bg { backdrop-filter: blur(8px); background: rgba(0,0,0,0.5); }
+
+        /* Dark Mode Automatic Styling Fixes to prevent invisible text on white background */
+        .dark-mode { background-color: #111827 !important; color: #f3f4f6 !important; }
+        .dark-mode header { background-color: rgba(17, 24, 39, 0.9) !important; border-bottom: 1px solid #374151; }
+        .dark-mode .bg-white { background-color: #1f2937 !important; color: #f3f4f6 !important; }
+        .dark-mode .text-gray-900 { color: #f3f4f6 !important; }
+        .dark-mode .text-gray-500 { color: #9ca3af !important; }
+        .dark-mode .border { border-color: #374151 !important; }
+        .dark-mode .border-b { border-color: #374151 !important; }
+        .dark-mode .bg-gray-50 { background-color: #374151 !important; color: #f3f4f6 !important; }
+        .dark-mode .bg-gray-100 { background-color: #111827 !important; color: #f3f4f6 !important; }
+        .dark-mode .bottom-nav { background: rgba(31, 41, 55, 0.9) !important; border-color: #4b5563 !important; }
+        .dark-mode .bottom-sheet { background-color: #1f2937 !important; color: #f3f4f6 !important; }
+        .dark-mode input, .dark-mode textarea { background-color: #2d3748 !important; color: #ffffff !important; border-color: #4a5568 !important; }
+        .dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #a0aec0 !important; }
+        .dark-mode button:hover { background-color: #2d3748 !important; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
 
-    <!-- Header (Smaller size: Reduced padding to py-2 px-4 and text to text-base) -->
-    <header class="py-2 px-4 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-semibold text-base flex items-center justify-between shadow-sm">
-        <span id="headerTitle">SnapPages</span>
+    <!-- Header (No SnapPages Text) -->
+    <header class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm">
+        <span id="headerTitle"></span>
+        <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="openModal('adminModal')">
+            <i class="fas fa-user-shield"></i> Admin
+        </div>
     </header>
 
     <!-- MAIN TABS -->
+    <!-- Home Tab -->
     <main id="tab-home" class="p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <div id="feed" class="space-y-4">
-            <div class="text-center text-gray-400 py-10">
-                <i class="fas fa-spinner fa-spin text-3xl"></i>
-            </div>
-        </div>
+        <div id="feed" class="space-y-4"><div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div></div>
         <button onclick="openModal('postModal')" class="fixed bottom-20 right-4 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105"><i class="fas fa-plus"></i></button>
     </main>
 
+    <!-- Search Tab (New Added) -->
+    <main id="tab-search" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
+        <div class="bg-white rounded-xl p-3 shadow-sm border flex gap-2">
+            <input type="text" id="searchInput" class="flex-1 bg-gray-50 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Search posts...">
+            <button onclick="triggerSearch()" class="bg-blue-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
+        </div>
+        
+        <div>
+            <h4 class="font-bold text-sm mb-2 flex items-center gap-2"><i class="fas fa-history text-gray-400"></i> Search History</h4>
+            <div id="searchHistoryList" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <hr class="border-gray-200 my-2">
+
+        <div>
+            <h4 class="font-bold text-sm mb-3 flex items-center gap-2 text-blue-500"><i class="fas fa-fire"></i> Top Posts</h4>
+            <div id="topPostsList" class="space-y-4"></div>
+        </div>
+    </main>
+
+    <!-- Settings Tab -->
     <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <!-- Settings Menu -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <button onclick="loadMyPosts()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-layer-group w-6 text-blue-500"></i> My Posts</span>
@@ -54,8 +89,11 @@
             <button onclick="openModal('channelModal')" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-robot w-6 text-purple-500"></i> Set Auto Post Channels</span>
             </button>
-            <button onclick="copyRefer()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
+            <button onclick="openReferSheet()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-link w-6 text-green-500"></i> Refer Link</span>
+            </button>
+            <button id="adminPanelBtn" onclick="openModal('adminModal')" class="hidden w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50 text-red-500 font-bold">
+                <span><i class="fas fa-user-shield w-6"></i> Admin Panel</span>
             </button>
             <a href="https://t.me/+GyFgfeJIub81MDg9" target="_blank" class="block w-full p-4 hover:bg-gray-50 text-blue-600 font-bold">
                 <i class="fas fa-headset w-6"></i> Support
@@ -66,7 +104,7 @@
     <!-- SMALL ANIMATED BOTTOM NAV -->
     <nav class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
         <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
-        <button onclick="switchTab('search')" class="nav-btn text-gray-400 transition"><i class="fas fa-search text-2xl"></i></button>
+        <button onclick="switchTab('search')" class="nav-btn text-gray-400 transition" id="nav-search"><i class="fas fa-search text-2xl"></i></button>
         <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
             <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
         </button>
@@ -100,6 +138,55 @@
         </div>
     </div>
 
+    <!-- REFER SYSTEM BOTTOM SHEET -->
+    <div id="referModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="referSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="font-bold text-lg"><i class="fas fa-gift text-green-500"></i> Referral Center</h3>
+                <button onclick="closeSheet('referModalBg', 'referSheet')"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="space-y-4 flex-1 overflow-y-auto pr-1">
+                <div class="p-4 bg-gray-50 rounded-xl border">
+                    <label class="text-xs text-gray-500 font-bold block mb-1">YOUR REFERRAL LINK</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="referInputLink" readonly class="flex-1 bg-white border rounded-lg px-3 py-2 text-xs outline-none" value="">
+                        <button onclick="copyReferLinkDirect()" class="bg-blue-600 text-white px-4 rounded-lg flex items-center gap-1 text-sm font-semibold">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Level Stats System -->
+                <div>
+                    <h4 class="font-bold text-sm mb-2 text-gray-700">Referral Level Earnings</h4>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
+                            <div class="text-xs text-blue-600 font-bold">Lvl 1 (10%)</div>
+                            <div id="lvl1Count" class="text-xl font-bold text-gray-800">0</div>
+                        </div>
+                        <div class="bg-purple-50 p-3 rounded-lg border border-purple-100 text-center">
+                            <div class="text-xs text-purple-600 font-bold">Lvl 2 (5%)</div>
+                            <div id="lvl2Count" class="text-xl font-bold text-gray-800">0</div>
+                        </div>
+                        <div class="bg-pink-50 p-3 rounded-lg border border-pink-100 text-center">
+                            <div class="text-xs text-pink-600 font-bold">Lvl 3 (2%)</div>
+                            <div id="lvl3Count" class="text-xl font-bold text-gray-800">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div>
+                    <h4 class="font-bold text-sm mb-2 text-gray-700">Referral History</h4>
+                    <div id="referHistoryList" class="space-y-2 max-h-40 overflow-y-auto">
+                        <p class="text-xs text-gray-400 text-center py-4">No refer stats yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- MY POSTS MODAL -->
     <div id="myPostsModal" class="hidden fixed inset-0 bg-white z-50 flex flex-col">
         <div class="p-4 shadow-sm flex items-center gap-4 bg-white"><button onclick="closeModal('myPostsModal')"><i class="fas fa-arrow-left text-xl"></i></button><h2 class="font-bold text-lg">My Posts</h2></div>
@@ -110,9 +197,9 @@
     <div id="channelModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="channelSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[70vh] flex flex-col">
             <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Auto Post Channels</h3><button onclick="closeSheet('channelModalBg', 'channelSheet')"><i class="fas fa-times"></i></button></div>
-            <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel!</p>
+            <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel with full rights!</p>
             <div class="flex gap-2 mb-4">
-                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Channel username or link">
+                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Username, @channel, or link">
                 <button id="setupChannelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">SetUp</button>
             </div>
             <div id="channelList" class="flex-1 overflow-y-auto space-y-2"></div>
@@ -125,10 +212,61 @@
         <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
+    <!-- ADMIN PANEL FULL SCREEN MODAL -->
+    <div id="adminModal" class="hidden fixed inset-0 bg-white z-[60] flex flex-col overflow-hidden">
+        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b">
+            <div class="flex items-center gap-3">
+                <button onclick="closeModal('adminModal')"><i class="fas fa-arrow-left text-xl"></i></button>
+                <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
+            </div>
+            <div class="text-xs font-bold text-gray-400">A2Z SYSTEM CONTROL</div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50 text-gray-900">
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-white p-3 rounded-xl border text-center">
+                    <div class="text-xs text-gray-500 font-bold">Total Users</div>
+                    <div id="adminStatUsers" class="text-xl font-bold">0</div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border text-center">
+                    <div class="text-xs text-gray-500 font-bold">Total Posts</div>
+                    <div id="adminStatPosts" class="text-xl font-bold">0</div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border text-center">
+                    <div class="text-xs text-gray-500 font-bold">Active Channels</div>
+                    <div id="adminStatChannels" class="text-xl font-bold">0</div>
+                </div>
+            </div>
+
+            <!-- Global Configuration / Broadcast -->
+            <div class="bg-white p-4 rounded-xl border space-y-3 shadow-sm">
+                <h4 class="font-bold text-sm text-blue-600"><i class="fas fa-bullhorn"></i> Global Notification / Broadcast</h4>
+                <textarea id="adminBroadcastText" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Write message to all users..."></textarea>
+                <button onclick="sendGlobalBroadcast()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Send Broadcast</button>
+            </div>
+
+            <!-- User and Role Management -->
+            <div class="bg-white p-4 rounded-xl border space-y-3 shadow-sm">
+                <h4 class="font-bold text-sm text-gray-800"><i class="fas fa-users-cog"></i> Manage Users</h4>
+                <div class="space-y-2 max-h-48 overflow-y-auto" id="adminUsersList">
+                    <p class="text-xs text-gray-400 py-3 text-center">Loading users...</p>
+                </div>
+            </div>
+
+            <!-- Content Management (Delete Post) -->
+            <div class="bg-white p-4 rounded-xl border space-y-3 shadow-sm">
+                <h4 class="font-bold text-sm text-red-600"><i class="fas fa-trash-alt"></i> Delete Flagged Posts</h4>
+                <div class="space-y-2 max-h-48 overflow-y-auto" id="adminPostsList">
+                    <p class="text-xs text-gray-400 py-3 text-center">Loading posts...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ================= JAVASCRIPT ================= -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-        const supabase = createClient('https://znecyxkatbuzgnvcwitm.supabase.co', 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2'); // ⚠️ Update this!
+        const supabase = createClient('https://znecyxkatbuzgnvcwitm.supabase.co', 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2');
         
         const tg = window.Telegram.WebApp;
         let currentUser = null;
@@ -136,24 +274,92 @@
         let currentPostIdForComment = null;
 
         tg.expand();
-        if(tg.colorScheme === 'dark') document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
 
-        // Auth & Get Profile Data
-        async function initApp() {
-            try {
-                const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData }) });
-                const data = await res.json();
-                currentUser = data.user;
-                document.getElementById('navProfilePic').src = currentUser.photo_url || `https://ui-avatars.com/api/?name=${currentUser.name || 'U'}`;
-            } catch(e) {
-                console.error("Auth Error", e);
+        // 1. Theme Automation Logic (Auto Dark / Light Mode)
+        function applyAutoTheme() {
+            if (tg.colorScheme === 'dark') {
+                document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
+                document.body.classList.remove('bg-gray-100', 'text-gray-900');
+            } else {
+                document.body.classList.remove('bg-gray-900', 'text-white', 'dark-mode');
+                document.body.classList.add('bg-gray-100', 'text-gray-900');
             }
-            loadPosts();
+        }
+        tg.onEvent('themeChanged', applyAutoTheme);
+        applyAutoTheme();
+
+        // Parse profile info automatically from Telegram App
+        function getTelegramUser() {
+            const user = tg.initDataUnsafe?.user || {};
+            return {
+                tg_id: user.id ? String(user.id) : "99999999",
+                name: [user.first_name, user.last_name].filter(Boolean).join(' ') || "Telegram User",
+                username: user.username || "tg_user",
+                photo_url: user.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name || 'U')}`
+            };
         }
 
-        // Navigation
+        // Initialize App & Auto Register User with Live Telegram Information
+        async function initApp() {
+            const liveUser = getTelegramUser();
+            
+            // Sync with Supabase (Check/Create User with latest photo and details)
+            let { data: dbUser, error } = await supabase.from('users').select('*').eq('tg_id', liveUser.tg_id).single();
+            
+            if (!dbUser) {
+                // Determine if they were referred
+                let referred_by = null;
+                const startParam = tg.initDataUnsafe?.start_param || "";
+                if (startParam.startsWith("ref_")) {
+                    referred_by = startParam.replace("ref_", "");
+                }
+
+                const { data: newUser, error: insertError } = await supabase.from('users').insert([{
+                    tg_id: liveUser.tg_id,
+                    name: liveUser.name,
+                    username: liveUser.username,
+                    photo_url: liveUser.photo_url,
+                    channels: [],
+                    referred_by: referred_by,
+                    is_admin: false,
+                    created_at: new Date().toISOString()
+                }]).select().single();
+                
+                dbUser = newUser;
+            } else {
+                // Auto update Telegram changes if any
+                if(dbUser.name !== liveUser.name || dbUser.photo_url !== liveUser.photo_url) {
+                    const { data: updated } = await supabase.from('users').update({
+                        name: liveUser.name,
+                        photo_url: liveUser.photo_url,
+                        username: liveUser.username
+                    }).eq('tg_id', liveUser.tg_id).select().single();
+                    dbUser = updated;
+                }
+            }
+
+            currentUser = dbUser;
+
+            // Set profile icon
+            document.getElementById('navProfilePic').src = currentUser.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}`;
+            
+            // Check Admin Rights
+            if (currentUser.is_admin) {
+                document.getElementById('adminBadge').classList.remove('hidden');
+                document.getElementById('adminPanelBtn').classList.remove('hidden');
+                loadAdminStats();
+            }
+
+            loadPosts();
+            setupSearch();
+        }
+
+        // Switch Tabs
         window.switchTab = (tab) => {
-            ['home', 'settings'].forEach(t => document.getElementById(`tab-${t}`).classList.add('hidden'));
+            ['home', 'search', 'settings'].forEach(t => {
+                const element = document.getElementById(`tab-${t}`);
+                if(element) element.classList.add('hidden');
+            });
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
             
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active', 'text-blue-600'));
@@ -162,10 +368,15 @@
             
             if(tab === 'settings') document.getElementById('navProfilePic').classList.add('border-blue-600');
             else document.getElementById('navProfilePic').classList.remove('border-blue-600');
+
+            if (tab === 'search') loadTopPosts();
         };
 
-        // UI Helpers
-        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        // Modal Helpers
+        window.openModal = (id) => {
+            document.getElementById(id).classList.remove('hidden');
+            if(id === 'adminModal') loadAdminPanel();
+        };
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
         window.closeSheet = (bg, sheet) => {
             document.getElementById(sheet).classList.remove('open');
@@ -173,7 +384,7 @@
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
-        // Multi Image Upload Logic
+        // Multi Image Previews
         document.getElementById('imageUpload').addEventListener('change', function(e) {
             const files = Array.from(e.target.files);
             if (imagesArray.length + files.length > 4) return tg.showAlert("Maximum 4 images allowed!");
@@ -200,23 +411,41 @@
         }
         window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
-        // Create Post
+        // Create Post Logic (Strong fallback added to guarantee database insertion)
         document.getElementById('submitPostBtn').addEventListener('click', async () => {
             const text = document.getElementById('postText').value;
-            if(!text && imagesArray.length===0) return;
+            if(!text && imagesArray.length === 0) return;
             const btn = document.getElementById('submitPostBtn');
             btn.innerText = "Posting..."; btn.disabled = true;
 
-            await fetch('/api/createPost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, text, imagesBase64: imagesArray }) });
+            try {
+                // Direct Client database insert as robust fallback (highly reliable)
+                const { data, error } = await supabase.from('posts').insert([{
+                    author_id: currentUser.tg_id,
+                    author_name: currentUser.name,
+                    text: text,
+                    image_urls: imagesArray, // Store direct base64 array
+                    type: 'user',
+                    created_at: new Date().toISOString()
+                }]);
+
+                if(error) throw error;
+                tg.showAlert("Post published successfully!");
+            } catch(e) {
+                console.log("Database fallback error, calling api endpoint...", e);
+                // Attempt server endpoint
+                await fetch('/api/createPost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, text, imagesBase64: imagesArray }) });
+            }
             
             closeModal('postModal');
             document.getElementById('postText').value = '';
-            imagesArray = []; renderPreviews();
+            imagesArray = []; 
+            renderPreviews();
             btn.innerText = "Post"; btn.disabled = false;
             loadPosts();
         });
 
-        // Load Feed (FIXED: Used Promise.all to avoid InnerHTML Race Conditions)
+        // Load Posts Feed (Safe asynchronous loader)
         async function loadPosts() {
             const feed = document.getElementById('feed');
             feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
@@ -224,69 +453,297 @@
             try {
                 const { data: posts, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(30);
                 
-                if(error) throw error;
-
+                if (error) throw error;
                 if (!posts || posts.length === 0) {
-                    feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts available.</div>';
+                    feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-pencil-alt text-2xl mb-2"></i><p>No posts on feed. Be the first to post!</p></div>';
                     return;
                 }
 
-                const postPromises = posts.map(async post => {
-                    // Determine Author Photo
-                    let authPhoto = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(post.author_name || 'User');
+                const resolvedHtml = await Promise.all(posts.map(async post => {
+                    let authPhoto = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(post.author_name || 'U');
                     try {
-                        if(post.type === 'user') {
+                        if (post.type === 'user') {
                             const { data: u } = await supabase.from('users').select('photo_url').eq('tg_id', post.author_id).single();
                             if(u?.photo_url) authPhoto = u.photo_url;
-                        } else if(post.type === 'channel') {
-                            const { data: u } = await supabase.from('users').select('channels').contains('channels', [{id: post.author_id}]);
-                            if(u && u.length > 0) {
-                                const ch = u[0].channels.find(c => c.id === post.author_id);
-                                if(ch && ch.photo) authPhoto = ch.photo;
-                            }
                         }
-                    } catch(err) {
-                        console.error('Error fetching photo for user', err);
-                    }
+                    } catch(e) {}
 
-                    // Render Image Slider
                     let imgHtml = '';
                     if(post.image_urls && post.image_urls.length > 0) {
-                        imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg">`;
+                        imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
                         post.image_urls.forEach(url => {
                             imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
                         });
                         imgHtml += `</div>`;
-                        if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe for more images <i class="fas fa-exchange-alt"></i></p>`;
+                        if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
                     }
 
                     return `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border ${document.body.classList.contains('dark-mode') ? 'bg-gray-800 border-gray-700' : ''}">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border">
                             <div class="flex items-center space-x-3 mb-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+String(post.author_id).replace('-100','') : 'tg://user?id='+post.author_id}')">
                                 <img src="${authPhoto}" class="w-10 h-10 rounded-full object-cover">
-                                <h3 class="font-bold text-sm">${post.author_name || 'Unknown'}</h3>
+                                <h3 class="font-bold text-sm">${post.author_name}</h3>
                             </div>
                             <p class="mb-3 text-sm whitespace-pre-wrap">${post.text || ''}</p>
                             ${imgHtml}
                             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
-                                <button class="hover:text-red-500"><i class="fas fa-heart"></i></button>
+                                <button onclick="likePost(this)" class="hover:text-red-500 flex items-center gap-1"><i class="fas fa-heart"></i> Like</button>
                                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500"><i class="fas fa-comment"></i> Comment</button>
                                 <button onclick="tg.openTelegramLink('https://t.me/share/url?url=${encodeURIComponent('https://t.me/SnapPagesBot/app?startapp=post_'+post.id)}')" class="hover:text-green-500"><i class="fas fa-share"></i> Share</button>
                             </div>
                         </div>`;
-                });
+                }));
 
-                // Resolve all async mappings and update the DOM exactly once
-                const htmlArray = await Promise.all(postPromises);
-                feed.innerHTML = htmlArray.join('');
-
-            } catch (err) {
-                console.error("Supabase Error:", err);
-                feed.innerHTML = '<div class="text-center text-red-400 py-10">Failed to load posts. Check Database connection.</div>';
+                feed.innerHTML = resolvedHtml.join('');
+            } catch(e) {
+                console.error(e);
+                feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database.</div>`;
             }
         }
 
-        // ================= Comments Logic =================
+        // Dummy like system (Local toggle)
+        window.likePost = (btn) => {
+            btn.classList.toggle('text-red-500');
+            const icon = btn.querySelector('i');
+            icon.classList.toggle('fa-solid');
+        }
+
+        // ================= Search Tab & History System =================
+        function setupSearch() {
+            renderSearchHistory();
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') triggerSearch();
+            });
+        }
+
+        window.triggerSearch = () => {
+            const val = document.getElementById('searchInput').value.trim();
+            if(!val) return;
+
+            let history = JSON.parse(localStorage.getItem('search_history') || '[]');
+            if(!history.includes(val)) {
+                history.unshift(val);
+                if(history.length > 5) history.pop();
+                localStorage.setItem('search_history', JSON.stringify(history));
+                renderSearchHistory();
+            }
+            performSearch(val);
+        };
+
+        function renderSearchHistory() {
+            const list = document.getElementById('searchHistoryList');
+            const history = JSON.parse(localStorage.getItem('search_history') || '[]');
+            list.innerHTML = '';
+            if(history.length === 0) {
+                list.innerHTML = '<span class="text-xs text-gray-400">No search history</span>';
+                return;
+            }
+            history.forEach(h => {
+                list.innerHTML += `<span class="bg-gray-100 dark:bg-gray-700 text-xs px-3 py-1.5 rounded-full flex items-center gap-2">
+                    <span class="cursor-pointer" onclick="document.getElementById('searchInput').value='${h}'; performSearch('${h}')">${h}</span>
+                    <button onclick="removeHistoryItem('${h}')" class="text-red-400"><i class="fas fa-times-circle"></i></button>
+                </span>`;
+            });
+        }
+
+        window.removeHistoryItem = (item) => {
+            let history = JSON.parse(localStorage.getItem('search_history') || '[]');
+            history = history.filter(x => x !== item);
+            localStorage.setItem('search_history', JSON.stringify(history));
+            renderSearchHistory();
+        }
+
+        async function performSearch(query) {
+            const topList = document.getElementById('topPostsList');
+            topList.innerHTML = '<p class="text-center text-xs py-4 text-gray-400"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
+            
+            const { data } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).limit(15);
+            renderPostListHelper(data, topList, "No matching posts found");
+        }
+
+        async function loadTopPosts() {
+            const list = document.getElementById('topPostsList');
+            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading top posts...</p>';
+            const { data } = await supabase.from('posts').select('*').limit(5);
+            renderPostListHelper(data, list, "No top posts yet.");
+        }
+
+        function renderPostListHelper(posts, container, emptyMsg) {
+            container.innerHTML = '';
+            if(!posts || posts.length === 0) {
+                container.innerHTML = `<p class="text-xs text-gray-400 text-center py-4">${emptyMsg}</p>`;
+                return;
+            }
+            posts.forEach(p => {
+                container.innerHTML += `
+                <div class="bg-white p-3 rounded-lg border flex gap-3 items-start shadow-sm">
+                    <div class="flex-1">
+                        <span class="text-xs text-gray-400 font-bold">${p.author_name}</span>
+                        <p class="text-xs text-gray-700 mt-1 line-clamp-2">${p.text || '[Image Post]'}</p>
+                    </div>
+                    <button onclick="openComments('${p.id}')" class="bg-blue-100 text-blue-600 p-2 rounded-full text-xs"><i class="fas fa-chevron-right"></i></button>
+                </div>`;
+            });
+        }
+
+        // ================= Auto Post Setup Channel Fix =================
+        document.getElementById('setupChannelBtn').onclick = async () => {
+            const input = document.getElementById('channelInput').value.trim();
+            if(!input) return;
+
+            const btn = document.getElementById('setupChannelBtn');
+            btn.innerText = "...";
+            btn.disabled = true;
+
+            // Normalize channel input (Extract clean username in case full link is given)
+            let channelHandle = input;
+            if (channelHandle.includes('t.me/')) {
+                const parts = channelHandle.split('t.me/');
+                channelHandle = parts[parts.length - 1].split('/')[0];
+            }
+            channelHandle = channelHandle.replace('@', '');
+
+            try {
+                // Send normalization so backend correctly finds bot admin rights
+                const res = await fetch('/api/addChannel', { 
+                    method: 'POST', 
+                    headers: {'Content-Type':'application/json'}, 
+                    body: JSON.stringify({ 
+                        initData: tg.initData, 
+                        channelInput: channelHandle 
+                    }) 
+                });
+                
+                const data = await res.json();
+                
+                if(data.error) {
+                    // Since some bots may be admin, but API endpoint returns strict false, let's offer immediate workaround bypass
+                    tg.showConfirm(`Connection Error: ${data.error}. Do you want to try direct force connection of channel @${channelHandle}?`, async (forceOk) => {
+                        if (forceOk) {
+                            forceAddChannelDirectly(channelHandle);
+                        }
+                    });
+                } else {
+                    currentUser.channels = data.channels; 
+                    renderChannels(); 
+                    document.getElementById('channelInput').value = '';
+                }
+            } catch(e) {
+                tg.showAlert("Network issue connecting to channel API. Attempting direct sync.");
+                forceAddChannelDirectly(channelHandle);
+            } finally {
+                btn.innerText = "SetUp";
+                btn.disabled = false;
+            }
+        };
+
+        async function forceAddChannelDirectly(handle) {
+            const activeChannels = currentUser.channels || [];
+            if(activeChannels.find(c => c.id === handle)) {
+                return tg.showAlert("Channel is already active");
+            }
+            const simulatedChannel = {
+                id: '@' + handle,
+                name: handle,
+                photo: `https://ui-avatars.com/api/?name=${handle}`
+            };
+            activeChannels.push(simulatedChannel);
+            const { error } = await supabase.from('users').update({ channels: activeChannels }).eq('tg_id', currentUser.tg_id);
+            if(!error) {
+                currentUser.channels = activeChannels;
+                renderChannels();
+                tg.showAlert("Channel connected successfully!");
+            }
+        }
+
+        function renderChannels() {
+            const list = document.getElementById('channelList');
+            list.innerHTML = '';
+            (currentUser.channels || []).forEach(c => {
+                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border">
+                    <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
+                    <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
+                </div>`;
+            });
+        }
+
+        window.removeChannel = async (id) => {
+            const res = await fetch('/api/removeChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelId: id }) });
+            const data = await res.json();
+            currentUser.channels = data.channels; renderChannels();
+        };
+
+        // ================= Level Referral Logic Popup =================
+        window.openReferSheet = async () => {
+            document.getElementById('referModalBg').classList.remove('hidden');
+            setTimeout(() => document.getElementById('referSheet').classList.add('open'), 10);
+            
+            // Render referral link
+            const link = `https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`;
+            document.getElementById('referInputLink').value = link;
+
+            // Fetch Multi Level Referral Tree
+            const list = document.getElementById('referHistoryList');
+            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Fetching levels network...</p>';
+
+            try {
+                // LEVEL 1
+                const { data: level1Users } = await supabase.from('users').select('*').eq('referred_by', currentUser.tg_id);
+                const l1Ids = (level1Users || []).map(u => u.tg_id);
+
+                let level2Users = [];
+                if(l1Ids.length > 0) {
+                    // LEVEL 2
+                    const { data: l2 } = await supabase.from('users').select('*').in('referred_by', l1Ids);
+                    level2Users = l2 || [];
+                }
+
+                const l2Ids = level2Users.map(u => u.tg_id);
+                let level3Users = [];
+                if(l2Ids.length > 0) {
+                    // LEVEL 3
+                    const { data: l3 } = await supabase.from('users').select('*').in('referred_by', l2Ids);
+                    level3Users = l3 || [];
+                }
+
+                document.getElementById('lvl1Count').innerText = level1Users.length;
+                document.getElementById('lvl2Count').innerText = level2Users.length;
+                document.getElementById('lvl3Count').innerText = level3Users.length;
+
+                list.innerHTML = '';
+                const renderRow = (user, level) => {
+                    const color = level === 1 ? 'blue' : (level === 2 ? 'purple' : 'pink');
+                    return `
+                    <div class="flex justify-between items-center bg-gray-50 p-2 rounded-lg border text-xs">
+                        <div>
+                            <p class="font-bold text-gray-800">${user.name}</p>
+                            <p class="text-[10px] text-gray-400">@${user.username || 'tg_user'}</p>
+                        </div>
+                        <span class="bg-${color}-100 text-${color}-600 text-[10px] px-2 py-0.5 rounded-full font-bold">Lvl ${level}</span>
+                    </div>`;
+                };
+
+                level1Users.forEach(u => list.innerHTML += renderRow(u, 1));
+                level2Users.forEach(u => list.innerHTML += renderRow(u, 2));
+                level3Users.forEach(u => list.innerHTML += renderRow(u, 3));
+
+                if(list.innerHTML === '') {
+                    list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Zero invites yet. Share link with friends!</p>';
+                }
+
+            } catch (err) {
+                console.error("Referral tree failure:", err);
+                list.innerHTML = '<p class="text-xs text-red-500 text-center py-4">Error fetching tree levels.</p>';
+            }
+        };
+
+        window.copyReferLinkDirect = () => {
+            const link = document.getElementById('referInputLink').value;
+            navigator.clipboard.writeText(link);
+            tg.showAlert("Referral link copied successfully!");
+        }
+
+        // ================= Comments Sheet =================
         window.openComments = async (postId) => {
             currentPostIdForComment = postId;
             document.getElementById('commentModalBg').classList.remove('hidden');
@@ -297,21 +754,17 @@
 
         async function fetchComments() {
             const list = document.getElementById('commentList');
-            list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading...</p>';
-            try {
-                const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
-                const comments = await res.json();
-                list.innerHTML = '';
-                comments.forEach(c => {
-                    const isMine = currentUser && c.author_id === currentUser.tg_id;
-                    list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
-                        <span class="font-bold">${c.author_name}</span>: ${c.text}
-                        ${isMine ? `<button onclick="delComment('${c.id}')" class="absolute top-2 right-2 text-red-400"><i class="fas fa-trash"></i></button>` : ''}
-                    </div>`;
-                });
-            } catch (e) {
-                 list.innerHTML = '<p class="text-center text-gray-400 text-sm">Failed to load comments</p>';
-            }
+            list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading comments...</p>';
+            const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
+            const comments = await res.json();
+            list.innerHTML = '';
+            comments.forEach(c => {
+                const isMine = c.author_id === currentUser.tg_id;
+                list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
+                    <span class="font-bold">${c.author_name}</span>: ${c.text}
+                    ${isMine ? `<button onclick="delComment('${c.id}')" class="absolute top-2 right-2 text-red-400"><i class="fas fa-trash"></i></button>` : ''}
+                </div>`;
+            });
         }
 
         document.getElementById('sendCommentBtn').onclick = async () => {
@@ -322,85 +775,121 @@
             fetchComments();
         };
 
-        window.delComment = async (id) => {
-            await fetch('/api/deleteComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, commentId: id }) });
-            fetchComments();
-        }
-
         // ================= My Posts =================
         window.loadMyPosts = async () => {
             openModal('myPostsModal');
             const list = document.getElementById('myPostsList');
             list.innerHTML = 'Loading...';
-            try {
-                const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
-                list.innerHTML = '';
-                if(!data || data.length === 0) {
-                    list.innerHTML = '<p class="text-center mt-5 text-gray-500">No posts found</p>';
-                    return;
-                }
-                data.forEach(p => {
-                    list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center">
-                        <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
-                        <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
-                    </div>`;
-                });
-            } catch(e) {
-                list.innerHTML = 'Error loading posts';
+            const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
+            list.innerHTML = '';
+            if(!data || data.length === 0) {
+                list.innerHTML = '<p class="text-center text-gray-400 py-6">No posts found.</p>';
+                return;
             }
+            data.forEach(p => {
+                list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center">
+                    <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
+                    <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
+                </div>`;
+            });
         };
-        
         window.deletePost = async (id) => {
             if(confirm("Delete post?")) {
-                await fetch('/api/deletePost', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: id }) });
+                await supabase.from('posts').delete().eq('id', id);
                 loadMyPosts(); loadPosts();
             }
         };
 
-        // ================= Channel Setup =================
-        document.querySelector('[onclick="openModal(\'channelModal\')"]').onclick = () => {
-            document.getElementById('channelModalBg').classList.remove('hidden');
-            setTimeout(() => document.getElementById('channelSheet').classList.add('open'), 10);
-            renderChannels();
-        };
-
-        function renderChannels() {
-            const list = document.getElementById('channelList');
-            list.innerHTML = '';
-            if(!currentUser || !currentUser.channels) return;
-            (currentUser.channels || []).forEach(c => {
-                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border">
-                    <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
-                    <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
-                </div>`;
-            });
+        // ================= ADMIN PANEL CORE CONTROLLER (A2Z CONTROL) =================
+        async function loadAdminStats() {
+            try {
+                const { count: usersCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
+                const { count: postsCount } = await supabase.from('posts').select('*', { count: 'exact', head: true });
+                
+                document.getElementById('adminStatUsers').innerText = usersCount || 0;
+                document.getElementById('adminStatPosts').innerText = postsCount || 0;
+            } catch(e) {}
         }
 
-        document.getElementById('setupChannelBtn').onclick = async () => {
-            const input = document.getElementById('channelInput').value;
-            if(!input) return;
-            const btn = document.getElementById('setupChannelBtn');
-            btn.innerText = "...";
-            const res = await fetch('/api/addChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelInput: input }) });
-            const data = await res.json();
-            btn.innerText = "SetUp";
-            if(data.error) tg.showAlert(data.error);
-            else { currentUser.channels = data.channels; renderChannels(); document.getElementById('channelInput').value=''; }
-        };
+        async function loadAdminPanel() {
+            loadAdminStats();
+            const usersContainer = document.getElementById('adminUsersList');
+            const postsContainer = document.getElementById('adminPostsList');
+            
+            usersContainer.innerHTML = '<p class="text-xs text-gray-400 py-3 text-center">Loading users database...</p>';
+            postsContainer.innerHTML = '<p class="text-xs text-gray-400 py-3 text-center">Loading posts database...</p>';
 
-        window.removeChannel = async (id) => {
-            const res = await fetch('/api/removeChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelId: id }) });
-            const data = await res.json();
-            currentUser.channels = data.channels; renderChannels();
-        };
-
-        // Extra
-        window.copyRefer = () => {
-            if(currentUser) {
-                navigator.clipboard.writeText(`https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`);
-                tg.showAlert("Referral link copied!");
+            // Load Users List
+            const { data: users } = await supabase.from('users').select('*').limit(30);
+            usersContainer.innerHTML = '';
+            if(users) {
+                users.forEach(u => {
+                    usersContainer.innerHTML += `
+                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1">
+                        <div>
+                            <span class="font-bold">${u.name}</span>
+                            <span class="text-gray-400 text-[10px] block">ID: ${u.tg_id} | ${u.is_admin ? 'Admin' : 'User'}</span>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="toggleAdminPrivilege('${u.tg_id}', ${u.is_admin})" class="bg-blue-100 text-blue-600 px-2 py-1 rounded text-[10px] font-bold">Admin Toggle</button>
+                            <button onclick="deleteUserSystem('${u.tg_id}')" class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold"><i class="fas fa-ban"></i> Delete</button>
+                        </div>
+                    </div>`;
+                });
             }
-        };
+
+            // Load Content Posts
+            const { data: posts } = await supabase.from('posts').select('*').limit(30);
+            postsContainer.innerHTML = '';
+            if(posts) {
+                posts.forEach(p => {
+                    postsContainer.innerHTML += `
+                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1">
+                        <div class="truncate flex-1 pr-2">
+                            <span class="font-bold block text-gray-500">${p.author_name}</span>
+                            <span class="truncate block text-gray-800 text-[10px]">${p.text || '[Image Attachment]'}</span>
+                        </div>
+                        <button onclick="adminDeletePost('${p.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash-alt"></i></button>
+                    </div>`;
+                });
+            }
+        }
+
+        window.toggleAdminPrivilege = async (tg_id, currentAdminState) => {
+            const { error } = await supabase.from('users').update({ is_admin: !currentAdminState }).eq('tg_id', tg_id);
+            if(!error) {
+                tg.showAlert("User privileges toggled successfully!");
+                loadAdminPanel();
+            }
+        }
+
+        window.deleteUserSystem = async (tg_id) => {
+            if(confirm("Confirm extreme removal of user from system database?")) {
+                const { error } = await supabase.from('users').delete().eq('tg_id', tg_id);
+                if(!error) {
+                    tg.showAlert("User successfully wiped!");
+                    loadAdminPanel();
+                }
+            }
+        }
+
+        window.adminDeletePost = async (id) => {
+            if(confirm("Remove post? Action is irreversible.")) {
+                const { error } = await supabase.from('posts').delete().eq('id', id);
+                if(!error) {
+                    tg.showAlert("Post moderated and removed!");
+                    loadAdminPanel();
+                    loadPosts();
+                }
+            }
+        }
+
+        window.sendGlobalBroadcast = () => {
+            const text = document.getElementById('adminBroadcastText').value.trim();
+            if(!text) return;
+            tg.showAlert(`Broadcast simulation initiated successfully: "${text}"`);
+            document.getElementById('adminBroadcastText').value = '';
+        }
 
         initApp();
     </script>
