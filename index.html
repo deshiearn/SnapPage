@@ -324,7 +324,7 @@
         async function initApp() {
             const liveUser = getTelegramUser();
             
-            // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY (FIXED: Users never see blank name/photo)
+            // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY
             const safePhoto = liveUser.photo_url;
             document.getElementById('navProfilePic').src = safePhoto;
             document.getElementById('settingsProfilePic').src = safePhoto;
@@ -332,7 +332,6 @@
             document.getElementById('settingsProfileUsername').innerText = liveUser.username ? `@${liveUser.username}` : '';
             document.getElementById('settingsProfileLevel').innerText = `Level 1`;
             
-            // Populate refer link input on startup with direct telegram id
             const link = `https://t.me/SnapPagesBot/app?startapp=ref_${liveUser.tg_id}`;
             document.getElementById('referInputLink').value = link;
 
@@ -481,7 +480,7 @@
         }
         window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
-        // Create / Edit Post Submission
+        // Create / Edit Post Submission (FIXED: Route insert through secure Service Role backend API first to bypass DB RLS Blocks, with direct local fallback)
         document.getElementById('submitPostBtn').addEventListener('click', async () => {
             const text = document.getElementById('postText').value;
             if(!text && imagesArray.length === 0) return;
@@ -490,24 +489,46 @@
 
             try {
                 if (editModePostId) {
-                    await supabase.from('posts').update({
+                    const { error } = await supabase.from('posts').update({
                         text: text,
                         image_urls: imagesArray
                     }).eq('id', editModePostId);
+                    if (error) throw error;
                     tg.showAlert("Post edited successfully!");
                 } else {
-                    await supabase.from('posts').insert([{
-                        author_id: currentUser.tg_id,
-                        author_name: currentUser.name,
-                        text: text,
-                        image_urls: imagesArray,
-                        type: 'user',
-                        created_at: new Date().toISOString()
-                    }]);
-                    tg.showAlert("Post published successfully!");
+                    // 1. Try server backend creation first (Guarantees bypass of Supabase Anon RLS block)
+                    const apiRes = await fetch('/api/createPost', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            initData: tg.initData,
+                            text: text,
+                            imagesBase64: imagesArray
+                        })
+                    });
+                    
+                    const apiData = await apiRes.json();
+                    
+                    if (apiData && apiData.success) {
+                        tg.showAlert("Post published successfully!");
+                    } else {
+                        // 2. Direct client insert fallback with error validation
+                        const { error } = await supabase.from('posts').insert([{
+                            author_id: currentUser.tg_id,
+                            author_name: currentUser.name,
+                            text: text,
+                            image_urls: imagesArray,
+                            type: 'user',
+                            created_at: new Date().toISOString()
+                        }]);
+                        
+                        if (error) throw error;
+                        tg.showAlert("Post published successfully!");
+                    }
                 }
             } catch(e) {
-                console.error(e);
+                console.error("Submission failed:", e);
+                tg.showAlert(`Failed to publish: ${e.message || e}`);
             }
             
             closeModal('postModal');
@@ -519,7 +540,7 @@
             loadPosts();
         });
 
-        // Load Posts Feed with safety checks (FIXED: Handled RLS and empty database failures gracefully)
+        // Load Posts Feed with safety checks
         async function loadPosts() {
             const feed = document.getElementById('feed');
             feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
@@ -809,27 +830,20 @@
             btn.innerText = "...";
             btn.disabled = true;
 
-            let channelHandle = input;
-            if (channelHandle.includes('t.me/')) {
-                const parts = channelHandle.split('t.me/');
-                channelHandle = parts[parts.length - 1].split('/')[0];
-            }
-            channelHandle = channelHandle.replace('@', '');
-
             try {
                 const res = await fetch('/api/addChannel', { 
                     method: 'POST', 
                     headers: {'Content-Type':'application/json'}, 
                     body: JSON.stringify({ 
                         initData: tg.initData, 
-                        channelInput: channelHandle 
+                        channelInput: input // Passes raw input, server handles links/usernames safely now!
                     }) 
                 });
                 
                 const data = await res.json();
                 
                 if(data.error) {
-                    tg.showAlert(`Admin Verification Failed: ${data.error}. Bot must be an admin to configure auto-posting.`);
+                    tg.showAlert(`Admin Verification Failed: ${data.error}`);
                 } else {
                     currentUser.channels = data.channels; 
                     renderChannels(); 
@@ -847,7 +861,7 @@
             const list = document.getElementById('channelList');
             list.innerHTML = '';
             (currentUser.channels || []).forEach(c => {
-                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border text-gray-900">
+                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border text-gray-900 animate-none">
                     <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
                     <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
                 </div>`;
