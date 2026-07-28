@@ -72,24 +72,24 @@
     <!-- Search Tab -->
     <main id="tab-search" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
         <div class="bg-white rounded-xl p-3 shadow-sm border flex gap-2">
-            <input type="text" id="searchInput" class="flex-1 bg-gray-50 rounded-lg px-3 py-2 outline-none text-sm" placeholder="Search posts...">
+            <input type="text" id="searchInput" class="flex-1 bg-gray-50 rounded-lg px-3 py-2 outline-none text-sm animate-none" placeholder="Search posts...">
             <button onclick="triggerSearch()" class="bg-blue-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
         </div>
         <div>
             <h4 class="font-bold text-sm mb-2 flex items-center gap-2"><i class="fas fa-history text-gray-400"></i> Search History</h4>
-            <div id="searchHistoryList" class="flex flex-wrap gap-2"></div>
+            <div id="searchHistoryList" class="flex flex-wrap gap-2 animate-none"></div>
         </div>
         <hr class="border-gray-200 my-2">
         <div>
             <h4 class="font-bold text-sm mb-3 flex items-center gap-2 text-blue-500"><i class="fas fa-fire"></i> Top Posts</h4>
-            <div id="topPostsList" class="space-y-4"></div>
+            <div id="topPostsList" class="space-y-4 animate-none"></div>
         </div>
     </main>
 
     <!-- Settings Tab -->
     <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
         <!-- Live User Profile Card -->
-        <div class="bg-white rounded-xl p-4 shadow-sm border flex items-center space-x-4">
+        <div class="bg-white rounded-xl p-4 shadow-sm border flex items-center space-x-4 animate-none">
             <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-16 h-16 rounded-full border-2 border-blue-500 object-cover">
             <div>
                 <h3 id="settingsProfileName" class="font-bold text-base text-gray-900">Telegram User</h3>
@@ -246,7 +246,7 @@
                 <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
             </div>
         </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50 text-gray-900">
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50 text-gray-900 animate-none">
             <div class="grid grid-cols-3 gap-3">
                 <div class="bg-white p-3 rounded-xl border text-center">
                     <div class="text-xs text-gray-500 font-bold">Total Users</div>
@@ -261,12 +261,12 @@
                     <div id="adminStatChannels" class="text-xl font-bold">0</div>
                 </div>
             </div>
-            <div class="bg-white p-4 rounded-xl border space-y-3 animate-none">
+            <div class="bg-white p-4 rounded-xl border space-y-3">
                 <h4 class="font-bold text-sm text-blue-600"><i class="fas fa-bullhorn"></i> Global Broadcast</h4>
                 <textarea id="adminBroadcastText" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Write message..."></textarea>
                 <button onclick="sendGlobalBroadcast()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Send</button>
             </div>
-            <div class="bg-white p-4 rounded-xl border space-y-3">
+            <div class="bg-white p-4 rounded-xl border space-y-3 animate-none">
                 <h4 class="font-bold text-sm"><i class="fas fa-users-cog"></i> Manage Users</h4>
                 <div class="space-y-2 max-h-48 overflow-y-auto" id="adminUsersList"></div>
             </div>
@@ -324,61 +324,76 @@
         async function initApp() {
             const liveUser = getTelegramUser();
             
-            let { data: dbUser, error } = await supabase.from('users').select('*').eq('tg_id', liveUser.tg_id).maybeSingle();
-            
-            if (!dbUser) {
-                let referred_by = null;
-                const startParam = tg.initDataUnsafe?.start_param || "";
-                if (startParam.startsWith("ref_")) {
-                    referred_by = startParam.replace("ref_", "");
-                }
-
-                const { data: newUser } = await supabase.from('users').insert([{
-                    tg_id: liveUser.tg_id,
-                    name: liveUser.name,
-                    username: liveUser.username,
-                    photo_url: liveUser.photo_url,
-                    channels: [],
-                    referred_by: referred_by,
-                    is_admin: false,
-                    created_at: new Date().toISOString()
-                }]).select().single();
-                
-                dbUser = newUser;
-            } else {
-                // Keep info updated from telegram dynamic profiles
-                if (dbUser.name !== liveUser.name || dbUser.photo_url !== liveUser.photo_url) {
-                    const { data: updated } = await supabase.from('users').update({
-                        name: liveUser.name,
-                        photo_url: liveUser.photo_url,
-                        username: liveUser.username
-                    }).eq('tg_id', liveUser.tg_id).select().single();
-                    dbUser = updated;
-                }
-            }
-
-            // Load Referral counts dynamically to calculate Level
-            const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', liveUser.tg_id);
-            dbUser.level = calculateLevel(refCount || 0);
-            
-            currentUser = dbUser;
-
-            // Update Navigation profile picture
-            const safePhoto = currentUser.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}`;
+            // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY (FIXED: Users never see blank name/photo)
+            const safePhoto = liveUser.photo_url;
             document.getElementById('navProfilePic').src = safePhoto;
-            
-            // Update Me/Settings Tab Profile Card elements
             document.getElementById('settingsProfilePic').src = safePhoto;
-            document.getElementById('settingsProfileName').innerText = currentUser.name || "Telegram User";
-            document.getElementById('settingsProfileUsername').innerText = currentUser.username ? `@${currentUser.username}` : '';
-            document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+            document.getElementById('settingsProfileName').innerText = liveUser.name;
+            document.getElementById('settingsProfileUsername').innerText = liveUser.username ? `@${liveUser.username}` : '';
+            document.getElementById('settingsProfileLevel').innerText = `Level 1`;
+            
+            // Populate refer link input on startup with direct telegram id
+            const link = `https://t.me/SnapPagesBot/app?startapp=ref_${liveUser.tg_id}`;
+            document.getElementById('referInputLink').value = link;
 
-            if (currentUser.is_admin) {
-                document.getElementById('adminBadge').classList.remove('hidden');
-                document.getElementById('adminPanelBtn').classList.remove('hidden');
-                loadAdminStats();
+            try {
+                // 2. Fetch/Create User in Database safely
+                let { data: dbUser, error } = await supabase.from('users').select('*').eq('tg_id', liveUser.tg_id).maybeSingle();
+                
+                if (error) console.error("Database connection issue:", error);
+
+                if (!dbUser) {
+                    let referred_by = null;
+                    const startParam = tg.initDataUnsafe?.start_param || "";
+                    if (startParam.startsWith("ref_")) {
+                        referred_by = startParam.replace("ref_", "");
+                    }
+
+                    const { data: newUser } = await supabase.from('users').insert([{
+                        tg_id: liveUser.tg_id,
+                        name: liveUser.name,
+                        username: liveUser.username,
+                        photo_url: liveUser.photo_url,
+                        channels: [],
+                        referred_by: referred_by,
+                        is_admin: false,
+                        created_at: new Date().toISOString()
+                    }]).select().maybeSingle();
+                    
+                    dbUser = newUser || { ...liveUser, channels: [], is_admin: false }; // Fallback
+                } else {
+                    // Update user fields if Telegram profile changes
+                    if (dbUser.name !== liveUser.name || dbUser.photo_url !== liveUser.photo_url) {
+                        const { data: updated } = await supabase.from('users').update({
+                            name: liveUser.name,
+                            photo_url: liveUser.photo_url,
+                            username: liveUser.username
+                        }).eq('tg_id', liveUser.tg_id).select().maybeSingle();
+                        if (updated) dbUser = updated;
+                    }
+                }
+
+                // Load Referral counts dynamically to calculate Level
+                const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', liveUser.tg_id);
+                dbUser.level = calculateLevel(refCount || 0);
+                
+                currentUser = dbUser;
+
+                // Refresh UI with calculated DB details
+                document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+
+                if (currentUser.is_admin) {
+                    document.getElementById('adminBadge').classList.remove('hidden');
+                    document.getElementById('adminPanelBtn').classList.remove('hidden');
+                    loadAdminStats();
+                }
+
+            } catch(dbErr) {
+                console.error("Supabase load failed, using live fallbacks:", dbErr);
+                currentUser = { ...liveUser, level: 1, channels: [], is_admin: false };
             }
 
+            // 3. Guarantee loadPosts runs smoothly
             loadPosts();
             setupSearch();
         }
@@ -401,11 +416,21 @@
             if (tab === 'search') loadTopPosts();
         };
 
-        // UI Open / Close modals
+        // UI Open / Close modals (FIXED ID mismatch: redirecting setup channels correctly)
         window.openModal = (id) => {
-            document.getElementById(id).classList.remove('hidden');
+            if (id === 'channelModal') {
+                document.getElementById('channelModalBg').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('channelSheet').classList.add('open');
+                }, 10);
+                renderChannels();
+                return;
+            }
+
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('hidden');
+
             if(id === 'adminModal') loadAdminPanel();
-            if(id === 'channelModal') renderChannels(); // FIXED: Dynamically renders user auto-channels when opened
             if(id === 'postModal') {
                 document.getElementById('postModalTitle').innerText = "Create Post";
                 editModePostId = null;
@@ -494,7 +519,7 @@
             loadPosts();
         });
 
-        // Load Posts Feed with safety checks (FIXED: Prevented endless loading when database is empty)
+        // Load Posts Feed with safety checks (FIXED: Handled RLS and empty database failures gracefully)
         async function loadPosts() {
             const feed = document.getElementById('feed');
             feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
@@ -503,7 +528,6 @@
                 let { data: posts, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
                 if (error) throw error;
 
-                // Safe fallback if posts return null
                 if (!posts) posts = [];
 
                 // Handle unique link direct opening highlighting matching ID
@@ -573,7 +597,7 @@
                 feed.innerHTML = resolvedHtml.join('');
             } catch(e) {
                 console.error(e);
-                feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database.</div>`;
+                feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database. Check your connection.</div>`;
             }
         }
 
@@ -764,7 +788,6 @@
             }
         };
 
-        // FIXED: Universal clipboard copy selection fallback mechanism
         window.copyReferLinkDirect = () => {
             const input = document.getElementById('referInputLink');
             input.select();
@@ -824,7 +847,7 @@
             const list = document.getElementById('channelList');
             list.innerHTML = '';
             (currentUser.channels || []).forEach(c => {
-                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border">
+                list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border text-gray-900">
                     <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}</span></div>
                     <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
                 </div>`;
@@ -927,7 +950,7 @@
                     return;
                 }
                 data.forEach(p => {
-                    list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center text-gray-900">
+                    list.innerHTML += `<div class="bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center text-gray-900 animate-none">
                         <p class="truncate w-3/4 text-sm">${p.text || 'Photo Post'}</p>
                         <button onclick="deletePost('${p.id}')" class="text-red-500"><i class="fas fa-trash"></i></button>
                     </div>`;
@@ -966,7 +989,7 @@
             if(users) {
                 users.forEach(u => {
                     usersContainer.innerHTML += `
-                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1 text-gray-900">
+                    <div class="flex items-center justify-between p-2 border-b text-xs bg-gray-50 rounded mb-1 text-gray-900 animate-none">
                         <div>
                             <span class="font-bold">${u.name}</span>
                             <span class="text-gray-400 text-[10px] block">ID: ${u.tg_id}</span>
