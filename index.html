@@ -228,7 +228,11 @@
 
     <!-- MY POSTS MODAL -->
     <div id="myPostsModal" class="hidden fixed inset-0 bg-white z-50 flex flex-col">
-        <div class="p-4 shadow-sm flex items-center gap-4 bg-white"><button onclick="closeModal('myPostsModal')"><i class="fas fa-arrow-left text-xl"></i></button><h2 class="font-bold text-lg">My Posts</h2></div>
+        <!-- FIXED custom title area overlapping prevention -->
+        <div class="p-4 shadow-sm flex items-center gap-4 bg-white text-gray-900 border-b">
+            <button id="customMyPostsBackBtn" onclick="closeModal('myPostsModal')"><i class="fas fa-arrow-left text-xl"></i></button>
+            <h2 class="font-bold text-lg">My Posts</h2>
+        </div>
         <div id="myPostsList" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 animate-none"></div>
     </div>
 
@@ -240,9 +244,9 @@
 
     <!-- ADMIN PANEL -->
     <div id="adminModal" class="hidden fixed inset-0 bg-white z-[60] flex flex-col overflow-hidden">
-        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b">
+        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b text-gray-900">
             <div class="flex items-center gap-3">
-                <button onclick="closeModal('adminModal')"><i class="fas fa-arrow-left text-xl"></i></button>
+                <button id="customAdminBackBtn" onclick="closeModal('adminModal')"><i class="fas fa-arrow-left text-xl"></i></button>
                 <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
             </div>
         </div>
@@ -283,6 +287,9 @@
         let imagesArray = [];
         let currentPostIdForComment = null;
         let editModePostId = null; 
+
+        // FIXED Modal navigation stack to handle Telegram's Native Back Button
+        let openModalsStack = [];
 
         // Apply Full Screen App natively if API is supported, otherwise expand
         if (tg.requestFullscreen) {
@@ -336,47 +343,20 @@
             document.getElementById('referInputLink').value = link;
 
             try {
-                // 2. Fetch/Create User in Database safely
-                let { data: dbUser, error } = await supabase.from('users').select('*').eq('tg_id', liveUser.tg_id).maybeSingle();
+                // 2. Fetch/Create User dynamically via secure Auth API (bypasses direct DB RLS blocks)
+                const authRes = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData })
+                });
                 
-                if (error) console.error("Database connection issue:", error);
-
-                if (!dbUser) {
-                    let referred_by = null;
-                    const startParam = tg.initDataUnsafe?.start_param || "";
-                    if (startParam.startsWith("ref_")) {
-                        referred_by = startParam.replace("ref_", "");
-                    }
-
-                    const { data: newUser } = await supabase.from('users').insert([{
-                        tg_id: liveUser.tg_id,
-                        name: liveUser.name,
-                        username: liveUser.username,
-                        photo_url: liveUser.photo_url,
-                        channels: [],
-                        referred_by: referred_by,
-                        is_admin: false,
-                        created_at: new Date().toISOString()
-                    }]).select().maybeSingle();
-                    
-                    dbUser = newUser || { ...liveUser, channels: [], is_admin: false }; // Fallback
+                const authData = await authRes.json();
+                
+                if (authData && authData.success) {
+                    currentUser = authData.user;
                 } else {
-                    // Update user fields if Telegram profile changes
-                    if (dbUser.name !== liveUser.name || dbUser.photo_url !== liveUser.photo_url) {
-                        const { data: updated } = await supabase.from('users').update({
-                            name: liveUser.name,
-                            photo_url: liveUser.photo_url,
-                            username: liveUser.username
-                        }).eq('tg_id', liveUser.tg_id).select().maybeSingle();
-                        if (updated) dbUser = updated;
-                    }
+                    throw new Error("Auth API response failed");
                 }
-
-                // Load Referral counts dynamically to calculate Level
-                const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', liveUser.tg_id);
-                dbUser.level = calculateLevel(refCount || 0);
-                
-                currentUser = dbUser;
 
                 // Refresh UI with calculated DB details
                 document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
@@ -388,7 +368,7 @@
                 }
 
             } catch(dbErr) {
-                console.error("Supabase load failed, using live fallbacks:", dbErr);
+                console.error("Auth routing failed, using live fallbacks:", dbErr);
                 currentUser = { ...liveUser, level: 1, channels: [], is_admin: false };
             }
 
@@ -427,7 +407,17 @@
             }
 
             const el = document.getElementById(id);
-            if (el) el.classList.remove('hidden');
+            if (el) {
+                el.classList.remove('hidden');
+                
+                // Track modal stack to invoke native BackButton on Telegram header
+                openModalsStack.push(id);
+                tg.BackButton.show();
+                
+                // Hide overlapping custom inline back buttons in TG to prevent overlapping
+                if (id === 'myPostsModal') document.getElementById('customMyPostsBackBtn').classList.add('hidden');
+                if (id === 'adminModal') document.getElementById('customAdminBackBtn').classList.add('hidden');
+            }
 
             if(id === 'adminModal') loadAdminPanel();
             if(id === 'postModal') {
@@ -435,12 +425,33 @@
                 editModePostId = null;
             }
         };
-        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+        
+        window.closeModal = (id) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.add('hidden');
+                openModalsStack = openModalsStack.filter(m => m !== id);
+                
+                // If all modals are closed, hide Telegram's Native BackButton
+                if (openModalsStack.length === 0) {
+                    tg.BackButton.hide();
+                }
+            }
+        };
+        
         window.closeSheet = (bg, sheet) => {
             document.getElementById(sheet).classList.remove('open');
             setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
+
+        // Telegram Native BackButton Event registration
+        tg.BackButton.onClick(() => {
+            if (openModalsStack.length > 0) {
+                const lastModal = openModalsStack[openModalsStack.length - 1];
+                closeModal(lastModal);
+            }
+        });
 
         // Caption URL restriction logic based on level
         function formatCaption(text, level) {
@@ -540,14 +551,19 @@
             loadPosts();
         });
 
-        // Load Posts Feed with safety checks
+        // Load Posts Feed with safety checks (FIXED: routed via /api/getPosts to bypass RLS SELECT Blockage)
         async function loadPosts() {
             const feed = document.getElementById('feed');
             feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
             
             try {
-                let { data: posts, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
-                if (error) throw error;
+                // Fetch posts via backend secure endpoint
+                const res = await fetch('/api/getPosts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData })
+                });
+                let posts = await res.json();
 
                 if (!posts) posts = [];
 
@@ -751,7 +767,7 @@
             fetchComments();
         }
 
-        // ================= Referral System Levels Setup =================
+        // ================= Referral System Levels Setup (FIXED: secure Server bypass API to bypass client RLS check) =================
         window.openReferSheet = async () => {
             document.getElementById('referModalBg').classList.remove('hidden');
             setTimeout(() => document.getElementById('referSheet').classList.add('open'), 10);
@@ -763,21 +779,17 @@
             list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading stats...</p>';
 
             try {
-                const { data: level1Users } = await supabase.from('users').select('*').eq('referred_by', currentUser.tg_id);
-                const l1Ids = (level1Users || []).map(u => u.tg_id);
-
-                let level2Users = [];
-                if(l1Ids.length > 0) {
-                    const { data: l2 } = await supabase.from('users').select('*').in('referred_by', l1Ids);
-                    level2Users = l2 || [];
-                }
-
-                const l2Ids = level2Users.map(u => u.tg_id);
-                let level3Users = [];
-                if(l2Ids.length > 0) {
-                    const { data: l3 } = await supabase.from('users').select('*').in('referred_by', l2Ids);
-                    level3Users = l3 || [];
-                }
+                const res = await fetch('/api/getReferStats', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData })
+                });
+                
+                const stats = await res.json();
+                
+                const level1Users = stats.level1 || [];
+                const level2Users = stats.level2 || [];
+                const level3Users = stats.level3 || [];
 
                 document.getElementById('lvl1Count').innerText = level1Users.length;
                 document.getElementById('lvl2Count').innerText = level2Users.length;
@@ -836,7 +848,7 @@
                     headers: {'Content-Type':'application/json'}, 
                     body: JSON.stringify({ 
                         initData: tg.initData, 
-                        channelInput: input // Passes raw input, server handles links/usernames safely now!
+                        channelInput: input // Passes raw input, server handles links/usernames/Ids safely!
                     }) 
                 });
                 
@@ -951,13 +963,19 @@
             });
         }
 
-        // ================= My Posts Modal =================
+        // ================= My Posts Modal (FIXED: routed via secure API backend bypass) =================
         window.loadMyPosts = async () => {
             openModal('myPostsModal');
             const list = document.getElementById('myPostsList');
             list.innerHTML = 'Loading...';
             try {
-                const { data } = await supabase.from('posts').select('*').eq('author_id', currentUser.tg_id).order('created_at', {ascending: false});
+                const res = await fetch('/api/getMyPosts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData })
+                });
+                
+                const data = await res.json();
                 list.innerHTML = '';
                 if(!data || data.length === 0) {
                     list.innerHTML = '<p class="text-center text-gray-400 py-6">No posts found.</p>';
