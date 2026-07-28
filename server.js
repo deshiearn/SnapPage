@@ -55,7 +55,7 @@ async function getTgProfilePic(tgId) {
 // ================= Bot Commands =================
 bot.start(async (ctx) => {
     const tgId = ctx.from.id.toString();
-    const payload = ctx.startPayload || ""; // Telegram passes start_param here automatically
+    const payload = ctx.startPayload || "";
     
     let { data: user } = await supabase.from('users').select('*').eq('tg_id', tgId).maybeSingle();
 
@@ -110,8 +110,6 @@ app.post('/api/auth', async (req, res) => {
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     const tgId = tgUser.id.toString();
-    
-    // Extract referral from raw initData safely if present
     const urlParams = new URLSearchParams(req.body.initData);
     const startParam = urlParams.get('start_param') || '';
 
@@ -140,51 +138,82 @@ app.post('/api/auth', async (req, res) => {
     res.json({ success: true, user });
 });
 
-// Create Post (Up to 4 Images)
+// Create Post (Using Service Role Key to bypass RLS blocks)
 app.post('/api/createPost', async (req, res) => {
     const { initData, text, imagesBase64 } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
-    const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id).single();
-    
-    let imageUrls = [];
-    if (imagesBase64 && imagesBase64.length > 0) {
-        for (let img of imagesBase64) {
-            try {
-                const form = new URLSearchParams();
-                form.append('image', img.split(',')[1]);
-                const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}`, form);
-                imageUrls.push(imgbb.data.data.url);
-            } catch(e) {}
+    try {
+        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id).single();
+        
+        let imageUrls = [];
+        if (imagesBase64 && imagesBase64.length > 0) {
+            for (let img of imagesBase64) {
+                try {
+                    const form = new URLSearchParams();
+                    form.append('image', img.split(',')[1]);
+                    const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}`, form);
+                    imageUrls.push(imgbb.data.data.url);
+                } catch(e) {}
+            }
         }
-    }
 
-    await supabase.from('posts').insert([{ 
-        author_id: tgUser.id.toString(), 
-        author_name: user.name, 
-        type: 'user', 
-        text, 
-        image_urls: imageUrls,
-        created_at: new Date().toISOString()
-    }]);
-    res.json({ success: true });
+        const { error } = await supabase.from('posts').insert([{ 
+            author_id: tgUser.id.toString(), 
+            author_name: user.name, 
+            type: 'user', 
+            text, 
+            image_urls: imageUrls,
+            created_at: new Date().toISOString()
+        }]);
+
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
 });
 
-// Setup Channel
+// Setup Channel (Smart identifier parser to support links, numeric IDs, public/private channel setups)
 app.post('/api/addChannel', async (req, res) => {
     const { initData, channelInput } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        let username = channelInput.replace('https://t.me/', '').replace('@', '');
-        const chat = await bot.telegram.getChat(`@${username}`);
+        let input = channelInput.trim();
+        let chatId;
+
+        // Resolve chat identifier based on type of input
+        if (input.includes('t.me/')) {
+            if (input.includes('/c/')) {
+                const match = input.match(/\/c\/(\d+)/);
+                if (match) {
+                    chatId = `-100${match[1]}`; // Private channel message link parser
+                }
+            } else {
+                const parts = input.split('t.me/');
+                const path = parts[parts.length - 1].split('/')[0];
+                if (path.startsWith('+')) {
+                    return res.json({ error: "Private invite links are not supported directly. Please provide the numerical Channel ID (e.g. -100...) or make the channel public." });
+                }
+                chatId = `@${path.replace('@', '')}`;
+            }
+        } else if (/^-?\d+$/.test(input)) {
+            chatId = input; // Raw Numerical ID
+        } else {
+            chatId = `@${input.replace('@', '')}`; // Standard public handle
+        }
+
+        const chat = await bot.telegram.getChat(chatId);
         
         // Verification: Check if Bot is Admin
         const botInfo = await bot.telegram.getMe();
         const member = await bot.telegram.getChatMember(chat.id, botInfo.id);
-        if (member.status !== 'administrator') return res.json({ error: "Bot is not an admin in this channel!" });
+        if (member.status !== 'administrator') {
+            return res.json({ error: "Bot is not an admin inside this channel!" });
+        }
 
         // Query dynamic refer count to check Limit eligibility
         const { count: refs } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgUser.id.toString());
@@ -193,7 +222,7 @@ app.post('/api/addChannel', async (req, res) => {
         const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id).single();
         let channels = user.channels || [];
         if (channels.length >= limits.channels) {
-            return res.json({ error: `At your Level (Level ${limits.level}), you can only set up to ${limits.channels} channel(s).` });
+            return res.json({ error: `At your Level, you can only set up to ${limits.channels} channel(s).` });
         }
 
         // Get Channel Photo
@@ -204,11 +233,13 @@ app.post('/api/addChannel', async (req, res) => {
             photoUrl = imgbb.data.data.url;
         }
 
-        channels.push({ id: chat.id.toString(), name: chat.title, username, photo: photoUrl });
+        channels.push({ id: chat.id.toString(), name: chat.title, username: chat.username || 'private', photo: photoUrl });
         await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id);
         res.json({ success: true, channels });
 
-    } catch (e) { res.json({ error: "Invalid Channel setup or bot doesn't have privileges!" }); }
+    } catch (e) { 
+        res.json({ error: `Verification Failed: ${e.message || e}. Ensure the Bot is Admin in your channel first.` }); 
+    }
 });
 
 app.post('/api/removeChannel', async (req, res) => {
