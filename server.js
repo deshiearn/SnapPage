@@ -135,7 +135,80 @@ app.post('/api/auth', async (req, res) => {
         const { data: updated } = await supabase.from('users').update({ photo_url }).eq('tg_id', tgId).select().single();
         user = updated;
     }
+
+    // Securely count referrals and dynamically update user level in response payload
+    const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
+    user.ref_count = refCount || 0;
+    user.level = getLevelData(refCount || 0).level;
+
     res.json({ success: true, user });
+});
+
+// Secure endpoint to get all Posts (RLS Bypass)
+app.post('/api/getPosts', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Secure endpoint to get User's Personal Posts (RLS Bypass)
+app.post('/api/getMyPosts', async (req, res) => {
+    const { initData } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data, error } = await supabase.from('posts').select('*').eq('author_id', tgUser.id.toString()).order('created_at', { ascending: false });
+        if (error) throw error;
+        res.json(data || []);
+    } catch(e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Secure Referral Stats calculation endpoint (RLS Bypass)
+app.post('/api/getReferStats', async (req, res) => {
+    const { initData } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const myId = tgUser.id.toString();
+        
+        // Level 1
+        const { data: level1Users, error: err1 } = await supabase.from('users').select('*').eq('referred_by', myId);
+        if (err1) throw err1;
+        const l1Ids = (level1Users || []).map(u => u.tg_id);
+
+        // Level 2
+        let level2Users = [];
+        if (l1Ids.length > 0) {
+            const { data: l2, error: err2 } = await supabase.from('users').select('*').in('referred_by', l1Ids);
+            if (err2) throw err2;
+            level2Users = l2 || [];
+        }
+        const l2Ids = level2Users.map(u => u.tg_id);
+
+        // Level 3
+        let level3Users = [];
+        if (l2Ids.length > 0) {
+            const { data: l3, error: err3 } = await supabase.from('users').select('*').in('referred_by', l2Ids);
+            if (err3) throw err3;
+            level3Users = l3 || [];
+        }
+
+        res.json({
+            level1: level1Users,
+            level2: level2Users,
+            level3: level3Users
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
 });
 
 // Create Post (Using Service Role Key to bypass RLS blocks)
@@ -175,7 +248,7 @@ app.post('/api/createPost', async (req, res) => {
     }
 });
 
-// Setup Channel (Smart identifier parser to support links, numeric IDs, public/private channel setups)
+// Setup Channel (Smart identifier parser + robust ImgBB try-catch wrapper to prevent status code 400 crashes)
 app.post('/api/addChannel', async (req, res) => {
     const { initData, channelInput } = req.body;
     const tgUser = validateTGData(initData);
@@ -225,12 +298,16 @@ app.post('/api/addChannel', async (req, res) => {
             return res.json({ error: `At your Level, you can only set up to ${limits.channels} channel(s).` });
         }
 
-        // Get Channel Photo
-        let photoUrl = 'https://ui-avatars.com/api/?name=Channel';
+        // FIXED: Wrapped ImgBB photo upload in try-catch to avoid crashing if API key fails
+        let photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.title || 'C')}`;
         if (chat.photo) {
-            const link = await bot.telegram.getFileLink(chat.photo.small_file_id);
-            const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}&image=${encodeURIComponent(link)}`);
-            photoUrl = imgbb.data.data.url;
+            try {
+                const link = await bot.telegram.getFileLink(chat.photo.small_file_id);
+                const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}&image=${encodeURIComponent(link)}`);
+                photoUrl = imgbb.data.data.url;
+            } catch(imgErr) {
+                console.log("Channel avatar upload failed, falling back gracefully:", imgErr);
+            }
         }
 
         channels.push({ id: chat.id.toString(), name: chat.title, username: chat.username || 'private', photo: photoUrl });
