@@ -30,11 +30,13 @@
             padding-top: env(safe-area-inset-top, 24px);
         }
 
-        /* Dark Mode Styling */
+        /* Dark Mode Styling & Critical Contrast overrides (FIXED: Invisible captions on dark mode cards) */
         .dark-mode { background-color: #111827 !important; color: #f3f4f6 !important; }
         .dark-mode header { background-color: rgba(17, 24, 39, 0.9) !important; border-bottom: 1px solid #374151; }
         .dark-mode .bg-white { background-color: #1f2937 !important; color: #f3f4f6 !important; }
-        .dark-mode .text-gray-900 { color: #f3f4f6 !important; }
+        .dark-mode .text-gray-900,
+        .dark-mode .text-gray-800,
+        .dark-mode .text-gray-700 { color: #f3f4f6 !important; }
         .dark-mode .text-gray-500 { color: #9ca3af !important; }
         .dark-mode .border { border-color: #374151 !important; }
         .dark-mode .border-b { border-color: #374151 !important; }
@@ -163,7 +165,7 @@
             </div>
             <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
             <div class="flex gap-2">
-                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" placeholder="Write a comment...">
+                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900 animate-none" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
@@ -215,7 +217,7 @@
 
     <!-- SETUP CHANNEL MODAL -->
     <div id="channelModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="channelSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[70vh] flex flex-col">
+        <div id="channelSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[70vh] flex flex-col animate-none">
             <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Auto Post Channels</h3><button onclick="closeSheet('channelModalBg', 'channelSheet')"><i class="fas fa-times"></i></button></div>
             <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel with post permissions!</p>
             <div class="flex gap-2 mb-4">
@@ -244,7 +246,7 @@
 
     <!-- ADMIN PANEL -->
     <div id="adminModal" class="hidden fixed inset-0 bg-white z-[60] flex flex-col overflow-hidden">
-        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b text-gray-900">
+        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b text-gray-900 animate-none">
             <div class="flex items-center gap-3">
                 <button id="customAdminBackBtn" onclick="closeModal('adminModal')"><i class="fas fa-arrow-left text-xl"></i></button>
                 <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
@@ -290,6 +292,11 @@
 
         // FIXED Modal navigation stack to handle Telegram's Native Back Button
         let openModalsStack = [];
+
+        // Pagination/Infinite scroll variables (10 posts at a time)
+        let currentPage = 1;
+        let isLoadingFeed = false;
+        let hasMorePosts = true;
 
         // Apply Full Screen App natively if API is supported, otherwise expand
         if (tg.requestFullscreen) {
@@ -343,7 +350,7 @@
             document.getElementById('referInputLink').value = link;
 
             try {
-                // 2. Fetch/Create User dynamically via secure Auth API (bypasses direct DB RLS blocks)
+                // 2. Fetch/Create User dynamically via secure Auth API
                 const authRes = await fetch('/api/auth', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -372,8 +379,8 @@
                 currentUser = { ...liveUser, level: 1, channels: [], is_admin: false };
             }
 
-            // 3. Guarantee loadPosts runs smoothly
-            loadPosts();
+            // 3. Load Feed
+            loadPosts(1, true);
             setupSearch();
         }
 
@@ -395,7 +402,7 @@
             if (tab === 'search') loadTopPosts();
         };
 
-        // UI Open / Close modals (FIXED ID mismatch: redirecting setup channels correctly)
+        // UI Open / Close modals
         window.openModal = (id) => {
             if (id === 'channelModal') {
                 document.getElementById('channelModalBg').classList.remove('hidden');
@@ -445,7 +452,7 @@
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
-        // Telegram Native BackButton Event registration
+        // Telegram Native BackButton Event registration (Close modal seamlessly)
         tg.BackButton.onClick(() => {
             if (openModalsStack.length > 0) {
                 const lastModal = openModalsStack[openModalsStack.length - 1];
@@ -491,7 +498,7 @@
         }
         window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
-        // Create / Edit Post Submission (FIXED: Route insert through secure Service Role backend API first to bypass DB RLS Blocks, with direct local fallback)
+        // Create / Edit Post Submission
         document.getElementById('submitPostBtn').addEventListener('click', async () => {
             const text = document.getElementById('postText').value;
             if(!text && imagesArray.length === 0) return;
@@ -500,14 +507,24 @@
 
             try {
                 if (editModePostId) {
-                    const { error } = await supabase.from('posts').update({
-                        text: text,
-                        image_urls: imagesArray
-                    }).eq('id', editModePostId);
-                    if (error) throw error;
-                    tg.showAlert("Post edited successfully!");
+                    const res = await fetch('/api/editPost', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            initData: tg.initData,
+                            postId: editModePostId,
+                            text: text,
+                            imageUrls: imagesArray
+                        })
+                    });
+                    const data = await res.json();
+                    if (data && data.success) {
+                        tg.showAlert("Post edited successfully!");
+                    } else {
+                        throw new Error(data.error || "Update failed");
+                    }
                 } else {
-                    // 1. Try server backend creation first (Guarantees bypass of Supabase Anon RLS block)
+                    // Route insert through secure Service Role backend API first to bypass DB RLS Blocks
                     const apiRes = await fetch('/api/createPost', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -519,22 +536,10 @@
                     });
                     
                     const apiData = await apiRes.json();
-                    
                     if (apiData && apiData.success) {
                         tg.showAlert("Post published successfully!");
                     } else {
-                        // 2. Direct client insert fallback with error validation
-                        const { error } = await supabase.from('posts').insert([{
-                            author_id: currentUser.tg_id,
-                            author_name: currentUser.name,
-                            text: text,
-                            image_urls: imagesArray,
-                            type: 'user',
-                            created_at: new Date().toISOString()
-                        }]);
-                        
-                        if (error) throw error;
-                        tg.showAlert("Post published successfully!");
+                        throw new Error(apiData.error || "Creation failed");
                     }
                 }
             } catch(e) {
@@ -548,55 +553,52 @@
             renderPreviews();
             btn.innerText = "Post"; btn.disabled = false;
             editModePostId = null;
-            loadPosts();
+            loadPosts(1, true);
         });
 
-        // Load Posts Feed with safety checks (FIXED: routed via /api/getPosts to bypass RLS SELECT Blockage)
-        async function loadPosts() {
+        // Load Posts Feed with Pagination and Infinite Scroll (10 posts at a time)
+        async function loadPosts(page = 1, clearFeed = true) {
+            if (isLoadingFeed) return;
+            isLoadingFeed = true;
+
             const feed = document.getElementById('feed');
-            feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
+            if (clearFeed) {
+                feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
+                currentPage = 1;
+                hasMorePosts = true;
+            } else {
+                const scrollLoading = document.createElement('div');
+                scrollLoading.id = 'feed-scroll-loading';
+                scrollLoading.className = 'text-center text-gray-400 py-4';
+                scrollLoading.innerHTML = '<i class="fas fa-spinner fa-spin text-xl"></i>';
+                feed.appendChild(scrollLoading);
+            }
             
             try {
-                // Fetch posts via backend secure endpoint
                 const res = await fetch('/api/getPosts', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ initData: tg.initData })
+                    body: JSON.stringify({ initData: tg.initData, page, limit: 10 })
                 });
-                let posts = await res.json();
+                const posts = await res.json();
 
-                if (!posts) posts = [];
+                const indicator = document.getElementById('feed-scroll-loading');
+                if (indicator) indicator.remove();
 
-                // Handle unique link direct opening highlighting matching ID
-                const startParam = tg.initDataUnsafe?.start_param || "";
-                if (startParam.startsWith("post_") && posts.length > 0) {
-                    const postId = startParam.replace("post_", "");
-                    const targetIdx = posts.findIndex(p => String(p.id) === postId);
-                    if (targetIdx !== -1) {
-                        const targetPost = posts.splice(targetIdx, 1)[0];
-                        posts.unshift(targetPost); 
+                if (!posts || posts.length === 0) {
+                    hasMorePosts = false;
+                    if (clearFeed) {
+                        feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
                     }
-                }
-
-                if (posts.length === 0) {
-                    feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
+                    isLoadingFeed = false;
                     return;
                 }
 
-                const resolvedHtml = await Promise.all(posts.map(async post => {
-                    let authPhoto = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(post.author_name || 'U');
-                    let calculatedAuthorLevel = 1;
+                if (posts.length < 10) {
+                    hasMorePosts = false;
+                }
 
-                    try {
-                        if (post.type === 'user') {
-                            const { data: u } = await supabase.from('users').select('photo_url, tg_id').eq('tg_id', post.author_id).maybeSingle();
-                            if(u?.photo_url) authPhoto = u.photo_url;
-                            
-                            const { count: uRef } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
-                            calculatedAuthorLevel = calculateLevel(uRef || 0);
-                        }
-                    } catch(e){}
-
+                const resolvedHtml = posts.map(post => {
                     let imgHtml = '';
                     if(post.image_urls && post.image_urls.length > 0) {
                         imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
@@ -607,16 +609,18 @@
                         if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
                     }
 
-                    const captionHtml = formatCaption(post.text, calculatedAuthorLevel);
+                    const captionHtml = formatCaption(post.text, post.author_level || 1);
+                    const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
+                    const likeCount = post.likes_count || 0;
 
                     return `
                         <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
                             <div class="flex justify-between items-center mb-3">
                                 <div class="flex items-center space-x-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+String(post.author_id).replace('-100','') : 'tg://user?id='+post.author_id}')">
-                                    <img src="${authPhoto}" class="w-10 h-10 rounded-full object-cover">
+                                    <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                                     <div>
                                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}</h3>
-                                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${calculatedAuthorLevel}</span>
+                                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1}</span>
                                     </div>
                                 </div>
                                 <button onclick="openPostOptions('${post.id}', '${post.author_id}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
@@ -624,19 +628,39 @@
                             <p class="mb-3 text-sm whitespace-pre-wrap text-gray-800">${captionHtml}</p>
                             ${imgHtml}
                             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
-                                <button onclick="likePost(this, '${post.id}')" class="hover:text-red-500 flex items-center gap-1"><i class="fas fa-heart"></i> Like</button>
+                                <button onclick="likePost(this, '${post.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
+                                    <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
+                                </button>
                                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> Comment</button>
                                 <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> Share</button>
                             </div>
                         </div>`;
-                }));
+                }).join('');
 
-                feed.innerHTML = resolvedHtml.join('');
+                if (clearFeed) {
+                    feed.innerHTML = resolvedHtml;
+                } else {
+                    feed.insertAdjacentHTML('beforeend', resolvedHtml);
+                }
             } catch(e) {
                 console.error(e);
-                feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database. Check your connection.</div>`;
+                if (clearFeed) {
+                    feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database. Check your connection.</div>`;
+                }
+            } finally {
+                isLoadingFeed = false;
             }
         }
+
+        // Register window scroll listener for infinite scroll mechanism
+        window.addEventListener('scroll', () => {
+            if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100) {
+                if (!isLoadingFeed && hasMorePosts) {
+                    currentPage++;
+                    loadPosts(currentPage, false);
+                }
+            }
+        });
 
         window.sharePostDirectly = (id) => {
             const forwardLink = `https://t.me/SnapPagesBot/app?startapp=post_${id}`;
@@ -644,10 +668,35 @@
             tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent(text)}`);
         }
 
-        window.likePost = (btn) => {
-            btn.classList.toggle('text-red-500');
-            const icon = btn.querySelector('i');
-            icon.classList.toggle('fa-solid');
+        // Like count dynamic incrementer API handler
+        window.likePost = async (btn, postId) => {
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/likePost', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData, postId })
+                });
+                const data = await res.json();
+                
+                if (data && data.success) {
+                    const countEl = btn.querySelector('.like-count');
+                    if (countEl) countEl.innerText = data.likesCount;
+
+                    btn.classList.toggle('text-red-500', data.hasLiked);
+                    btn.classList.toggle('font-bold', data.hasLiked);
+                    const icon = btn.querySelector('i');
+                    if (data.hasLiked) {
+                        icon.className = 'fas fa-heart text-red-500';
+                    } else {
+                        icon.className = 'far fa-heart';
+                    }
+                }
+            } catch(e) {
+                console.error("Liking failed:", e);
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         // ================= Three-dot Options Logic sheet =================
@@ -689,8 +738,15 @@
             closeSheet('optionsModalBg', 'optionsSheet');
             tg.showConfirm("Are you sure you want to delete this post?", async (ok) => {
                 if (ok) {
-                    await supabase.from('posts').delete().eq('id', postId);
-                    loadPosts();
+                    const res = await fetch('/api/deletePost', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ initData: tg.initData, postId })
+                    });
+                    const data = await res.json();
+                    if (data && data.success) {
+                        loadPosts(1, true);
+                    }
                 }
             });
         }
@@ -700,16 +756,18 @@
             const { data: post } = await supabase.from('posts').select('*').eq('id', postId).single();
             if (post) {
                 const repostText = `[Reposted from ${post.author_name}]:\n\n${post.text || ''}`;
-                await supabase.from('posts').insert([{
-                    author_id: currentUser.tg_id,
-                    author_name: currentUser.name,
-                    text: repostText,
-                    image_urls: post.image_urls || [],
-                    type: 'user',
-                    created_at: new Date().toISOString()
-                }]);
+                
+                await fetch('/api/createPost', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        initData: tg.initData,
+                        text: repostText,
+                        imagesBase64: post.image_urls || []
+                    })
+                });
                 tg.showAlert("Post reposted successfully!");
-                loadPosts();
+                loadPosts(1, true);
             }
         }
 
@@ -732,7 +790,7 @@
                 list.innerHTML = '';
                 
                 comments.forEach(c => {
-                    const isMine = String(c.author_id) === String(currentUser.tg_id);
+                    const isMine = currentUser && String(c.author_id) === String(currentUser.tg_id);
                     const safeCommentText = (c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const likeCount = c.likes_count || 0;
 
@@ -767,7 +825,7 @@
             fetchComments();
         }
 
-        // ================= Referral System Levels Setup (FIXED: secure Server bypass API to bypass client RLS check) =================
+        // ================= Referral System Levels Setup =================
         window.openReferSheet = async () => {
             document.getElementById('referModalBg').classList.remove('hidden');
             setTimeout(() => document.getElementById('referSheet').classList.add('open'), 10);
@@ -848,7 +906,7 @@
                     headers: {'Content-Type':'application/json'}, 
                     body: JSON.stringify({ 
                         initData: tg.initData, 
-                        channelInput: input // Passes raw input, server handles links/usernames/Ids safely!
+                        channelInput: input 
                     }) 
                 });
                 
@@ -963,7 +1021,7 @@
             });
         }
 
-        // ================= My Posts Modal (FIXED: routed via secure API backend bypass) =================
+        // ================= My Posts Modal =================
         window.loadMyPosts = async () => {
             openModal('myPostsModal');
             const list = document.getElementById('myPostsList');
@@ -995,9 +1053,16 @@
         window.deletePost = async (id) => {
             tg.showConfirm("Are you sure you want to delete this post?", async (ok) => {
                 if(ok) {
-                    await supabase.from('posts').delete().eq('id', id);
-                    loadMyPosts(); 
-                    loadPosts();
+                    const res = await fetch('/api/deletePost', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ initData: tg.initData, postId: id })
+                    });
+                    const data = await res.json();
+                    if (data && data.success) {
+                        loadMyPosts(); 
+                        loadPosts(1, true);
+                    }
                 }
             });
         };
