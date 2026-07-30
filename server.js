@@ -14,7 +14,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = process.env.IMGBB_API_KEY;
+const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb"; // Hardcoded default fallback key
 
 // ================= Referral Level Mapping (3 Refs = Lvl 2, 5 Refs = Lvl 3) =================
 const getLevelData = (refs) => {
@@ -78,28 +78,49 @@ bot.start(async (ctx) => {
     ctx.reply('Welcome to SnapPages! 🚀', Markup.inlineKeyboard([ Markup.button.webApp('Open App', process.env.MINI_APP_URL) ]));
 });
 
-// ================= Channel Auto Sync =================
+// ================= Channel Auto Sync (Supports Text, Photo & Video Captions seamlessly) =================
 bot.on('channel_post', async (ctx) => {
     const channelId = ctx.update.channel_post.chat.id.toString();
     const msg = ctx.update.channel_post;
     
-    const { data: users } = await supabase.from('users').select('channels');
-    let isRegistered = false;
-    users?.forEach(u => { if(u.channels?.some(c => c.id === channelId)) isRegistered = true; });
+    const { data: users, error } = await supabase.from('users').select('channels');
+    if (error) return;
 
-    if (isRegistered && msg.photo) {
+    let isRegistered = false;
+    users?.forEach(u => { 
+        if (u.channels && Array.isArray(u.channels)) {
+            if (u.channels.some(c => String(c.id) === String(channelId))) {
+                isRegistered = true;
+            }
+        }
+    });
+
+    if (isRegistered) {
         try {
-            const fileLink = await bot.telegram.getFileLink(msg.photo[msg.photo.length - 1].file_id);
-            const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}&image=${encodeURIComponent(fileLink)}`);
-            
+            let imageUrls = [];
+            if (msg.photo) {
+                try {
+                    const fileLink = await bot.telegram.getFileLink(msg.photo[msg.photo.length - 1].file_id);
+                    const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}&image=${encodeURIComponent(fileLink)}`);
+                    imageUrls.push(imgbb.data.data.url);
+                } catch(imgErr) {
+                    console.error("Auto Sync ImgBB upload failed:", imgErr);
+                }
+            }
+
+            const textContent = msg.text || msg.caption || '';
+
             await supabase.from('posts').insert([{
                 author_id: channelId, 
-                author_name: msg.chat.title, 
+                author_name: msg.chat.title || 'Channel Post', 
                 type: 'channel',
-                text: msg.caption || '', 
-                image_urls: [imgbb.data.data.url]
+                text: textContent, 
+                image_urls: imageUrls,
+                created_at: new Date().toISOString()
             }]);
-        } catch (e) { console.error("Sync Error", e); }
+        } catch (e) { 
+            console.error("Auto Sync Sync Error", e); 
+        }
     }
 });
 
@@ -136,7 +157,6 @@ app.post('/api/auth', async (req, res) => {
         user = updated;
     }
 
-    // Securely count referrals and dynamically update user level in response payload
     const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
     user.ref_count = refCount || 0;
     user.level = getLevelData(refCount || 0).level;
@@ -144,12 +164,49 @@ app.post('/api/auth', async (req, res) => {
     res.json({ success: true, user });
 });
 
-// Secure endpoint to get all Posts (RLS Bypass)
+// Secure endpoint to get all Posts with Pagination (10 posts at a time, bypassing client RLS SELECT block)
 app.post('/api/getPosts', async (req, res) => {
+    const { page = 1, limit = 10 } = req.body;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
     try {
-        const { data, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+        const { data: posts, error } = await supabase.from('posts')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
         if (error) throw error;
-        res.json(data || []);
+        if (!posts) return res.json([]);
+
+        // Fetch & enrich author details for all retrieved posts
+        const enrichedPosts = await Promise.all(posts.map(async post => {
+            let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_name || 'U')}`;
+            let authorLevel = 1;
+
+            try {
+                if (post.type === 'user') {
+                    const { data: u } = await supabase.from('users').select('photo_url, tg_id').eq('tg_id', post.author_id).maybeSingle();
+                    if (u && u.photo_url) authPhoto = u.photo_url;
+
+                    const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
+                    authorLevel = getLevelData(refCount || 0).level;
+                } else if (post.type === 'channel') {
+                    const { data: u } = await supabase.from('users').select('channels').contains('channels', [{ id: post.author_id }]);
+                    if (u && u.length > 0) {
+                        const ch = u[0].channels.find(c => String(c.id) === String(post.author_id));
+                        if (ch && ch.photo) authPhoto = ch.photo;
+                    }
+                }
+            } catch(e) {}
+
+            return {
+                ...post,
+                author_photo: authPhoto,
+                author_level: authorLevel
+            };
+        }));
+
+        res.json(enrichedPosts);
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -238,6 +295,8 @@ app.post('/api/createPost', async (req, res) => {
             type: 'user', 
             text, 
             image_urls: imageUrls,
+            likes_count: 0,
+            likes_users: [],
             created_at: new Date().toISOString()
         }]);
 
@@ -248,7 +307,81 @@ app.post('/api/createPost', async (req, res) => {
     }
 });
 
-// Setup Channel (Smart identifier parser + robust ImgBB try-catch wrapper to prevent status code 400 crashes)
+// Edit Post (Using Service Role Key to bypass direct RLS update block)
+app.post('/api/editPost', async (req, res) => {
+    const { initData, postId, text, imageUrls } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { error } = await supabase.from('posts').update({
+            text,
+            image_urls: imageUrls
+        }).match({ id: postId, author_id: tgUser.id.toString() });
+        
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Delete Post (Using Service Role Key to bypass direct RLS delete block)
+app.post('/api/deletePost', async (req, res) => {
+    const { initData, postId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { error } = await supabase.from('posts').delete().match({ id: postId, author_id: tgUser.id.toString() });
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Like/Unlike dynamic handler API (Service Role Key bypass)
+app.post('/api/likePost', async (req, res) => {
+    const { initData, postId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: post, error: fetchErr } = await supabase.from('posts').select('likes_count, likes_users').eq('id', postId).maybeSingle();
+        if (fetchErr) throw fetchErr;
+
+        if (post) {
+            let likesUsers = post.likes_users || [];
+            let likesCount = post.likes_count || 0;
+            const userId = tgUser.id.toString();
+
+            let hasLiked = false;
+            if (likesUsers.includes(userId)) {
+                likesUsers = likesUsers.filter(id => id !== userId);
+                likesCount = Math.max(0, likesCount - 1);
+            } else {
+                likesUsers.push(userId);
+                likesCount += 1;
+                hasLiked = true;
+            }
+
+            const { error: updateErr } = await supabase.from('posts').update({
+                likes_count: likesCount,
+                likes_users: likesUsers
+            }).eq('id', postId);
+            if (updateErr) throw updateErr;
+
+            res.json({ success: true, likesCount, hasLiked });
+        } else {
+            res.status(404).json({ error: "Post not found" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Setup Channel
 app.post('/api/addChannel', async (req, res) => {
     const { initData, channelInput } = req.body;
     const tgUser = validateTGData(initData);
@@ -298,7 +431,7 @@ app.post('/api/addChannel', async (req, res) => {
             return res.json({ error: `At your Level, you can only set up to ${limits.channels} channel(s).` });
         }
 
-        // FIXED: Wrapped ImgBB photo upload in try-catch to avoid crashing if API key fails
+        // Robust ImgBB photo upload in try-catch to prevent status code 400 crashes
         let photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.title || 'C')}`;
         if (chat.photo) {
             try {
@@ -328,14 +461,6 @@ app.post('/api/removeChannel', async (req, res) => {
     res.json({ success: true, channels });
 });
 
-// Post Management (Delete)
-app.post('/api/deletePost', async (req, res) => {
-    const { initData, postId } = req.body;
-    const tgUser = validateTGData(initData);
-    await supabase.from('posts').delete().match({ id: postId, author_id: tgUser.id.toString() });
-    res.json({ success: true });
-});
-
 // Comments API
 app.post('/api/getComments', async (req, res) => {
     const { postId } = req.body;
@@ -346,15 +471,23 @@ app.post('/api/getComments', async (req, res) => {
 app.post('/api/addComment', async (req, res) => {
     const { initData, postId, text } = req.body;
     const tgUser = validateTGData(initData);
-    const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id).single();
-    await supabase.from('comments').insert([{ 
-        post_id: postId, 
-        author_id: tgUser.id.toString(), 
-        author_name: user.name, 
-        text,
-        likes_count: 0
-    }]);
-    res.json({ success: true });
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        const authorName = user ? user.name : tgUser.first_name || "Anonymous";
+        const { error } = await supabase.from('comments').insert([{ 
+            post_id: postId, 
+            author_id: tgUser.id.toString(), 
+            author_name: authorName, 
+            text,
+            likes_count: 0
+        }]);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
 });
 
 app.post('/api/deleteComment', async (req, res) => {
