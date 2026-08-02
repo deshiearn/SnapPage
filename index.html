@@ -30,7 +30,7 @@
             padding-top: env(safe-area-inset-top, 24px);
         }
 
-        /* Dark Mode Styling & Critical Contrast overrides (FIXED: Invisible captions on dark mode cards) */
+        /* Dark Mode Styling & Contrast Overrides (FIXED: Invisible captions in dark mode card styles) */
         .dark-mode { background-color: #111827 !important; color: #f3f4f6 !important; }
         .dark-mode header { background-color: rgba(17, 24, 39, 0.9) !important; border-bottom: 1px solid #374151; }
         .dark-mode .bg-white { background-color: #1f2937 !important; color: #f3f4f6 !important; }
@@ -335,6 +335,20 @@
             return 1;
         }
 
+        // FIXED Redirect handler for clicking on post profiles (Loads Telegram profile or Channel directly)
+        window.openProfileLink = (type, authorId, username) => {
+            if (username && username !== 'private') {
+                tg.openTelegramLink(`https://t.me/${username}`);
+            } else {
+                if (type === 'channel') {
+                    const cleanId = String(authorId).replace('-100', '');
+                    tg.openTelegramLink(`https://t.me/c/${cleanId}`);
+                } else {
+                    tg.openTelegramLink(`tg://user?id=${authorId}`);
+                }
+            }
+        }
+
         async function initApp() {
             const liveUser = getTelegramUser();
             
@@ -452,7 +466,7 @@
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
-        // Telegram Native BackButton Event registration (Close modal seamlessly)
+        // Telegram Native BackButton Event registration
         tg.BackButton.onClick(() => {
             if (openModalsStack.length > 0) {
                 const lastModal = openModalsStack[openModalsStack.length - 1];
@@ -616,7 +630,7 @@
                     return `
                         <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
                             <div class="flex justify-between items-center mb-3">
-                                <div class="flex items-center space-x-3 cursor-pointer" onclick="tg.openTelegramLink('${post.type==='channel' ? 'https://t.me/c/'+String(post.author_id).replace('-100','') : 'tg://user?id='+post.author_id}')">
+                                <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileLink('${post.type}', '${post.author_id}', '${post.author_username || ''}')">
                                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                                     <div>
                                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}</h3>
