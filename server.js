@@ -14,7 +14,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb"; // Updated live ImgBB API key
+const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb";
 
 // ================= Referral Level Mapping =================
 const getLevelData = (refs) => {
@@ -68,7 +68,6 @@ async function uploadImageToImgBB(base64Str) {
 async function sendTelegramNotification(targetTgId, text, startappParam = "") {
     if (!targetTgId) return;
     try {
-        // Appends startapp query param to allow targeted deep-linking on open app
         const appUrl = startappParam 
             ? `${process.env.MINI_APP_URL}?startapp=${startappParam}`
             : process.env.MINI_APP_URL;
@@ -78,6 +77,24 @@ async function sendTelegramNotification(targetTgId, text, startappParam = "") {
         ]));
     } catch (err) {
         console.error(`Failed to send TG notification to ${targetTgId}:`, err.message);
+    }
+}
+
+// ================= Notify Owners (Resolves Channel Post Likes/Comments Notifications to Channel Owner) =================
+async function notifyPostOwners(postAuthorId, postType, messageText, startappParam) {
+    try {
+        if (postType === 'channel') {
+            const { data: owners } = await supabase.from('users').select('tg_id').contains('channels', [{ id: postAuthorId }]);
+            if (owners && owners.length > 0) {
+                owners.forEach(owner => {
+                    sendTelegramNotification(owner.tg_id, messageText, startappParam);
+                });
+            }
+        } else {
+            sendTelegramNotification(postAuthorId, messageText, startappParam);
+        }
+    } catch (err) {
+        console.error("Notification forwarding failed:", err);
     }
 }
 
@@ -108,7 +125,7 @@ bot.start(async (ctx) => {
         if (payload.startsWith("ref_")) {
             referred_by = payload.replace("ref_", "");
             
-            // Notify the inviter that someone joined using their link
+            // Notify the inviter only on genuine brand new registration
             sendTelegramNotification(
                 referred_by, 
                 `🎉 New Refer Joined!\n\n${ctx.from.first_name} has joined using your referral link. Check your Level Stats inside the Referral Center.`, 
@@ -236,7 +253,6 @@ app.post('/api/getPosts', async (req, res) => {
         if (error) throw error;
         if (!posts) return res.json([]);
 
-        // Fetch & enrich author details for all retrieved posts
         const enrichedPosts = await Promise.all(posts.map(async post => {
             let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_name || 'U')}`;
             let authorLevel = 1;
@@ -275,7 +291,7 @@ app.post('/api/getPosts', async (req, res) => {
         res.json(enrichedPosts);
     } catch (e) {
         console.error("Feed error:", e);
-        res.json([]); // Return empty list instead of crashing client side
+        res.json([]);
     }
 });
 
@@ -370,17 +386,33 @@ app.post('/api/createPost', async (req, res) => {
     }
 });
 
-// Edit Post
+// Edit Post (Using Admin Key bypass with Ownership validation for Channel/User ownership)
 app.post('/api/editPost', async (req, res) => {
     const { initData, postId, text, imageUrls } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
+        const { data: post, error: findError } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+        if (!post || findError) return res.status(404).json({ error: "Post not found" });
+
+        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        if (!user) return res.status(403).json({ error: "Unauthorized" });
+
+        let isOwner = false;
+        if (post.type === 'channel') {
+            isOwner = user.channels && Array.isArray(user.channels) && 
+                      user.channels.some(c => String(c.id) === String(post.author_id));
+        } else {
+            isOwner = String(post.author_id) === String(user.tg_id);
+        }
+
+        if (!isOwner) return res.status(403).json({ error: "You do not own this post!" });
+
         const { error } = await supabase.from('posts').update({
             text,
             image_urls: imageUrls
-        }).match({ id: postId, author_id: tgUser.id.toString() });
+        }).eq('id', postId);
         
         if (error) throw error;
         res.json({ success: true });
@@ -389,14 +421,30 @@ app.post('/api/editPost', async (req, res) => {
     }
 });
 
-// Delete Post
+// Delete Post (Using Admin Key bypass with Ownership validation for Channel/User ownership)
 app.post('/api/deletePost', async (req, res) => {
     const { initData, postId } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { error } = await supabase.from('posts').delete().match({ id: postId, author_id: tgUser.id.toString() });
+        const { data: post, error: findError } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+        if (!post || findError) return res.status(404).json({ error: "Post not found" });
+
+        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        if (!user) return res.status(403).json({ error: "Unauthorized" });
+
+        let isOwner = false;
+        if (post.type === 'channel') {
+            isOwner = user.channels && Array.isArray(user.channels) && 
+                      user.channels.some(c => String(c.id) === String(post.author_id));
+        } else {
+            isOwner = String(post.author_id) === String(user.tg_id);
+        }
+
+        if (!isOwner) return res.status(403).json({ error: "You do not own this post!" });
+
+        const { error } = await supabase.from('posts').delete().eq('id', postId);
         if (error) throw error;
         res.json({ success: true });
     } catch (e) {
@@ -404,14 +452,14 @@ app.post('/api/deletePost', async (req, res) => {
     }
 });
 
-// Like/Unlike dynamic handler with bot notifications
+// Like/Unlike dynamic handler with bot notifications (Forwarding to Channel Owners if liked)
 app.post('/api/likePost', async (req, res) => {
     const { initData, postId } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { data: post, error: fetchErr } = await supabase.from('posts').select('likes_count, likes_users, author_id, text').eq('id', postId).maybeSingle();
+        const { data: post, error: fetchErr } = await supabase.from('posts').select('likes_count, likes_users, author_id, text, type').eq('id', postId).maybeSingle();
         if (fetchErr) throw fetchErr;
 
         if (post) {
@@ -428,15 +476,14 @@ app.post('/api/likePost', async (req, res) => {
                 likesCount += 1;
                 hasLiked = true;
 
-                // Send Bot Notification to the post owner (if it's not the owner themselves)
-                if (String(post.author_id) !== userId) {
-                    const postPreview = post.text ? post.text.substring(0, 30) : 'Photo Post';
-                    sendTelegramNotification(
-                        post.author_id, 
-                        `❤️ ${tgUser.first_name} liked your post:\n"${postPreview}..."`, 
-                        `post_${postId}`
-                    );
-                }
+                // Send Bot Notification to the post owner or channel owner
+                const postPreview = post.text ? post.text.substring(0, 30) : 'Photo Post';
+                await notifyPostOwners(
+                    post.author_id,
+                    post.type,
+                    `❤️ ${tgUser.first_name} liked your post:\n"${postPreview}..."`,
+                    `post_${postId}`
+                );
             }
 
             const { error: updateErr } = await supabase.from('posts').update({
@@ -543,6 +590,37 @@ app.post('/api/removeChannel', async (req, res) => {
     res.json({ success: true, channels });
 });
 
+// Secure Search Posts API (Bypassing direct client-side RLS Blockage)
+app.post('/api/searchPosts', async (req, res) => {
+    const { query } = req.body;
+    try {
+        const { data, error } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).limit(15);
+        if (error) throw error;
+        
+        // Enrich search results author photos and levels
+        const enriched = await Promise.all((data || []).map(async post => {
+            let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_name || 'U')}`;
+            try {
+                if (post.type === 'user') {
+                    const { data: u } = await supabase.from('users').select('photo_url').eq('tg_id', post.author_id).maybeSingle();
+                    if (u && u.photo_url) authPhoto = u.photo_url;
+                } else if (post.type === 'channel') {
+                    const { data: u } = await supabase.from('users').select('channels').contains('channels', [{ id: post.author_id }]);
+                    if (u && u.length > 0) {
+                        const ch = u[0].channels.find(c => String(c.id) === String(post.author_id));
+                        if (ch && ch.photo) authPhoto = ch.photo;
+                    }
+                }
+            } catch(e){}
+            return { ...post, author_photo: authPhoto };
+        }));
+
+        res.json(enriched);
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
 // Comments API
 app.post('/api/getComments', async (req, res) => {
     const { postId } = req.body;
@@ -559,22 +637,23 @@ app.post('/api/addComment', async (req, res) => {
         const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
         const authorName = user ? user.name : tgUser.first_name || "Anonymous";
         
+        // FIXED: Removed likes_count parameter to prevent crash if old DB tables do not have likes_count column
         const { error } = await supabase.from('comments').insert([{ 
             post_id: postId, 
             author_id: tgUser.id.toString(), 
             author_name: authorName, 
-            text,
-            likes_count: 0
+            text
         }]);
         if (error) throw error;
 
-        // Send Bot notification to post author about comment
-        const { data: post } = await supabase.from('posts').select('author_id, text').eq('id', postId).maybeSingle();
+        // Send Bot notification to post author or channel owners about comment
+        const { data: post } = await supabase.from('posts').select('author_id, text, type').eq('id', postId).maybeSingle();
         if (post && String(post.author_id) !== tgUser.id.toString()) {
             const postPreview = post.text ? post.text.substring(0, 20) : 'Photo Post';
-            sendTelegramNotification(
-                post.author_id, 
-                `💬 ${tgUser.first_name} commented on your post:\n"${postPreview}..."\n\nComment: "${text}"`, 
+            await notifyPostOwners(
+                post.author_id,
+                post.type,
+                `💬 ${tgUser.first_name} commented on your post:\n"${postPreview}..."\n\nComment: "${text}"`,
                 `post_${postId}`
             );
         }
