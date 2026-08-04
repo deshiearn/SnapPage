@@ -335,7 +335,7 @@
             return 1;
         }
 
-        // FIXED Redirect handler for clicking on post profiles (Loads Telegram profile or Channel directly)
+        // Redirect handler for clicking on post profiles (Loads Telegram profile or Channel directly)
         window.openProfileLink = (type, authorId, username) => {
             if (username && username !== 'private') {
                 tg.openTelegramLink(`https://t.me/${username}`);
@@ -398,7 +398,7 @@
             setupSearch();
         }
 
-        // Switch Tabs
+        // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
         window.switchTab = (tab) => {
             ['home', 'search', 'settings'].forEach(t => {
                 const element = document.getElementById(`tab-${t}`);
@@ -413,6 +413,9 @@
             if(tab === 'settings') document.getElementById('navProfilePic').classList.add('border-blue-600');
             else document.getElementById('navProfilePic').classList.remove('border-blue-600');
 
+            if (tab === 'home') {
+                loadPosts(1, true); // Clean re-fetch on Home nav click
+            }
             if (tab === 'search') loadTopPosts();
         };
 
@@ -613,19 +616,40 @@
                 }
 
                 const resolvedHtml = posts.map(post => {
+                    // FIXED: Fallback parser to cleanly convert raw PostgreSQL string arrays into JavaScript arrays
+                    let imageUrls = post.image_urls;
+                    if (typeof imageUrls === 'string') {
+                        if (imageUrls.startsWith('{') && imageUrls.endsWith('}')) {
+                            imageUrls = imageUrls.slice(1, -1).split(',').map(u => u.trim().replace(/^"|"$/g, ''));
+                        } else {
+                            try {
+                                imageUrls = JSON.parse(imageUrls);
+                            } catch(e) {
+                                imageUrls = [imageUrls];
+                            }
+                        }
+                    }
+
                     let imgHtml = '';
-                    if(post.image_urls && post.image_urls.length > 0) {
+                    if(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "") {
                         imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
-                        post.image_urls.forEach(url => {
-                            imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
+                        imageUrls.forEach(url => {
+                            if (url) {
+                                imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
+                            }
                         });
                         imgHtml += `</div>`;
-                        if(post.image_urls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
+                        if(imageUrls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
                     }
 
                     const captionHtml = formatCaption(post.text, post.author_level || 1);
                     const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
                     const likeCount = post.likes_count || 0;
+
+                    // FIXED: Dynamic Level Badge with [Channel] or [User] labels 
+                    const labelBadge = post.type === 'channel' 
+                        ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">Channel</span>'
+                        : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
 
                     return `
                         <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
@@ -634,10 +658,10 @@
                                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                                     <div>
                                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}</h3>
-                                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1}</span>
+                                        ${labelBadge}
                                     </div>
                                 </div>
-                                <button onclick="openPostOptions('${post.id}', '${post.author_id}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
+                                <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
                             </div>
                             <p class="mb-3 text-sm whitespace-pre-wrap text-gray-800">${captionHtml}</p>
                             ${imgHtml}
@@ -713,15 +737,24 @@
             }
         }
 
-        // ================= Three-dot Options Logic sheet =================
-        window.openPostOptions = async (postId, authorId) => {
+        // ================= Three-dot Options Logic sheet (FIXED: Supports own-channel post modifications) =================
+        window.openPostOptions = async (postId, authorId, postType) => {
             const sheet = document.getElementById('optionsSheet');
             const content = document.getElementById('optionsContent');
             
             document.getElementById('optionsModalBg').classList.remove('hidden');
             setTimeout(() => sheet.classList.add('open'), 10);
 
-            const isMine = String(authorId) === String(currentUser.tg_id);
+            // Validates own-channel post modification privileges
+            let isMine = false;
+            if (currentUser) {
+                if (postType === 'channel') {
+                    isMine = currentUser.channels && Array.isArray(currentUser.channels) && 
+                             currentUser.channels.some(c => String(c.id) === String(authorId));
+                } else {
+                    isMine = String(authorId) === String(currentUser.tg_id);
+                }
+            }
 
             if (isMine) {
                 content.innerHTML = `
@@ -742,7 +775,16 @@
                 editModePostId = postId;
                 document.getElementById('postModalTitle').innerText = "Edit Post";
                 document.getElementById('postText').value = post.text;
-                imagesArray = post.image_urls || [];
+                
+                let imageUrls = post.image_urls;
+                if (typeof imageUrls === 'string') {
+                    if (imageUrls.startsWith('{') && imageUrls.endsWith('}')) {
+                        imageUrls = imageUrls.slice(1, -1).split(',').map(u => u.trim().replace(/^"|"$/g, ''));
+                    } else {
+                        try { imageUrls = JSON.parse(imageUrls); } catch(e) { imageUrls = [imageUrls]; }
+                    }
+                }
+                imagesArray = imageUrls || [];
                 renderPreviews();
                 openModal('postModal');
             }
@@ -825,9 +867,14 @@
         document.getElementById('sendCommentBtn').onclick = async () => {
             const text = document.getElementById('commentInput').value.trim();
             if(!text) return;
-            await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text }) });
-            document.getElementById('commentInput').value = '';
-            fetchComments();
+            const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text }) });
+            const data = await res.json();
+            if (data && data.success) {
+                document.getElementById('commentInput').value = '';
+                fetchComments();
+            } else {
+                tg.showAlert(`Failed to comment: ${data.error || 'Server error'}`);
+            }
         };
 
         window.likeComment = async (btn, commentId) => {
@@ -1003,18 +1050,40 @@
             renderSearchHistory();
         }
 
+        // FIXED: Routed search via secure RLS-Bypassing backend API (/api/searchPosts)
         async function performSearch(query) {
             const topList = document.getElementById('topPostsList');
             topList.innerHTML = '<p class="text-center text-xs py-4 text-gray-400"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
-            const { data } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).limit(15);
-            renderPostListHelper(data, topList, "No matching posts found");
+            
+            try {
+                const res = await fetch('/api/searchPosts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+                renderPostListHelper(data, topList, "No matching posts found");
+            } catch (err) {
+                console.error("Search failed:", err);
+                topList.innerHTML = '<p class="text-center text-xs py-4 text-red-500">Search service is temporarily unavailable.</p>';
+            }
         }
 
         async function loadTopPosts() {
             const list = document.getElementById('topPostsList');
             list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading top posts...</p>';
-            const { data } = await supabase.from('posts').select('*').limit(5);
-            renderPostListHelper(data, list, "No top posts yet.");
+            
+            try {
+                const res = await fetch('/api/getPosts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData, page: 1, limit: 5 })
+                });
+                const data = await res.json();
+                renderPostListHelper(data, list, "No top posts yet.");
+            } catch (err) {
+                list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">No top posts yet.</p>';
+            }
         }
 
         function renderPostListHelper(posts, container, emptyMsg) {
@@ -1025,7 +1094,8 @@
             }
             posts.forEach(p => {
                 container.innerHTML += `
-                <div class="bg-white p-3 rounded-lg border flex gap-3 items-start shadow-sm">
+                <div class="bg-white p-3 rounded-lg border flex gap-3 items-start shadow-sm text-gray-900">
+                    <img src="${p.author_photo || 'https://ui-avatars.com/api/?name=U'}" class="w-8 h-8 rounded-full object-cover">
                     <div class="flex-1">
                         <span class="text-xs text-gray-400 font-bold">${p.author_name}</span>
                         <p class="text-xs text-gray-700 mt-1 line-clamp-2">${p.text || '[Image Post]'}</p>
@@ -1035,7 +1105,7 @@
             });
         }
 
-        // ================= My Posts Modal =================
+        // ================= My Posts Modal (FIXED: routed via secure API backend bypass) =================
         window.loadMyPosts = async () => {
             openModal('myPostsModal');
             const list = document.getElementById('myPostsList');
