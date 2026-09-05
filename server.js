@@ -68,9 +68,11 @@ async function requireAdminUser(req, res, next) {
 // ================= Smart ImgBB Base64 Upload Wrapper =================
 async function uploadImageToImgBB(base64Str) {
     try {
-        let cleanBase64 = base64Str;
-        if (base64Str.includes(',')) {
-            cleanBase64 = base64Str.split(',')[1];
+        // Telegram's getFileLink can resolve to a URL object rather than a plain string
+        // depending on the Telegraf version — normalize to string first.
+        let cleanBase64 = typeof base64Str === 'string' ? base64Str : String(base64Str);
+        if (cleanBase64.includes(',')) {
+            cleanBase64 = cleanBase64.split(',')[1];
         }
 
         const params = new URLSearchParams();
@@ -278,46 +280,60 @@ app.post('/api/auth', async (req, res) => {
     const { data: banned } = await supabase.from('banned_users').select('tg_id').eq('tg_id', tgId).maybeSingle();
     if (banned) return res.status(403).json({ error: "banned" });
 
-    const urlParams = new URLSearchParams(req.body.initData);
-    const startParam = urlParams.get('start_param') || '';
+    try {
+        const urlParams = new URLSearchParams(req.body.initData);
+        const startParam = urlParams.get('start_param') || '';
 
-    let { data: user } = await supabase.from('users').select('*').eq('tg_id', tgId).maybeSingle();
+        let { data: user } = await supabase.from('users').select('*').eq('tg_id', tgId).maybeSingle();
 
-    if (!user) {
-        const photo_url = await getTgProfilePic(tgId);
-        let referred_by = null;
-        if (startParam.startsWith("ref_")) {
-            referred_by = startParam.replace("ref_", "");
+        if (!user) {
+            const photo_url = await getTgProfilePic(tgId);
+            let referred_by = null;
+            if (startParam.startsWith("ref_")) {
+                referred_by = startParam.replace("ref_", "");
 
-            sendTelegramNotification(
+                sendTelegramNotification(
+                    referred_by,
+                    `🎉 New Refer Joined!\n\n${tgUser.first_name} has joined using your referral link. Check your Level Stats inside the Referral Center.`,
+                    "settings"
+                );
+            }
+
+            const { data: newUser, error: insertErr } = await supabase.from('users').insert([{
+                tg_id: tgId,
+                name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
+                photo_url,
                 referred_by,
-                `🎉 New Refer Joined!\n\n${tgUser.first_name} has joined using your referral link. Check your Level Stats inside the Referral Center.`,
-                "settings"
-            );
+                channels: [],
+                is_verified: false,
+                is_admin: false
+            }]).select().single();
+
+            if (insertErr || !newUser) {
+                console.error("User insert failed (did you run admin_panel_migration.sql?):", insertErr);
+                return res.status(500).json({ error: `Failed to create user: ${insertErr ? insertErr.message : 'unknown error'}` });
+            }
+            user = newUser;
+        } else if (!user.photo_url || user.photo_url.includes('ui-avatars')) {
+            const photo_url = await getTgProfilePic(tgId);
+            const { data: updated, error: updateErr } = await supabase.from('users').update({ photo_url }).eq('tg_id', tgId).select().single();
+            if (!updateErr && updated) user = updated;
         }
 
-        const { data: newUser } = await supabase.from('users').insert([{
-            tg_id: tgId,
-            name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
-            photo_url,
-            referred_by,
-            channels: [],
-            is_verified: false,
-            is_admin: false
-        }]).select().single();
-        user = newUser;
-    } else if (!user.photo_url || user.photo_url.includes('ui-avatars')) {
-        const photo_url = await getTgProfilePic(tgId);
-        const { data: updated } = await supabase.from('users').update({ photo_url }).eq('tg_id', tgId).select().single();
-        user = updated;
+        if (!user) {
+            return res.status(500).json({ error: "User record could not be loaded" });
+        }
+
+        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
+        user.ref_count = refCount || 0;
+        // Verified (blue badge) users are unlocked to the top level regardless of referrals
+        user.level = user.is_verified ? 3 : getLevelData(refCount || 0).level;
+
+        res.json({ success: true, user });
+    } catch (e) {
+        console.error("Auth route crashed:", e);
+        res.status(500).json({ error: e.message || "Internal server error" });
     }
-
-    const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
-    user.ref_count = refCount || 0;
-    // Verified (blue badge) users are unlocked to the top level regardless of referrals
-    user.level = user.is_verified ? 3 : getLevelData(refCount || 0).level;
-
-    res.json({ success: true, user });
 });
 
 // Secure endpoint to get all Posts with Pagination and author data mapping
