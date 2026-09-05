@@ -1033,6 +1033,7 @@ app.post('/api/admin/wipeDatabase', requireAdminUser, requireAdminPassword, asyn
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'indexadmin.html')));
 app.use(bot.webhookCallback('/webhook'));
 app.listen(process.env.PORT || 3000, async () => {
     console.log("Server Live!");
