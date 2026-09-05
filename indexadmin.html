@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>SnapPages Admin</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        body { padding-top: env(safe-area-inset-top, 24px); }
+        .admin-tab-btn { flex: 1; text-align: center; padding: 10px 4px; font-size: 11px; font-weight: 700; color: #9ca3af; border-bottom: 2px solid transparent; }
+        .admin-tab-btn.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+        .admin-tab-content { display: none; }
+        .admin-tab-content.active { display: block; }
+        .toggle-switch { position: relative; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background-color: #d1d5db; border-radius: 999px; transition: 0.2s; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.2s; }
+        .toggle-switch input:checked + .toggle-slider { background-color: #2563eb; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans">
+
+    <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b sticky top-0 z-10">
+        <div class="flex items-center gap-3">
+            <button onclick="history.back()"><i class="fas fa-arrow-left text-xl"></i></button>
+            <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
+        </div>
+    </div>
+
+    <!-- Password Gate -->
+    <div id="adminLoginGate" class="flex flex-col items-center justify-center p-6 gap-3" style="min-height: 80vh;">
+        <i class="fas fa-lock text-4xl text-red-400 mb-2"></i>
+        <p class="text-sm text-gray-500 mb-2">Enter the admin password to continue</p>
+        <input type="password" id="adminPasswordInput" class="w-full max-w-xs bg-white border rounded-xl px-4 py-3 text-center outline-none" placeholder="Admin Password">
+        <button onclick="submitAdminLogin()" class="w-full max-w-xs bg-red-600 text-white py-3 rounded-xl font-bold">Login</button>
+        <p id="adminLoginError" class="hidden text-red-500 text-xs"></p>
+        <p id="adminAuthWarning" class="hidden text-orange-500 text-xs text-center max-w-xs">Could not read your Telegram session. Open this page from the "Admin Panel" button inside the SnapPages app.</p>
+    </div>
+
+    <!-- Admin Content -->
+    <div id="adminPanelContent" class="hidden">
+        <div class="flex border-b bg-white sticky top-[60px] z-10">
+            <button class="admin-tab-btn active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">Dashboard</button>
+            <button class="admin-tab-btn" data-tab="manage" onclick="switchAdminTab('manage')">Manage</button>
+            <button class="admin-tab-btn" data-tab="broadcast" onclick="switchAdminTab('broadcast')">Broadcast</button>
+            <button class="admin-tab-btn" data-tab="ads" onclick="switchAdminTab('ads')">Ads</button>
+            <button class="admin-tab-btn" data-tab="settings" onclick="switchAdminTab('settings')">Settings</button>
+        </div>
+
+        <div class="p-4 max-w-lg mx-auto">
+
+            <!-- DASHBOARD TAB -->
+            <div id="admin-tab-dashboard" class="admin-tab-content active space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white p-3 rounded-xl border text-center">
+                        <div class="text-xs text-gray-500 font-bold">Total Active Users</div>
+                        <div id="adminStatUsers" class="text-2xl font-bold">0</div>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border text-center">
+                        <div class="text-xs text-gray-500 font-bold">Total Posts</div>
+                        <div id="adminStatPosts" class="text-2xl font-bold">0</div>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border text-center">
+                        <div class="text-xs text-gray-500 font-bold">Total Channels</div>
+                        <div id="adminStatChannels" class="text-2xl font-bold">0</div>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border text-center">
+                        <div class="text-xs text-gray-500 font-bold">Total Reports</div>
+                        <div id="adminStatReports" class="text-2xl font-bold text-red-500">0</div>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border">
+                    <div class="flex justify-between text-xs font-bold text-gray-500 mb-1"><span>Server State</span></div>
+                    <div class="flex justify-between text-sm">
+                        <span>RAM Used: <b id="adminStatRam">0 MB</b></span>
+                        <span>Uptime: <b id="adminStatUptime">0s</b></span>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border">
+                    <h4 class="font-bold text-sm mb-2">User Activity (Posts, last 7 days)</h4>
+                    <canvas id="adminActivityChart" height="160"></canvas>
+                </div>
+            </div>
+
+            <!-- MANAGE TAB -->
+            <div id="admin-tab-manage" class="admin-tab-content space-y-3">
+                <h4 class="font-bold text-sm text-gray-700">Reported Posts</h4>
+                <div id="adminReportsList" class="space-y-3">
+                    <p class="text-xs text-gray-400 text-center py-4">Loading reports...</p>
+                </div>
+            </div>
+
+            <!-- BROADCAST TAB -->
+            <div id="admin-tab-broadcast" class="admin-tab-content space-y-3">
+                <div class="bg-white p-4 rounded-xl border space-y-3">
+                    <h4 class="font-bold text-sm text-blue-600"><i class="fas fa-bullhorn"></i> Global Broadcast</h4>
+                    <textarea id="adminBroadcastText" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none h-24" placeholder="Write message (HTML formatting supported)..."></textarea>
+                    <input type="text" id="adminBroadcastImage" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Image URL (optional)">
+                    <div class="flex gap-2">
+                        <input type="text" id="adminBroadcastBtnText" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Button text (optional)">
+                        <input type="text" id="adminBroadcastBtnUrl" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Button URL (optional)">
+                    </div>
+                    <label class="flex items-center gap-2 text-sm">
+                        <div class="toggle-switch"><input type="checkbox" id="adminBroadcastPin"><span class="toggle-slider"></span></div>
+                        Pin this broadcast for all users
+                    </label>
+                    <button onclick="sendGlobalBroadcast()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Send Broadcast</button>
+                </div>
+            </div>
+
+            <!-- ADS TAB -->
+            <div id="admin-tab-ads" class="admin-tab-content">
+                <div class="bg-white p-8 rounded-xl border text-center text-gray-400">
+                    <i class="fas fa-rectangle-ad text-4xl mb-3"></i>
+                    <p class="font-bold">Coming Soon</p>
+                </div>
+            </div>
+
+            <!-- SETTINGS TAB -->
+            <div id="admin-tab-settings" class="admin-tab-content space-y-4">
+                <div class="bg-white p-4 rounded-xl border space-y-3">
+                    <h4 class="font-bold text-sm"><i class="fas fa-check-circle text-blue-500"></i> Set Blue Badge</h4>
+                    <input type="text" id="adminBadgeTarget" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Chat ID, @username, or channel ID">
+                    <select id="adminBadgeType" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none">
+                        <option value="user">User</option>
+                        <option value="channel">Channel</option>
+                    </select>
+                    <div class="flex gap-2">
+                        <button onclick="setBadgeAction('add')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Add Badge</button>
+                        <button onclick="setBadgeAction('remove')" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Remove Badge</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border space-y-3">
+                    <h4 class="font-bold text-sm"><i class="fas fa-thumbtack text-yellow-500"></i> Pin Post</h4>
+                    <input type="text" id="adminPinTarget" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Post ID or post link">
+                    <div class="flex gap-2">
+                        <button onclick="pinPostAction('pin')" class="flex-1 bg-yellow-500 text-white py-2 rounded-lg text-sm font-bold">Pin</button>
+                        <button onclick="pinPostAction('unpin')" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Unpin</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-sm">Off App (Maintenance Mode)</h4>
+                        <p class="text-xs text-gray-400">Users will see a "Try Again" screen</p>
+                    </div>
+                    <div class="toggle-switch"><input type="checkbox" id="adminMaintenanceToggle" onchange="toggleMaintenance(this.checked)"><span class="toggle-slider"></span></div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border space-y-2">
+                    <h4 class="font-bold text-sm text-red-600"><i class="fas fa-radiation"></i> Danger Zone</h4>
+                    <button onclick="wipeDatabaseAction()" class="w-full bg-red-600 text-white py-2 rounded-lg text-sm font-bold">Remove All Database</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        try { tg.expand(); } catch(e) {}
+
+        // The Mini App SDK only receives initData when this page is the app's original
+        // launch URL. When we navigate here from index.html we pass it along as a query
+        // param instead, so fall back to that if tg.initData is empty.
+        const urlParams = new URLSearchParams(window.location.search);
+        let initData = tg.initData || urlParams.get('tgInitData') || '';
+
+        let adminPassword = sessionStorage.getItem('sp_admin_pw') || null;
+        let adminActivityChartInstance = null;
+
+        function showAlert(msg) {
+            if (tg && tg.showAlert) tg.showAlert(msg); else alert(msg);
+        }
+        function showConfirm(msg, cb) {
+            if (tg && tg.showConfirm) tg.showConfirm(msg, cb); else cb(confirm(msg));
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!initData) {
+                document.getElementById('adminAuthWarning').classList.remove('hidden');
+            }
+            if (adminPassword) {
+                verifyAndEnter();
+            }
+        });
+
+        async function verifyAndEnter() {
+            const data = await adminFetch('/api/admin/login');
+            if (data && data.success) {
+                document.getElementById('adminLoginGate').classList.add('hidden');
+                document.getElementById('adminPanelContent').classList.remove('hidden');
+                loadAdminDashboard();
+            } else {
+                adminPassword = null;
+                sessionStorage.removeItem('sp_admin_pw');
+            }
+        }
+
+        window.submitAdminLogin = async () => {
+            const pw = document.getElementById('adminPasswordInput').value;
+            if (!pw) return;
+            adminPassword = pw;
+            try {
+                const data = await adminFetch('/api/admin/login');
+                if (data && data.success) {
+                    sessionStorage.setItem('sp_admin_pw', pw);
+                    document.getElementById('adminLoginGate').classList.add('hidden');
+                    document.getElementById('adminPanelContent').classList.remove('hidden');
+                    loadAdminDashboard();
+                } else {
+                    adminPassword = null;
+                    const err = document.getElementById('adminLoginError');
+                    err.innerText = (data && data.error) || "Login failed";
+                    err.classList.remove('hidden');
+                }
+            } catch(e) {
+                adminPassword = null;
+                showAlert("Admin login request failed.");
+            }
+        };
+
+        async function adminFetch(url, extraBody = {}) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ initData, adminPassword, ...extraBody })
+                });
+                const data = await res.json();
+                if (res.status === 403) {
+                    adminPassword = null;
+                    sessionStorage.removeItem('sp_admin_pw');
+                    document.getElementById('adminLoginGate').classList.remove('hidden');
+                    document.getElementById('adminPanelContent').classList.add('hidden');
+                    const err = document.getElementById('adminLoginError');
+                    err.innerText = data.error || "Session expired, please log in again";
+                    err.classList.remove('hidden');
+                }
+                return data;
+            } catch (e) {
+                return { error: "Network error" };
+            }
+        }
+
+        window.switchAdminTab = (tab) => {
+            document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`admin-tab-${tab}`).classList.add('active');
+            if (tab === 'dashboard') loadAdminDashboard();
+            if (tab === 'manage') loadAdminReports();
+            if (tab === 'settings') loadAdminSettings();
+        };
+
+        async function loadAdminDashboard() {
+            const data = await adminFetch('/api/admin/dashboard');
+            if (!data || data.error) return;
+            document.getElementById('adminStatUsers').innerText = data.totalUsers;
+            document.getElementById('adminStatPosts').innerText = data.totalPosts;
+            document.getElementById('adminStatChannels').innerText = data.totalChannels;
+            document.getElementById('adminStatReports').innerText = data.totalReports;
+            document.getElementById('adminStatRam').innerText = `${data.ramUsedMB} MB`;
+            const uptimeH = Math.floor(data.uptimeSeconds / 3600);
+            const uptimeM = Math.floor((data.uptimeSeconds % 3600) / 60);
+            document.getElementById('adminStatUptime').innerText = `${uptimeH}h ${uptimeM}m`;
+
+            const ctx = document.getElementById('adminActivityChart');
+            if (adminActivityChartInstance) adminActivityChartInstance.destroy();
+            adminActivityChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.activity.labels.map(l => l.slice(5)),
+                    datasets: [{ label: 'Posts', data: data.activity.counts, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', fill: true, tension: 0.3 }]
+                },
+                options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+        }
+
+        async function loadAdminReports() {
+            const list = document.getElementById('adminReportsList');
+            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading reports...</p>';
+            const data = await adminFetch('/api/admin/reports');
+            if (!data || data.error || data.length === 0) {
+                list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">No reports right now 🎉</p>';
+                return;
+            }
+            list.innerHTML = data.map(r => `
+                <div class="bg-white p-3 rounded-xl border space-y-2">
+                    <div>
+                        <p class="text-xs text-gray-400">${r.post_type === 'channel' ? 'Channel Post' : 'User Post'} • ${r.count} report(s)</p>
+                        <p class="text-sm font-semibold line-clamp-2">${(r.post_text || '[Image Post]').slice(0, 100)}</p>
+                        <a href="${r.post_link}" target="_blank" class="text-[10px] text-blue-500 underline">View post link</a>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="adminRemovePost('${r.post_id}')" class="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2 rounded-lg">Remove Post</button>
+                        <button onclick="adminRemovePostBanUser('${r.post_id}')" class="flex-1 bg-red-100 text-red-600 text-xs font-bold py-2 rounded-lg">Remove & Ban ${r.post_type === 'channel' ? 'Channel' : 'User'}</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.adminRemovePost = (postId) => {
+            showConfirm("Remove this post?", async (ok) => { if (ok) { await adminFetch('/api/admin/removePost', { postId }); loadAdminReports(); } });
+        };
+        window.adminRemovePostBanUser = (postId) => {
+            showConfirm("Remove this post AND ban its author? This deletes all their content.", async (ok) => { if (ok) { await adminFetch('/api/admin/removePostBanUser', { postId }); loadAdminReports(); } });
+        };
+
+        window.sendGlobalBroadcast = async () => {
+            const message = document.getElementById('adminBroadcastText').value.trim();
+            if (!message) return showAlert("Write a message first.");
+            const imageUrl = document.getElementById('adminBroadcastImage').value.trim();
+            const buttonText = document.getElementById('adminBroadcastBtnText').value.trim();
+            const buttonUrl = document.getElementById('adminBroadcastBtnUrl').value.trim();
+            const pinAll = document.getElementById('adminBroadcastPin').checked;
+            const data = await adminFetch('/api/admin/broadcast', { message, imageUrl, buttonText, buttonUrl, pinAll });
+            if (data && data.success) {
+                showAlert(`Broadcast dispatched to ${data.sent} users!`);
+                document.getElementById('adminBroadcastText').value = '';
+            } else {
+                showAlert(`Broadcast failed: ${(data && data.error) || 'Server error'}`);
+            }
+        };
+
+        function loadAdminSettings() {
+            fetch('/api/appStatus').then(r => r.json()).then(s => {
+                document.getElementById('adminMaintenanceToggle').checked = !!s.maintenance;
+            }).catch(() => {});
+        }
+
+        window.setBadgeAction = async (action) => {
+            const targetId = document.getElementById('adminBadgeTarget').value.trim();
+            const type = document.getElementById('adminBadgeType').value;
+            if (!targetId) return showAlert("Enter a Chat ID or username first.");
+            const data = await adminFetch('/api/admin/setBadge', { targetId, type, action });
+            if (data && data.success) {
+                showAlert(`Badge ${action === 'add' ? 'added' : 'removed'} successfully!`);
+                document.getElementById('adminBadgeTarget').value = '';
+            } else {
+                showAlert(`Failed: ${(data && data.error) || 'Server error'}`);
+            }
+        };
+
+        window.pinPostAction = async (action) => {
+            const postId = document.getElementById('adminPinTarget').value.trim();
+            if (!postId) return showAlert("Enter a Post ID or link first.");
+            const data = await adminFetch('/api/admin/pinPost', { postId, action });
+            if (data && data.success) {
+                showAlert(`Post ${action === 'pin' ? 'pinned' : 'unpinned'} successfully!`);
+                document.getElementById('adminPinTarget').value = '';
+            } else {
+                showAlert(`Failed: ${(data && data.error) || 'Server error'}`);
+            }
+        };
+
+        window.toggleMaintenance = async (enabled) => {
+            const data = await adminFetch('/api/admin/maintenance', { enabled });
+            if (!data || !data.success) {
+                showAlert(`Failed to update maintenance mode: ${data ? data.error : 'Server error'}`);
+                document.getElementById('adminMaintenanceToggle').checked = !enabled;
+            }
+        };
+
+        window.wipeDatabaseAction = () => {
+            showConfirm("This will PERMANENTLY delete ALL users, posts, comments and reports. Continue?", async (ok) => {
+                if (!ok) return;
+                const data = await adminFetch('/api/admin/wipeDatabase', { confirm: 'WIPE' });
+                if (data && data.success) showAlert("Database wiped.");
+                else showAlert(`Failed: ${(data && data.error) || 'Server error'}`);
+            });
+        };
+    </script>
+</body>
+</html>
