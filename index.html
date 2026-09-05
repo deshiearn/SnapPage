@@ -7,7 +7,6 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
     <style>
         .hidden { display: none !important; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
@@ -48,22 +47,8 @@
         .dark-mode input, .dark-mode textarea { background-color: #2d3748 !important; color: #ffffff !important; border-color: #4a5568 !important; }
         .dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #a0aec0 !important; }
 
-        /* Admin Panel Tabs */
-        .admin-tab-btn { flex: 1; text-align: center; padding: 10px 4px; font-size: 11px; font-weight: 700; color: #9ca3af; border-bottom: 2px solid transparent; }
-        .admin-tab-btn.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
-        .admin-tab-content { display: none; }
-        .admin-tab-content.active { display: block; }
-
         /* Blue verified badge */
         .verified-badge { color: #2563eb; font-size: 12px; margin-left: 2px; }
-
-        /* Toggle switch */
-        .toggle-switch { position: relative; width: 44px; height: 24px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background-color: #d1d5db; border-radius: 999px; transition: 0.2s; }
-        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.2s; }
-        .toggle-switch input:checked + .toggle-slider { background-color: #2563eb; }
-        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -79,7 +64,7 @@
     <!-- Header (No SnapPages Text, dynamic safe spacing) -->
     <header class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
         <span id="headerTitle"></span>
-        <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="openModal('adminModal')">
+        <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
             <i class="fas fa-user-shield"></i> Admin
         </div>
     </header>
@@ -133,7 +118,7 @@
             <button onclick="openReferSheet()" class="w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50">
                 <span><i class="fas fa-link w-6 text-green-500"></i> Refer Link</span>
             </button>
-            <button id="adminPanelBtn" onclick="openModal('adminModal')" class="hidden w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50 text-red-500 font-bold">
+            <button id="adminPanelBtn" onclick="goToAdminPanel()" class="hidden w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50 text-red-500 font-bold">
                 <span><i class="fas fa-user-shield w-6"></i> Admin Panel</span>
             </button>
             <a href="https://t.me/+GyFgfeJIub81MDg9" target="_blank" class="block w-full p-4 hover:bg-gray-50 text-blue-600 font-bold">
@@ -267,149 +252,6 @@
         <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
-    <!-- ADMIN PANEL -->
-    <div id="adminModal" class="hidden fixed inset-0 bg-white z-[60] flex flex-col overflow-hidden">
-        <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b text-gray-900 animate-none">
-            <div class="flex items-center gap-3">
-                <button id="customAdminBackBtn" onclick="closeModal('adminModal')"><i class="fas fa-arrow-left text-xl"></i></button>
-                <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
-            </div>
-        </div>
-
-        <!-- Password Gate -->
-        <div id="adminLoginGate" class="flex-1 flex flex-col items-center justify-center p-6 gap-3 bg-gray-50">
-            <i class="fas fa-lock text-4xl text-red-400 mb-2"></i>
-            <p class="text-sm text-gray-500 mb-2">Enter the admin password to continue</p>
-            <input type="password" id="adminPasswordInput" class="w-full max-w-xs bg-white border rounded-xl px-4 py-3 text-center outline-none" placeholder="Admin Password">
-            <button onclick="submitAdminLogin()" class="w-full max-w-xs bg-red-600 text-white py-3 rounded-xl font-bold">Login</button>
-            <p id="adminLoginError" class="hidden text-red-500 text-xs"></p>
-        </div>
-
-        <!-- Admin Content (shown after successful password login) -->
-        <div id="adminPanelContent" class="hidden flex-1 flex flex-col overflow-hidden">
-            <div class="flex border-b bg-white">
-                <button class="admin-tab-btn active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">Dashboard</button>
-                <button class="admin-tab-btn" data-tab="manage" onclick="switchAdminTab('manage')">Manage</button>
-                <button class="admin-tab-btn" data-tab="broadcast" onclick="switchAdminTab('broadcast')">Broadcast</button>
-                <button class="admin-tab-btn" data-tab="ads" onclick="switchAdminTab('ads')">Ads</button>
-                <button class="admin-tab-btn" data-tab="settings" onclick="switchAdminTab('settings')">Settings</button>
-            </div>
-
-            <div class="flex-1 overflow-y-auto p-4 bg-gray-50 text-gray-900">
-
-                <!-- DASHBOARD TAB -->
-                <div id="admin-tab-dashboard" class="admin-tab-content active space-y-4">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-white p-3 rounded-xl border text-center">
-                            <div class="text-xs text-gray-500 font-bold">Total Active Users</div>
-                            <div id="adminStatUsers" class="text-2xl font-bold">0</div>
-                        </div>
-                        <div class="bg-white p-3 rounded-xl border text-center">
-                            <div class="text-xs text-gray-500 font-bold">Total Posts</div>
-                            <div id="adminStatPosts" class="text-2xl font-bold">0</div>
-                        </div>
-                        <div class="bg-white p-3 rounded-xl border text-center">
-                            <div class="text-xs text-gray-500 font-bold">Total Channels</div>
-                            <div id="adminStatChannels" class="text-2xl font-bold">0</div>
-                        </div>
-                        <div class="bg-white p-3 rounded-xl border text-center">
-                            <div class="text-xs text-gray-500 font-bold">Total Reports</div>
-                            <div id="adminStatReports" class="text-2xl font-bold text-red-500">0</div>
-                        </div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl border">
-                        <div class="flex justify-between text-xs font-bold text-gray-500 mb-1">
-                            <span>Server State</span>
-                        </div>
-                        <div class="flex justify-between text-sm">
-                            <span>RAM Used: <b id="adminStatRam">0 MB</b></span>
-                            <span>Uptime: <b id="adminStatUptime">0s</b></span>
-                        </div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl border">
-                        <h4 class="font-bold text-sm mb-2">User Activity (Posts, last 7 days)</h4>
-                        <canvas id="adminActivityChart" height="160"></canvas>
-                    </div>
-                </div>
-
-                <!-- MANAGE TAB (Reported Posts / Users) -->
-                <div id="admin-tab-manage" class="admin-tab-content space-y-3">
-                    <h4 class="font-bold text-sm text-gray-700">Reported Posts</h4>
-                    <div id="adminReportsList" class="space-y-3">
-                        <p class="text-xs text-gray-400 text-center py-4">Loading reports...</p>
-                    </div>
-                </div>
-
-                <!-- BROADCAST TAB -->
-                <div id="admin-tab-broadcast" class="admin-tab-content space-y-3">
-                    <div class="bg-white p-4 rounded-xl border space-y-3">
-                        <h4 class="font-bold text-sm text-blue-600"><i class="fas fa-bullhorn"></i> Global Broadcast</h4>
-                        <textarea id="adminBroadcastText" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none h-24" placeholder="Write message (HTML formatting supported)..."></textarea>
-                        <input type="text" id="adminBroadcastImage" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Image URL (optional)">
-                        <div class="flex gap-2">
-                            <input type="text" id="adminBroadcastBtnText" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Button text (optional)">
-                            <input type="text" id="adminBroadcastBtnUrl" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Button URL (optional)">
-                        </div>
-                        <label class="flex items-center gap-2 text-sm">
-                            <div class="toggle-switch"><input type="checkbox" id="adminBroadcastPin"><span class="toggle-slider"></span></div>
-                            Pin this broadcast for all users
-                        </label>
-                        <button onclick="sendGlobalBroadcast()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Send Broadcast</button>
-                    </div>
-                </div>
-
-                <!-- ADS TAB -->
-                <div id="admin-tab-ads" class="admin-tab-content">
-                    <div class="bg-white p-8 rounded-xl border text-center text-gray-400">
-                        <i class="fas fa-rectangle-ad text-4xl mb-3"></i>
-                        <p class="font-bold">Coming Soon</p>
-                    </div>
-                </div>
-
-                <!-- SETTINGS TAB -->
-                <div id="admin-tab-settings" class="admin-tab-content space-y-4">
-                    <div class="bg-white p-4 rounded-xl border space-y-3">
-                        <h4 class="font-bold text-sm"><i class="fas fa-check-circle text-blue-500"></i> Set Blue Badge</h4>
-                        <input type="text" id="adminBadgeTarget" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Chat ID, @username, or channel ID">
-                        <div class="flex gap-2">
-                            <select id="adminBadgeType" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none">
-                                <option value="user">User</option>
-                                <option value="channel">Channel</option>
-                            </select>
-                        </div>
-                        <div class="flex gap-2">
-                            <button onclick="setBadgeAction('add')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Add Badge</button>
-                            <button onclick="setBadgeAction('remove')" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Remove Badge</button>
-                        </div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border space-y-3">
-                        <h4 class="font-bold text-sm"><i class="fas fa-thumbtack text-yellow-500"></i> Pin Post</h4>
-                        <input type="text" id="adminPinTarget" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Post ID or post link">
-                        <div class="flex gap-2">
-                            <button onclick="pinPostAction('pin')" class="flex-1 bg-yellow-500 text-white py-2 rounded-lg text-sm font-bold">Pin</button>
-                            <button onclick="pinPostAction('unpin')" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Unpin</button>
-                        </div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border flex items-center justify-between">
-                        <div>
-                            <h4 class="font-bold text-sm">Off App (Maintenance Mode)</h4>
-                            <p class="text-xs text-gray-400">Users will see a "Try Again" screen</p>
-                        </div>
-                        <div class="toggle-switch"><input type="checkbox" id="adminMaintenanceToggle" onchange="toggleMaintenance(this.checked)"><span class="toggle-slider"></span></div>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-xl border space-y-2">
-                        <h4 class="font-bold text-sm text-red-600"><i class="fas fa-radiation"></i> Danger Zone</h4>
-                        <button onclick="wipeDatabaseAction()" class="w-full bg-red-600 text-white py-2 rounded-lg text-sm font-bold">Remove All Database</button>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
     <!-- ================= JAVASCRIPT ================= -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -419,9 +261,7 @@
         let currentUser = null;
         let imagesArray = [];
         let currentPostIdForComment = null;
-        let editModePostId = null; 
-        let adminPassword = sessionStorage.getItem('sp_admin_pw') || null;
-        let adminActivityChartInstance = null;
+        let editModePostId = null;
 
         // FIXED Modal navigation stack to handle Telegram's Native Back Button
         let openModalsStack = [];
@@ -467,6 +307,12 @@
             if (refCount >= 3) return 2;
             return 1;
         }
+
+        // Navigate to the standalone Admin Panel page, forwarding initData since a full
+        // page navigation loses Telegram's initData (it's only attached to the launch URL).
+        window.goToAdminPanel = () => {
+            window.location.href = `/admin?tgInitData=${encodeURIComponent(tg.initData || '')}`;
+        };
 
         // Redirect handler for clicking on post profiles (Loads Telegram profile or Channel directly)
         window.openProfileLink = (type, authorId, username) => {
@@ -584,11 +430,8 @@
                 openModalsStack.push(id);
                 tg.BackButton.show();
                 
-                // Hide overlapping custom inline back buttons in TG to prevent overlapping
-                if (id === 'adminModal') document.getElementById('customAdminBackBtn').classList.add('hidden');
             }
 
-            if(id === 'adminModal') openAdminModal();
             if(id === 'postModal') {
                 document.getElementById('postModalTitle').innerText = "Create Post";
                 editModePostId = null;
@@ -1274,218 +1117,6 @@
                 </div>`;
             });
         }
-
-        // ================= Admin Controller =================
-        function openAdminModal() {
-            if (adminPassword) {
-                document.getElementById('adminLoginGate').classList.add('hidden');
-                document.getElementById('adminPanelContent').classList.remove('hidden');
-                loadAdminDashboard();
-            } else {
-                document.getElementById('adminLoginGate').classList.remove('hidden');
-                document.getElementById('adminPanelContent').classList.add('hidden');
-                document.getElementById('adminLoginError').classList.add('hidden');
-            }
-        }
-
-        window.submitAdminLogin = async () => {
-            const pw = document.getElementById('adminPasswordInput').value;
-            if (!pw) return;
-            try {
-                const res = await fetch('/api/admin/login', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ initData: tg.initData, adminPassword: pw })
-                });
-                const data = await res.json();
-                if (data && data.success) {
-                    adminPassword = pw;
-                    sessionStorage.setItem('sp_admin_pw', pw);
-                    document.getElementById('adminLoginGate').classList.add('hidden');
-                    document.getElementById('adminPanelContent').classList.remove('hidden');
-                    loadAdminDashboard();
-                } else {
-                    const err = document.getElementById('adminLoginError');
-                    err.innerText = data.error || "Login failed";
-                    err.classList.remove('hidden');
-                }
-            } catch(e) {
-                tg.showAlert("Admin login request failed.");
-            }
-        };
-
-        async function adminFetch(url, extraBody = {}) {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ initData: tg.initData, adminPassword, ...extraBody })
-            });
-            const data = await res.json();
-            if (res.status === 403) {
-                // password/session invalid - force re-login
-                adminPassword = null;
-                sessionStorage.removeItem('sp_admin_pw');
-                openAdminModal();
-            }
-            return data;
-        }
-
-        window.switchAdminTab = (tab) => {
-            document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-            document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById(`admin-tab-${tab}`).classList.add('active');
-            if (tab === 'dashboard') loadAdminDashboard();
-            if (tab === 'manage') loadAdminReports();
-            if (tab === 'settings') loadAdminSettings();
-        };
-
-        async function loadAdminDashboard() {
-            try {
-                const data = await adminFetch('/api/admin/dashboard');
-                if (data.error) return;
-                document.getElementById('adminStatUsers').innerText = data.totalUsers;
-                document.getElementById('adminStatPosts').innerText = data.totalPosts;
-                document.getElementById('adminStatChannels').innerText = data.totalChannels;
-                document.getElementById('adminStatReports').innerText = data.totalReports;
-                document.getElementById('adminStatRam').innerText = `${data.ramUsedMB} MB`;
-                const uptimeH = Math.floor(data.uptimeSeconds / 3600);
-                const uptimeM = Math.floor((data.uptimeSeconds % 3600) / 60);
-                document.getElementById('adminStatUptime').innerText = `${uptimeH}h ${uptimeM}m`;
-
-                const ctx = document.getElementById('adminActivityChart');
-                if (adminActivityChartInstance) adminActivityChartInstance.destroy();
-                adminActivityChartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.activity.labels.map(l => l.slice(5)),
-                        datasets: [{
-                            label: 'Posts',
-                            data: data.activity.counts,
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37,99,235,0.1)',
-                            fill: true,
-                            tension: 0.3
-                        }]
-                    },
-                    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-                });
-            } catch (e) { console.error("Dashboard load failed:", e); }
-        }
-
-        async function loadAdminReports() {
-            const list = document.getElementById('adminReportsList');
-            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading reports...</p>';
-            try {
-                const data = await adminFetch('/api/admin/reports');
-                if (!data || data.error || data.length === 0) {
-                    list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">No reports right now 🎉</p>';
-                    return;
-                }
-                list.innerHTML = data.map(r => `
-                    <div class="bg-white p-3 rounded-xl border space-y-2">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-xs text-gray-400">${r.post_type === 'channel' ? 'Channel Post' : 'User Post'} • ${r.count} report(s)</p>
-                                <p class="text-sm font-semibold line-clamp-2">${(r.post_text || '[Image Post]').slice(0, 100)}</p>
-                                <a href="${r.post_link}" target="_blank" class="text-[10px] text-blue-500 underline">View post link</a>
-                            </div>
-                        </div>
-                        <div class="flex gap-2 flex-wrap">
-                            <button onclick="adminRemovePost('${r.post_id}')" class="flex-1 bg-gray-100 text-gray-700 text-xs font-bold py-2 rounded-lg">Remove Post</button>
-                            <button onclick="adminRemovePostBanUser('${r.post_id}')" class="flex-1 bg-red-100 text-red-600 text-xs font-bold py-2 rounded-lg">Remove & Ban ${r.post_type === 'channel' ? 'Channel' : 'User'}</button>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (e) {
-                list.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Failed to load reports.</p>';
-            }
-        }
-
-        window.adminRemovePost = async (postId) => {
-            tg.showConfirm("Remove this post?", async (ok) => {
-                if (!ok) return;
-                await adminFetch('/api/admin/removePost', { postId });
-                loadAdminReports();
-            });
-        };
-        window.adminRemovePostBanUser = async (postId) => {
-            tg.showConfirm("Remove this post AND ban its author? This deletes all their content.", async (ok) => {
-                if (!ok) return;
-                await adminFetch('/api/admin/removePostBanUser', { postId });
-                loadAdminReports();
-            });
-        };
-
-        window.sendGlobalBroadcast = async () => {
-            const message = document.getElementById('adminBroadcastText').value.trim();
-            if (!message) return tg.showAlert("Write a message first.");
-            const imageUrl = document.getElementById('adminBroadcastImage').value.trim();
-            const buttonText = document.getElementById('adminBroadcastBtnText').value.trim();
-            const buttonUrl = document.getElementById('adminBroadcastBtnUrl').value.trim();
-            const pinAll = document.getElementById('adminBroadcastPin').checked;
-
-            const data = await adminFetch('/api/admin/broadcast', { message, imageUrl, buttonText, buttonUrl, pinAll });
-            if (data && data.success) {
-                tg.showAlert(`Broadcast dispatched to ${data.sent} users!`);
-                document.getElementById('adminBroadcastText').value = '';
-            } else {
-                tg.showAlert(`Broadcast failed: ${data.error || 'Server error'}`);
-            }
-        };
-
-        function loadAdminSettings() {
-            // Maintenance toggle should reflect current state
-            fetch('/api/appStatus').then(r => r.json()).then(s => {
-                document.getElementById('adminMaintenanceToggle').checked = !!s.maintenance;
-            }).catch(() => {});
-        }
-
-        window.setBadgeAction = async (action) => {
-            const targetId = document.getElementById('adminBadgeTarget').value.trim();
-            const type = document.getElementById('adminBadgeType').value;
-            if (!targetId) return tg.showAlert("Enter a Chat ID or username first.");
-            const data = await adminFetch('/api/admin/setBadge', { targetId, type, action });
-            if (data && data.success) {
-                tg.showAlert(`Badge ${action === 'add' ? 'added' : 'removed'} successfully!`);
-                document.getElementById('adminBadgeTarget').value = '';
-            } else {
-                tg.showAlert(`Failed: ${data.error || 'Server error'}`);
-            }
-        };
-
-        window.pinPostAction = async (action) => {
-            const postId = document.getElementById('adminPinTarget').value.trim();
-            if (!postId) return tg.showAlert("Enter a Post ID or link first.");
-            const data = await adminFetch('/api/admin/pinPost', { postId, action });
-            if (data && data.success) {
-                tg.showAlert(`Post ${action === 'pin' ? 'pinned' : 'unpinned'} successfully!`);
-                document.getElementById('adminPinTarget').value = '';
-                loadPosts(1, true);
-            } else {
-                tg.showAlert(`Failed: ${data.error || 'Server error'}`);
-            }
-        };
-
-        window.toggleMaintenance = async (enabled) => {
-            const data = await adminFetch('/api/admin/maintenance', { enabled });
-            if (!data || !data.success) {
-                tg.showAlert(`Failed to update maintenance mode: ${data ? data.error : 'Server error'}`);
-                document.getElementById('adminMaintenanceToggle').checked = !enabled;
-            }
-        };
-
-        window.wipeDatabaseAction = () => {
-            tg.showConfirm("This will PERMANENTLY delete ALL users, posts, comments and reports. Continue?", async (ok) => {
-                if (!ok) return;
-                const data = await adminFetch('/api/admin/wipeDatabase', { confirm: 'WIPE' });
-                if (data && data.success) {
-                    tg.showAlert("Database wiped.");
-                    closeModal('adminModal');
-                } else {
-                    tg.showAlert(`Failed: ${data.error || 'Server error'}`);
-                }
-            });
-        };
 
         initApp();
     </script>
