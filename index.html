@@ -94,6 +94,9 @@
         <button onclick="exitShorts()" class="fixed top-4 left-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: max(16px, env(safe-area-inset-top));">
             <i class="fas fa-arrow-left"></i>
         </button>
+        <button onclick="toggleShortsSound()" class="fixed top-4 right-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: max(16px, env(safe-area-inset-top));">
+            <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
+        </button>
         <button onclick="openModal('videoUploadModal')" class="fixed bottom-6 right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">
             <i class="fas fa-plus"></i>
         </button>
@@ -834,6 +837,9 @@
         let isLoadingShorts = false;
         let hasMoreShorts = true;
         let shortsObserver = null;
+        // Videos must start muted so autoplay isn't blocked by the browser; tapping the
+        // sound button is a real user gesture, so we can safely unmute from then on.
+        let shortsMuted = true;
 
         async function loadShorts(reset = false) {
             if (isLoadingShorts) return;
@@ -912,7 +918,15 @@
         };
 
         window.toggleShortPlay = (video) => {
-            if (video.paused) video.play(); else video.pause();
+            if (video.paused) video.play().catch(() => {}); else video.pause();
+        };
+
+        // Global sound toggle — flips the shared mute preference and applies it live
+        window.toggleShortsSound = () => {
+            shortsMuted = !shortsMuted;
+            document.querySelectorAll('#shortsFeed video').forEach(v => { v.muted = shortsMuted; });
+            const icon = document.getElementById('shortsSoundIcon');
+            if (icon) icon.className = shortsMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
         };
 
         // Autoplay the Short in view, pause the rest — classic TikTok scroll behavior
@@ -923,6 +937,7 @@
                     const video = entry.target.querySelector('video');
                     if (!video) return;
                     if (entry.isIntersecting) {
+                        video.muted = shortsMuted; // respect the current sound preference every time a video (re)starts
                         video.play().catch(() => {});
                     } else {
                         video.pause();
