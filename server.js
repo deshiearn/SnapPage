@@ -16,6 +16,11 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
+// A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
+// so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
+const STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
+const MAX_VIDEO_BYTES = 15 * 1024 * 1024; // 15MB, per spec
+const MAX_VIDEOS_IN_DB = 50;
 
 // ================= Referral Level Mapping =================
 const getLevelData = (refs) => {
@@ -217,6 +222,25 @@ bot.on('channel_post', async (ctx) => {
 
     if (isRegistered) {
         try {
+            // Videos go to the Shorts feed (videos table); everything else stays a regular post.
+            if (msg.video) {
+                await supabase.from('videos').insert([{
+                    author_id: channelId,
+                    author_name: msg.chat.title || 'Channel Post',
+                    type: 'channel',
+                    caption: msg.caption || '',
+                    file_id: msg.video.file_id,
+                    storage_chat_id: channelId,
+                    storage_message_id: msg.message_id,
+                    owned_storage: false, // it's the channel's own message, we must never delete it
+                    likes_count: 0,
+                    likes_users: [],
+                    created_at: new Date().toISOString()
+                }]);
+                await enforceVideoCap();
+                return;
+            }
+
             let imageUrls = [];
             if (msg.photo) {
                 try {
@@ -261,6 +285,24 @@ async function enforcePostCap(cap = 500) {
             }
         }
     } catch (e) { console.error("Post cap enforcement failed:", e); }
+}
+
+// Keep only the most recent 50 videos (per the spec's storage cap). Only deletes the
+// Telegram message when we own the storage copy (user uploads) — never a channel's own post.
+async function enforceVideoCap(cap = MAX_VIDEOS_IN_DB) {
+    try {
+        const { count } = await supabase.from('videos').select('*', { count: 'exact', head: true });
+        if (count && count > cap) {
+            const excess = count - cap;
+            const { data: oldest } = await supabase.from('videos').select('id, storage_chat_id, storage_message_id, owned_storage').order('created_at', { ascending: true }).limit(excess);
+            for (const v of (oldest || [])) {
+                if (v.owned_storage && v.storage_chat_id && v.storage_message_id) {
+                    try { await bot.telegram.deleteMessage(v.storage_chat_id, v.storage_message_id); } catch (delErr) { /* best effort */ }
+                }
+                await supabase.from('videos').delete().eq('id', v.id);
+            }
+        }
+    } catch (e) { console.error("Video cap enforcement failed:", e); }
 }
 
 // ================= APIs =================
@@ -566,7 +608,7 @@ app.post('/api/deletePost', async (req, res) => {
 
         const { error } = await supabase.from('posts').delete().eq('id', postId);
         if (error) throw error;
-        await supabase.from('reports').delete().eq('post_id', postId);
+        await supabase.from('reports').delete().eq('post_id', postId).eq('content_type', 'post');
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -636,6 +678,7 @@ app.post('/api/reportPost', async (req, res) => {
             post_id: postId,
             post_author_id: post.author_id,
             post_type: post.type,
+            content_type: 'post',
             reporter_id: tgUser.id.toString(),
             reason: reason || 'Not specified',
             created_at: new Date().toISOString()
@@ -755,15 +798,15 @@ app.post('/api/searchPosts', async (req, res) => {
     }
 });
 
-// Comments API
+// Comments API (contentType: 'post' | 'video', defaults to 'post' for backward compatibility)
 app.post('/api/getComments', async (req, res) => {
-    const { postId } = req.body;
-    const { data } = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+    const { postId, contentType = 'post' } = req.body;
+    const { data } = await supabase.from('comments').select('*').eq('post_id', postId).eq('content_type', contentType).order('created_at', { ascending: true });
     res.json(data);
 });
 
 app.post('/api/addComment', async (req, res) => {
-    const { initData, postId, text } = req.body;
+    const { initData, postId, text, contentType = 'post' } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
@@ -776,19 +819,22 @@ app.post('/api/addComment', async (req, res) => {
             post_id: postId,
             author_id: tgUser.id.toString(),
             author_name: authorName,
-            text
+            text,
+            content_type: contentType
         }]);
         if (error) throw error;
 
-        // Send Bot notification to post author or channel owners about comment
-        const { data: post } = await supabase.from('posts').select('author_id, text, type').eq('id', postId).maybeSingle();
-        if (post && String(post.author_id) !== tgUser.id.toString()) {
-            const postPreview = post.text ? post.text.substring(0, 20) : 'Photo Post';
+        // Send Bot notification to post/video author or channel owners about the comment
+        const table = contentType === 'video' ? 'videos' : 'posts';
+        const textField = contentType === 'video' ? 'caption' : 'text';
+        const { data: content } = await supabase.from(table).select(`author_id, ${textField}, type`).eq('id', postId).maybeSingle();
+        if (content && String(content.author_id) !== tgUser.id.toString()) {
+            const preview = content[textField] ? content[textField].substring(0, 20) : (contentType === 'video' ? 'Video Post' : 'Photo Post');
             await notifyPostOwners(
-                post.author_id,
-                post.type,
-                `💬 ${tgUser.first_name} commented on your post:\n"${postPreview}..."\n\nComment: "${text}"`,
-                `post_${postId}`
+                content.author_id,
+                content.type,
+                `💬 ${tgUser.first_name} commented on your ${contentType}:\n"${preview}..."\n\nComment: "${text}"`,
+                `${contentType}_${postId}`
             );
         }
 
@@ -805,7 +851,263 @@ app.post('/api/deleteComment', async (req, res) => {
     res.json({ success: true });
 });
 
-// ================= ADMIN PANEL APIs =================
+// ================= SHORTS VIDEO APIs =================
+// Videos are never stored in Supabase directly — only Telegram's file_id is kept.
+// User uploads go through a dedicated storage channel (STORAGE_CHANNEL_ID); channel
+// videos are auto-synced straight from the origin channel_post (see bot.on('channel_post')).
+
+async function enrichVideos(videos) {
+    if (!videos) return [];
+    return Promise.all(videos.map(async v => {
+        let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(v.author_name || 'U')}`;
+        let authorLevel = 1;
+        let authorUsername = '';
+        let authorVerified = false;
+
+        try {
+            if (v.type === 'user') {
+                const { data: u } = await supabase.from('users').select('photo_url, username, is_verified').eq('tg_id', v.author_id).maybeSingle();
+                if (u) {
+                    if (u.photo_url) authPhoto = u.photo_url;
+                    if (u.username) authorUsername = u.username;
+                    authorVerified = !!u.is_verified;
+                }
+                const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', v.author_id);
+                authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
+            } else if (v.type === 'channel') {
+                const { data: u } = await supabase.from('users').select('channels').contains('channels', [{ id: v.author_id }]);
+                if (u && u.length > 0) {
+                    const ch = u[0].channels.find(c => String(c.id) === String(v.author_id));
+                    if (ch) {
+                        if (ch.photo) authPhoto = ch.photo;
+                        if (ch.username) authorUsername = ch.username;
+                        authorVerified = !!ch.verified;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        return {
+            ...v,
+            author_photo: authPhoto,
+            author_level: authorLevel,
+            author_username: authorUsername,
+            author_verified: authorVerified,
+            stream_url: `/api/videoStream/${v.id}`
+        };
+    }));
+}
+
+// Paginated Shorts feed
+app.post('/api/getShorts', async (req, res) => {
+    const { page = 1, limit = 5 } = req.body;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    try {
+        const { data: videos, error } = await supabase.from('videos')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        if (error) throw error;
+        res.json(await enrichVideos(videos || []));
+    } catch (e) {
+        console.error("Shorts feed error:", e);
+        res.json([]);
+    }
+});
+
+// Single video (used to open a share/deep link straight to a specific Short)
+app.post('/api/getVideoById', async (req, res) => {
+    const { videoId } = req.body;
+    try {
+        const { data: video, error } = await supabase.from('videos').select('*').eq('id', videoId).maybeSingle();
+        if (error || !video) return res.status(404).json({ error: "Video not found" });
+        const [enriched] = await enrichVideos([video]);
+        res.json(enriched);
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Single post (used to open a share/deep link straight to a specific post)
+app.post('/api/getPostById', async (req, res) => {
+    const { postId } = req.body;
+    try {
+        const { data: post, error } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+        if (error || !post) return res.status(404).json({ error: "Post not found" });
+        const [enriched] = await enrichPosts([post]);
+        res.json(enriched);
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Resolves a video's file_id to a fresh, short-lived Telegram CDN link and redirects to it.
+// We never persist the raw link since Telegram's file links expire (~1 hour).
+app.get('/api/videoStream/:id', async (req, res) => {
+    try {
+        const { data: video } = await supabase.from('videos').select('file_id').eq('id', req.params.id).maybeSingle();
+        if (!video) return res.status(404).send("Video not found");
+        const link = await bot.telegram.getFileLink(video.file_id);
+        res.redirect(link.href || link.toString());
+    } catch (e) {
+        res.status(500).send("Could not resolve video stream");
+    }
+});
+
+// Upload a new video (users only — channels are captured automatically via channel_post)
+app.post('/api/createVideo', async (req, res) => {
+    const { initData, caption, videoBase64 } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    if (!videoBase64) return res.status(400).json({ error: "No video provided" });
+    if (!STORAGE_CHANNEL_ID) return res.status(500).json({ error: "Server is missing STORAGE_CHANNEL_ID configuration" });
+
+    try {
+        const base64Data = videoBase64.includes(',') ? videoBase64.split(',')[1] : videoBase64;
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        if (buffer.length > MAX_VIDEO_BYTES) {
+            return res.status(400).json({ error: "Video exceeds the 15MB limit" });
+        }
+
+        const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        const authorName = user ? user.name : tgUser.first_name || "User";
+
+        const sentMsg = await bot.telegram.sendVideo(
+            STORAGE_CHANNEL_ID,
+            { source: buffer, filename: `snappages_${Date.now()}.mp4` },
+            { caption: `From: ${authorName} (${tgUser.id})` }
+        );
+
+        const fileId = sentMsg.video ? sentMsg.video.file_id : null;
+        if (!fileId) return res.status(500).json({ error: "Upload to storage channel failed" });
+
+        const { error } = await supabase.from('videos').insert([{
+            author_id: tgUser.id.toString(),
+            author_name: authorName,
+            type: 'user',
+            caption: caption || '',
+            file_id: fileId,
+            storage_chat_id: STORAGE_CHANNEL_ID,
+            storage_message_id: sentMsg.message_id,
+            owned_storage: true,
+            likes_count: 0,
+            likes_users: [],
+            created_at: new Date().toISOString()
+        }]);
+        if (error) throw error;
+
+        await enforceVideoCap();
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Video upload failed:", e);
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+app.post('/api/deleteVideo', async (req, res) => {
+    const { initData, videoId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: video } = await supabase.from('videos').select('*').eq('id', videoId).maybeSingle();
+        if (!video) return res.status(404).json({ error: "Video not found" });
+
+        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        let isOwner = false;
+        if (video.type === 'channel') {
+            isOwner = user && user.channels && user.channels.some(c => String(c.id) === String(video.author_id));
+        } else {
+            isOwner = String(video.author_id) === String(tgUser.id);
+        }
+        if (!isOwner) return res.status(403).json({ error: "You do not own this video!" });
+
+        if (video.owned_storage && video.storage_chat_id && video.storage_message_id) {
+            try { await bot.telegram.deleteMessage(video.storage_chat_id, video.storage_message_id); } catch (e) {}
+        }
+        await supabase.from('videos').delete().eq('id', videoId);
+        await supabase.from('comments').delete().eq('post_id', videoId).eq('content_type', 'video');
+        await supabase.from('reports').delete().eq('post_id', videoId).eq('content_type', 'video');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+app.post('/api/likeVideo', async (req, res) => {
+    const { initData, videoId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: video, error: fetchErr } = await supabase.from('videos').select('likes_count, likes_users, author_id, caption, type').eq('id', videoId).maybeSingle();
+        if (fetchErr || !video) return res.status(404).json({ error: "Video not found" });
+
+        let likesUsers = video.likes_users || [];
+        let likesCount = video.likes_count || 0;
+        const userId = tgUser.id.toString();
+        let hasLiked = false;
+
+        if (likesUsers.includes(userId)) {
+            likesUsers = likesUsers.filter(id => id !== userId);
+            likesCount = Math.max(0, likesCount - 1);
+        } else {
+            likesUsers.push(userId);
+            likesCount += 1;
+            hasLiked = true;
+            const preview = video.caption ? video.caption.substring(0, 30) : 'Video Post';
+            await notifyPostOwners(video.author_id, video.type, `❤️ ${tgUser.first_name} liked your video:\n"${preview}..."`, `video_${videoId}`);
+        }
+
+        await supabase.from('videos').update({ likes_count: likesCount, likes_users: likesUsers }).eq('id', videoId);
+        res.json({ success: true, likesCount, hasLiked });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+app.post('/api/reportVideo', async (req, res) => {
+    const { initData, videoId, reason } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: video } = await supabase.from('videos').select('id, author_id, type').eq('id', videoId).maybeSingle();
+        if (!video) return res.status(404).json({ error: "Video not found" });
+
+        const { error } = await supabase.from('reports').insert([{
+            post_id: videoId,
+            post_author_id: video.author_id,
+            post_type: video.type,
+            content_type: 'video',
+            reporter_id: tgUser.id.toString(),
+            reason: reason || 'Not specified',
+            created_at: new Date().toISOString()
+        }]);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+// "Save" sends the video straight to the user's own chat with the bot
+app.post('/api/saveVideo', async (req, res) => {
+    const { initData, videoId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: video } = await supabase.from('videos').select('file_id, caption').eq('id', videoId).maybeSingle();
+        if (!video) return res.status(404).json({ error: "Video not found" });
+
+        await bot.telegram.sendVideo(tgUser.id, video.file_id, { caption: video.caption ? `Saved from SnapPages\n\n${video.caption}` : 'Saved from SnapPages' });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
 // All routes below require the caller to (a) be flagged is_admin in the users table AND
 // (b) supply the correct adminPassword (set via the ADMIN_PASSWORD env var on Render).
 
@@ -817,6 +1119,7 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
     try {
         const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
         const { count: totalPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true });
+        const { count: totalVideos } = await supabase.from('videos').select('*', { count: 'exact', head: true });
         const { data: allUsers } = await supabase.from('users').select('channels');
         const totalChannels = (allUsers || []).reduce((sum, u) => sum + ((u.channels && u.channels.length) || 0), 0);
         const { count: totalReports } = await supabase.from('reports').select('*', { count: 'exact', head: true });
@@ -847,6 +1150,7 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
         res.json({
             totalUsers: totalUsers || 0,
             totalPosts: totalPosts || 0,
+            totalVideos: totalVideos || 0,
             totalChannels,
             totalReports: totalReports || 0,
             ramUsedMB,
@@ -863,21 +1167,37 @@ app.post('/api/admin/reports', requireAdminUser, requireAdminPassword, async (re
         const { data: reports, error } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
         if (error) throw error;
 
-        // Group reports by post
+        // Group reports by (content_type, post_id) — posts and videos each have their own
+        // auto-incrementing id, so the id alone isn't a unique key across both tables.
         const grouped = {};
         (reports || []).forEach(r => {
-            if (!grouped[r.post_id]) grouped[r.post_id] = { post_id: r.post_id, post_author_id: r.post_author_id, post_type: r.post_type, reasons: [], count: 0 };
-            grouped[r.post_id].count++;
-            grouped[r.post_id].reasons.push(r.reason);
+            const contentType = r.content_type || 'post';
+            const key = `${contentType}:${r.post_id}`;
+            if (!grouped[key]) grouped[key] = { post_id: r.post_id, content_type: contentType, post_author_id: r.post_author_id, post_type: r.post_type, reasons: [], count: 0 };
+            grouped[key].count++;
+            grouped[key].reasons.push(r.reason);
         });
 
-        const postIds = Object.keys(grouped);
-        if (postIds.length > 0) {
-            const { data: posts } = await supabase.from('posts').select('id, text, image_urls').in('id', postIds);
+        const postEntries = Object.values(grouped).filter(g => g.content_type === 'post');
+        const videoEntries = Object.values(grouped).filter(g => g.content_type === 'video');
+
+        if (postEntries.length > 0) {
+            const { data: posts } = await supabase.from('posts').select('id, text, image_urls').in('id', postEntries.map(g => g.post_id));
             (posts || []).forEach(p => {
-                if (grouped[p.id]) {
-                    grouped[p.id].post_text = p.text;
-                    grouped[p.id].post_link = `${process.env.MINI_APP_URL}?startapp=post_${p.id}`;
+                const g = grouped[`post:${p.id}`];
+                if (g) {
+                    g.post_text = p.text;
+                    g.post_link = `${process.env.MINI_APP_URL}?startapp=post_${p.id}`;
+                }
+            });
+        }
+        if (videoEntries.length > 0) {
+            const { data: videos } = await supabase.from('videos').select('id, caption').in('id', videoEntries.map(g => g.post_id));
+            (videos || []).forEach(v => {
+                const g = grouped[`video:${v.id}`];
+                if (g) {
+                    g.post_text = v.caption;
+                    g.post_link = `${process.env.MINI_APP_URL}?startapp=video_${v.id}`;
                 }
             });
         }
@@ -889,29 +1209,41 @@ app.post('/api/admin/reports', requireAdminUser, requireAdminPassword, async (re
 });
 
 app.post('/api/admin/removePost', requireAdminUser, requireAdminPassword, async (req, res) => {
-    const { postId } = req.body;
+    const { postId, contentType = 'post' } = req.body;
     try {
-        await supabase.from('posts').delete().eq('id', postId);
-        await supabase.from('reports').delete().eq('post_id', postId);
+        if (contentType === 'video') {
+            const { data: video } = await supabase.from('videos').select('*').eq('id', postId).maybeSingle();
+            if (video && video.owned_storage && video.storage_chat_id && video.storage_message_id) {
+                try { await bot.telegram.deleteMessage(video.storage_chat_id, video.storage_message_id); } catch (e) {}
+            }
+            await supabase.from('videos').delete().eq('id', postId);
+        } else {
+            await supabase.from('posts').delete().eq('id', postId);
+        }
+        await supabase.from('reports').delete().eq('post_id', postId).eq('content_type', contentType);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message || e }); }
 });
 
 app.post('/api/admin/removePostBanUser', requireAdminUser, requireAdminPassword, async (req, res) => {
-    const { postId } = req.body;
+    const { postId, contentType = 'post' } = req.body;
     try {
-        const { data: post } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
-        if (!post) return res.status(404).json({ error: "Post not found" });
+        const table = contentType === 'video' ? 'videos' : 'posts';
+        const { data: content } = await supabase.from(table).select('*').eq('id', postId).maybeSingle();
+        if (!content) return res.status(404).json({ error: "Content not found" });
 
-        if (post.type === 'channel') {
+        if (content.type === 'channel') {
             // Ban the channel instead of a user
-            await banChannelInternal(post.author_id);
+            await banChannelInternal(content.author_id);
         } else {
-            await banUserInternal(post.author_id);
+            await banUserInternal(content.author_id);
         }
 
-        await supabase.from('posts').delete().eq('id', postId);
-        await supabase.from('reports').delete().eq('post_id', postId);
+        if (contentType === 'video' && content.owned_storage && content.storage_chat_id && content.storage_message_id) {
+            try { await bot.telegram.deleteMessage(content.storage_chat_id, content.storage_message_id); } catch (e) {}
+        }
+        await supabase.from(table).delete().eq('id', postId);
+        await supabase.from('reports').delete().eq('post_id', postId).eq('content_type', contentType);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message || e }); }
 });
@@ -928,12 +1260,23 @@ async function banUserInternal(tgId) {
     await supabase.from('banned_users').upsert([{ tg_id: tgId.toString(), banned_at: new Date().toISOString() }]);
     await supabase.from('posts').delete().eq('author_id', tgId.toString());
     await supabase.from('comments').delete().eq('author_id', tgId.toString());
+
+    // Also purge any videos this user uploaded, cleaning up storage channel messages we own
+    const { data: userVideos } = await supabase.from('videos').select('id, owned_storage, storage_chat_id, storage_message_id').eq('author_id', tgId.toString());
+    for (const v of (userVideos || [])) {
+        if (v.owned_storage && v.storage_chat_id && v.storage_message_id) {
+            try { await bot.telegram.deleteMessage(v.storage_chat_id, v.storage_message_id); } catch (e) {}
+        }
+    }
+    await supabase.from('videos').delete().eq('author_id', tgId.toString());
+
     await supabase.from('users').delete().eq('tg_id', tgId.toString());
 }
 
 async function banChannelInternal(channelId) {
     await supabase.from('banned_channels').upsert([{ channel_id: channelId.toString(), banned_at: new Date().toISOString() }]);
     await supabase.from('posts').delete().eq('author_id', channelId.toString());
+    await supabase.from('videos').delete().eq('author_id', channelId.toString()); // channel-owned messages, never delete the source message
     // strip the channel out of every user's channels array
     const { data: owners } = await supabase.from('users').select('tg_id, channels').contains('channels', [{ id: channelId.toString() }]);
     for (const owner of (owners || [])) {
@@ -1039,6 +1382,7 @@ app.post('/api/admin/wipeDatabase', requireAdminUser, requireAdminPassword, asyn
         await supabase.from('comments').delete().neq('id', 0);
         await supabase.from('reports').delete().neq('id', 0);
         await supabase.from('posts').delete().neq('id', 0);
+        await supabase.from('videos').delete().neq('id', 0);
         await supabase.from('users').delete().neq('tg_id', '0');
         await supabase.from('banned_users').delete().neq('tg_id', '0');
         await supabase.from('banned_channels').delete().neq('channel_id', '0');
