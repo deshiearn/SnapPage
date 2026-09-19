@@ -49,6 +49,11 @@
 
         /* Blue verified badge */
         .verified-badge { color: #2563eb; font-size: 12px; margin-left: 2px; }
+
+        /* Caption "See more" clamp + expand animation */
+        .caption-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; transition: max-height 0.25s ease; }
+        .caption-expanded { display: block; -webkit-line-clamp: unset; animation: captionExpand 0.25s ease; }
+        @keyframes captionExpand { from { opacity: 0.5; } to { opacity: 1; } }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -62,7 +67,7 @@
     </div>
 
     <!-- Header (No SnapPages Text, dynamic safe spacing) -->
-    <header class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
+    <header id="appHeader" class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
         <span id="headerTitle"></span>
         <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
             <i class="fas fa-user-shield"></i> Admin
@@ -81,6 +86,23 @@
             <i class="fas fa-plus"></i>
         </button>
     </main>
+
+    <!-- Shorts Tab (full-screen, immersive vertical video feed) -->
+    <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
+        <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
+
+        <button onclick="exitShorts()" class="fixed top-4 left-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: max(16px, env(safe-area-inset-top));">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <button onclick="openModal('videoUploadModal')" class="fixed bottom-6 right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">
+            <i class="fas fa-plus"></i>
+        </button>
+
+        <div id="shortsEmptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-white gap-2">
+            <i class="fas fa-video-slash text-4xl text-gray-500"></i>
+            <p class="text-gray-400 text-sm">No Shorts yet — be the first to upload!</p>
+        </div>
+    </div>
 
     <!-- Search Tab -->
     <main id="tab-search" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
@@ -128,8 +150,9 @@
     </main>
 
     <!-- SMALL BOTTOM NAV -->
-    <nav class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
+    <nav id="bottomNav" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
         <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
+        <button onclick="switchTab('shorts')" class="nav-btn text-gray-400 transition" id="nav-shorts"><i class="fas fa-play-circle text-2xl"></i></button>
         <button onclick="switchTab('search')" class="nav-btn text-gray-400 transition" id="nav-search"><i class="fas fa-search text-2xl"></i></button>
         <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
             <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
@@ -152,6 +175,23 @@
             
             <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
             <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Post</button>
+        </div>
+    </div>
+
+    <!-- VIDEO UPLOAD MODAL (Shorts) -->
+    <div id="videoUploadModal" class="hidden fixed inset-0 blur-bg z-[70] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold">Upload Short</h3>
+                <button onclick="closeModal('videoUploadModal')"><i class="fas fa-times"></i></button>
+            </div>
+            <textarea id="videoCaptionText" class="w-full bg-gray-50 rounded-xl p-3 h-20 mb-3 outline-none" placeholder="Write a caption..."></textarea>
+
+            <input type="file" id="videoUploadInput" accept="video/*" class="hidden">
+            <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="w-full text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-film"></i> Choose Video (Max 15MB)</button>
+            <p id="videoFileName" class="text-xs text-gray-400 mb-3 truncate"></p>
+
+            <button id="submitVideoBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Upload</button>
         </div>
     </div>
 
@@ -328,6 +368,50 @@
             }
         }
 
+        // Resolve a shared link like ?startapp=post_123 or ?startapp=video_45 — Telegram
+        // passes this through tg.initDataUnsafe.start_param when the app is launched from it.
+        async function handleSharedDeepLink() {
+            try {
+                const startParam = tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+                if (!startParam) return;
+
+                if (startParam.startsWith('video_')) {
+                    const videoId = startParam.replace('video_', '');
+                    switchTab('shorts');
+                    const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+                    const video = await res.json();
+                    if (video && video.id) {
+                        const feed = document.getElementById('shortsFeed');
+                        feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
+                        document.getElementById('shortsEmptyState').classList.add('hidden');
+                        observeShorts();
+                        feed.firstElementChild.scrollIntoView();
+                    }
+                } else if (startParam.startsWith('post_')) {
+                    const postId = startParam.replace('post_', '');
+                    const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
+                    const post = await res.json();
+                    if (post && post.id) {
+                        // Wait for the normal feed to finish its initial render, then pin the shared post to the top
+                        setTimeout(() => {
+                            const feed = document.getElementById('feed');
+                            const existing = feed.querySelector(`[data-shared-post="${post.id}"]`);
+                            if (!existing) {
+                                feed.insertAdjacentHTML('afterbegin', renderSharedPostWrapper(post));
+                                feed.firstElementChild.scrollIntoView({ behavior: 'smooth' });
+                            }
+                        }, 400);
+                    }
+                }
+            } catch (e) { console.error("Deep link resolution failed:", e); }
+        }
+
+        function renderSharedPostWrapper(post) {
+            // Reuses the same card markup as the main feed, but wrapped with a highlight ring
+            const html = buildPostCardHtml(post);
+            return `<div data-shared-post="${post.id}" class="ring-2 ring-blue-400 rounded-xl">${html}</div>`;
+        }
+
         async function initApp() {
             // 0. Check maintenance mode before anything else renders
             try {
@@ -388,10 +472,20 @@
             // 3. Load Feed
             loadPosts(1, true);
             setupSearch();
+
+            // 4. Deep link handling — someone opened a shared post/video link
+            handleSharedDeepLink();
         }
 
         // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
+        let shortsActive = false;
         window.switchTab = (tab) => {
+            if (tab === 'shorts') {
+                enterShorts();
+                return;
+            }
+            if (shortsActive) leaveShortsUI();
+
             ['home', 'search', 'settings'].forEach(t => {
                 const element = document.getElementById(`tab-${t}`);
                 if(element) element.classList.add('hidden');
@@ -409,6 +503,43 @@
                 loadPosts(1, true); // Clean re-fetch on Home nav click
             }
             if (tab === 'search') loadTopPosts();
+        };
+
+        // Shorts is a full-screen, immersive mode: header + bottom nav hide while it's open.
+        function enterShorts() {
+            shortsActive = true;
+            ['home', 'search', 'settings'].forEach(t => {
+                const element = document.getElementById(`tab-${t}`);
+                if(element) element.classList.add('hidden');
+            });
+            document.getElementById('appHeader').classList.add('hidden');
+            document.getElementById('bottomNav').classList.add('hidden');
+            document.getElementById('tab-shorts').classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active', 'text-blue-600'));
+            document.getElementById('nav-shorts').classList.add('active', 'text-blue-600');
+
+            openModalsStack.push('__shorts__');
+            tg.BackButton.show();
+
+            if (document.getElementById('shortsFeed').children.length === 0) {
+                loadShorts(true);
+            }
+        }
+
+        function leaveShortsUI() {
+            shortsActive = false;
+            document.getElementById('tab-shorts').classList.add('hidden');
+            document.getElementById('appHeader').classList.remove('hidden');
+            document.getElementById('bottomNav').classList.remove('hidden');
+            document.querySelectorAll('#shortsFeed video').forEach(v => v.pause());
+            openModalsStack = openModalsStack.filter(m => m !== '__shorts__');
+            if (openModalsStack.length === 0) tg.BackButton.hide();
+        }
+
+        window.exitShorts = () => {
+            leaveShortsUI();
+            switchTab('home');
         };
 
         // UI Open / Close modals
@@ -461,7 +592,11 @@
         tg.BackButton.onClick(() => {
             if (openModalsStack.length > 0) {
                 const lastModal = openModalsStack[openModalsStack.length - 1];
-                closeModal(lastModal);
+                if (lastModal === '__shorts__') {
+                    exitShorts();
+                } else {
+                    closeModal(lastModal);
+                }
             }
         });
 
@@ -603,67 +738,7 @@
                     hasMorePosts = false;
                 }
 
-                const resolvedHtml = posts.map(post => {
-                    // FIXED: Fallback parser to cleanly convert raw PostgreSQL string arrays into JavaScript arrays
-                    let imageUrls = post.image_urls;
-                    if (typeof imageUrls === 'string') {
-                        if (imageUrls.startsWith('{') && imageUrls.endsWith('}')) {
-                            imageUrls = imageUrls.slice(1, -1).split(',').map(u => u.trim().replace(/^"|"$/g, ''));
-                        } else {
-                            try {
-                                imageUrls = JSON.parse(imageUrls);
-                            } catch(e) {
-                                imageUrls = [imageUrls];
-                            }
-                        }
-                    }
-
-                    let imgHtml = '';
-                    if(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "") {
-                        imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
-                        imageUrls.forEach(url => {
-                            if (url) {
-                                imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
-                            }
-                        });
-                        imgHtml += `</div>`;
-                        if(imageUrls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
-                    }
-
-                    const captionHtml = formatCaption(post.text, post.author_level || 1);
-                    const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
-                    const likeCount = post.likes_count || 0;
-                    const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
-                    const pinnedBadge = post.is_pinned ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold ml-1"><i class="fas fa-thumbtack"></i> Pinned</span>' : '';
-
-                    // FIXED: Dynamic Level Badge with [Channel] or [User] labels 
-                    const labelBadge = post.type === 'channel' 
-                        ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">Channel</span>'
-                        : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
-
-                    return `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
-                            <div class="flex justify-between items-center mb-3">
-                                <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileLink('${post.type}', '${post.author_id}', '${post.author_username || ''}')">
-                                    <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
-                                    <div>
-                                        <h3 class="font-bold text-sm text-gray-900">${post.author_name}${verifiedIcon}</h3>
-                                        ${labelBadge}${pinnedBadge}
-                                    </div>
-                                </div>
-                                <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
-                            </div>
-                            <p class="mb-3 text-sm whitespace-pre-wrap text-gray-800">${captionHtml}</p>
-                            ${imgHtml}
-                            <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
-                                <button onclick="likePost(this, '${post.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
-                                    <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
-                                </button>
-                                <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> Comment</button>
-                                <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> Share</button>
-                            </div>
-                        </div>`;
-                }).join('');
+                const resolvedHtml = posts.map(post => buildPostCardHtml(post)).join('');
 
                 if (clearFeed) {
                     feed.innerHTML = resolvedHtml;
@@ -680,6 +755,70 @@
             }
         }
 
+        // Builds one post card's HTML — used by the main feed and by shared deep links
+        function buildPostCardHtml(post) {
+            // FIXED: Fallback parser to cleanly convert raw PostgreSQL string arrays into JavaScript arrays
+            let imageUrls = post.image_urls;
+            if (typeof imageUrls === 'string') {
+                if (imageUrls.startsWith('{') && imageUrls.endsWith('}')) {
+                    imageUrls = imageUrls.slice(1, -1).split(',').map(u => u.trim().replace(/^"|"$/g, ''));
+                } else {
+                    try {
+                        imageUrls = JSON.parse(imageUrls);
+                    } catch(e) {
+                        imageUrls = [imageUrls];
+                    }
+                }
+            }
+
+            let imgHtml = '';
+            if(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "") {
+                imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
+                imageUrls.forEach(url => {
+                    if (url) {
+                        imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
+                    }
+                });
+                imgHtml += `</div>`;
+                if(imageUrls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
+            }
+
+            const captionHtml = formatCaption(post.text, post.author_level || 1);
+            const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
+            const likeCount = post.likes_count || 0;
+            const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
+            const pinnedBadge = post.is_pinned ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold ml-1"><i class="fas fa-thumbtack"></i> Pinned</span>' : '';
+
+            // FIXED: Dynamic Level Badge with [Channel] or [User] labels
+            const labelBadge = post.type === 'channel'
+                ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">Channel</span>'
+                : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
+
+            return `
+                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileLink('${post.type}', '${post.author_id}', '${post.author_username || ''}')">
+                            <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <h3 class="font-bold text-sm text-gray-900">${post.author_name}${verifiedIcon}</h3>
+                                ${labelBadge}${pinnedBadge}
+                            </div>
+                        </div>
+                        <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
+                    </div>
+                    <p class="mb-1 text-sm whitespace-pre-wrap text-gray-800 caption-clamp">${captionHtml}</p>
+                    ${(post.text || '').length > 140 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-blue-500 mb-3">See more</button>` : '<div class="mb-3"></div>'}
+                    ${imgHtml}
+                    <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
+                        <button onclick="likePost(this, '${post.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
+                            <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
+                        </button>
+                        <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> Comment</button>
+                        <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> Share</button>
+                    </div>
+                </div>`;
+        }
+
         // Register window scroll listener for infinite scroll mechanism
         window.addEventListener('scroll', () => {
             if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100) {
@@ -687,6 +826,229 @@
                     currentPage++;
                     loadPosts(currentPage, false);
                 }
+            }
+        });
+
+        // ================= SHORTS (TikTok-style video feed) =================
+        let shortsPage = 1;
+        let isLoadingShorts = false;
+        let hasMoreShorts = true;
+        let shortsObserver = null;
+
+        async function loadShorts(reset = false) {
+            if (isLoadingShorts) return;
+            isLoadingShorts = true;
+            const feed = document.getElementById('shortsFeed');
+            if (reset) { feed.innerHTML = ''; shortsPage = 1; hasMoreShorts = true; }
+
+            try {
+                const res = await fetch('/api/getShorts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ page: shortsPage, limit: 5 })
+                });
+                const videos = await res.json();
+
+                if (!videos || videos.length === 0) {
+                    hasMoreShorts = false;
+                    if (reset) document.getElementById('shortsEmptyState').classList.remove('hidden');
+                    return;
+                }
+                document.getElementById('shortsEmptyState').classList.add('hidden');
+                if (videos.length < 5) hasMoreShorts = false;
+
+                videos.forEach(v => feed.insertAdjacentHTML('beforeend', renderShortItem(v)));
+                observeShorts();
+            } catch (e) {
+                console.error("Shorts load failed:", e);
+            } finally {
+                isLoadingShorts = false;
+            }
+        }
+
+        function renderShortItem(v) {
+            const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
+            const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
+            const caption = (v.caption || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `
+            <div class="short-item w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
+                <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="metadata" onclick="toggleShortPlay(this)"></video>
+
+                <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top:max(16px, env(safe-area-inset-top));" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
+                    <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
+                    <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
+                </div>
+
+                <div class="absolute right-3 bottom-28 flex flex-col items-center gap-5 text-white">
+                    <button onclick="likeVideo(this, '${v.id}')" class="flex flex-col items-center gap-1">
+                        <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
+                        <span class="text-xs like-count">${v.likes_count || 0}</span>
+                    </button>
+                    <button onclick="openComments('${v.id}', 'video')" class="flex flex-col items-center gap-1">
+                        <i class="fas fa-comment text-2xl"></i>
+                        <span class="text-xs">Comment</span>
+                    </button>
+                    <button onclick="shareVideoDirectly('${v.id}')" class="flex flex-col items-center gap-1">
+                        <i class="fas fa-share text-2xl"></i>
+                        <span class="text-xs">Share</span>
+                    </button>
+                    <button onclick="openShortOptions('${v.id}', '${v.author_id}', '${v.type}')">
+                        <i class="fas fa-ellipsis-v text-2xl"></i>
+                    </button>
+                </div>
+
+                <div class="absolute left-3 right-20 bottom-8 text-white">
+                    <p class="text-sm caption-clamp" data-full="${caption.replace(/"/g, '&quot;')}">${caption}</p>
+                    ${caption.length > 90 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-gray-300 mt-1">See more</button>` : ''}
+                </div>
+            </div>`;
+        }
+
+        window.toggleCaption = (btn) => {
+            const p = btn.previousElementSibling;
+            const expanded = p.classList.toggle('caption-expanded');
+            p.classList.toggle('caption-clamp', !expanded);
+            btn.innerText = expanded ? 'See less' : 'See more';
+        };
+
+        window.toggleShortPlay = (video) => {
+            if (video.paused) video.play(); else video.pause();
+        };
+
+        // Autoplay the Short in view, pause the rest — classic TikTok scroll behavior
+        function observeShorts() {
+            if (shortsObserver) shortsObserver.disconnect();
+            shortsObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const video = entry.target.querySelector('video');
+                    if (!video) return;
+                    if (entry.isIntersecting) {
+                        video.play().catch(() => {});
+                    } else {
+                        video.pause();
+                    }
+                });
+            }, { threshold: 0.6 });
+            document.querySelectorAll('.short-item').forEach(item => shortsObserver.observe(item));
+        }
+
+        document.getElementById('shortsFeed').addEventListener('scroll', function() {
+            if (this.scrollTop + this.clientHeight >= this.scrollHeight - 200) {
+                if (!isLoadingShorts && hasMoreShorts) {
+                    shortsPage++;
+                    loadShorts(false);
+                }
+            }
+        });
+
+        window.shareVideoDirectly = (id) => {
+            const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}`;
+            tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent('Check out this Short on SnapPages!')}`);
+        };
+
+        window.likeVideo = async (btn, videoId) => {
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/likeVideo', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData, videoId })
+                });
+                const data = await res.json();
+                if (data && data.success) {
+                    btn.querySelector('.like-count').innerText = data.likesCount;
+                    const icon = btn.querySelector('i');
+                    icon.className = data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl';
+                }
+            } catch(e) { console.error("Video like failed:", e); }
+            finally { btn.disabled = false; }
+        };
+
+        window.openShortOptions = (videoId, authorId, type) => {
+            const sheet = document.getElementById('optionsSheet');
+            const content = document.getElementById('optionsContent');
+            document.getElementById('optionsModalBg').classList.remove('hidden');
+            setTimeout(() => sheet.classList.add('open'), 10);
+
+            let isMine = false;
+            if (currentUser) {
+                if (type === 'channel') {
+                    isMine = currentUser.channels && currentUser.channels.some(c => String(c.id) === String(authorId));
+                } else {
+                    isMine = String(authorId) === String(currentUser.tg_id);
+                }
+            }
+
+            content.innerHTML = `
+                <button onclick="saveVideoToChat('${videoId}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl font-bold text-green-600 flex items-center gap-2"><i class="fas fa-download"></i> Save</button>
+                ${isMine
+                    ? `<button onclick="deleteVideoDirect('${videoId}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl font-bold text-red-600 flex items-center gap-2"><i class="fas fa-trash-alt"></i> Delete Video</button>`
+                    : `<button onclick="openReportSheet('${videoId}', 'video')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl font-bold text-orange-600 flex items-center gap-2"><i class="fas fa-flag"></i> Report</button>`}
+            `;
+        };
+
+        window.saveVideoToChat = async (videoId) => {
+            closeSheet('optionsModalBg', 'optionsSheet');
+            try {
+                const res = await fetch('/api/saveVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+                const data = await res.json();
+                if (data && data.success) tg.showAlert("Saved! Check your chat with the bot.");
+                else tg.showAlert(`Failed: ${data.error || 'Server error'}`);
+            } catch(e) { tg.showAlert("Save failed."); }
+        };
+
+        window.deleteVideoDirect = (videoId) => {
+            closeSheet('optionsModalBg', 'optionsSheet');
+            tg.showConfirm("Delete this video?", async (ok) => {
+                if (!ok) return;
+                const res = await fetch('/api/deleteVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+                const data = await res.json();
+                if (data && data.success) {
+                    const el = document.querySelector(`.short-item[data-video-id="${videoId}"]`);
+                    if (el) el.remove();
+                }
+            });
+        };
+
+        // Video upload (Add Short)
+        let selectedVideoBase64 = null;
+        document.getElementById('videoUploadInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 15 * 1024 * 1024) {
+                tg.showAlert("Video must be under 15MB.");
+                this.value = '';
+                return;
+            }
+            document.getElementById('videoFileName').innerText = file.name;
+            const reader = new FileReader();
+            reader.onload = (ev) => { selectedVideoBase64 = ev.target.result; };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById('submitVideoBtn').addEventListener('click', async () => {
+            if (!selectedVideoBase64) return tg.showAlert("Choose a video first.");
+            const btn = document.getElementById('submitVideoBtn');
+            btn.innerText = "Uploading..."; btn.disabled = true;
+            try {
+                const res = await fetch('/api/createVideo', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initData: tg.initData, caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
+                });
+                const data = await res.json();
+                if (data && data.success) {
+                    tg.showAlert("Short uploaded!");
+                    closeModal('videoUploadModal');
+                    document.getElementById('videoCaptionText').value = '';
+                    document.getElementById('videoFileName').innerText = '';
+                    selectedVideoBase64 = null;
+                    loadShorts(true);
+                } else {
+                    tg.showAlert(`Upload failed: ${data.error || 'Server error'}`);
+                }
+            } catch(e) {
+                tg.showAlert("Upload failed: network error.");
+            } finally {
+                btn.innerText = "Upload"; btn.disabled = false;
             }
         });
 
@@ -818,31 +1180,35 @@
             }
         }
 
-        // ================= Report Post Logic =================
+        // ================= Report Post/Video Logic =================
         const REPORT_REASONS = ["Spam", "Nudity or sexual content", "Hate speech or symbols", "Violence", "False information", "Something else"];
-        window.openReportSheet = (postId) => {
+        window.openReportSheet = (postId, contentType = 'post') => {
             closeSheet('optionsModalBg', 'optionsSheet');
             const list = document.getElementById('reportReasonsList');
-            list.innerHTML = REPORT_REASONS.map(r => `<button onclick="submitReport('${postId}', '${r}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl text-sm font-semibold">${r}</button>`).join('');
+            list.innerHTML = REPORT_REASONS.map(r => `<button onclick="submitReport('${postId}', '${r}', '${contentType}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl text-sm font-semibold">${r}</button>`).join('');
             document.getElementById('reportModalBg').classList.remove('hidden');
             setTimeout(() => document.getElementById('reportSheet').classList.add('open'), 10);
         }
-        window.submitReport = async (postId, reason) => {
+        window.submitReport = async (postId, reason, contentType = 'post') => {
             closeSheet('reportModalBg', 'reportSheet');
             try {
-                const res = await fetch('/api/reportPost', {
+                const endpoint = contentType === 'video' ? '/api/reportVideo' : '/api/reportPost';
+                const bodyKey = contentType === 'video' ? 'videoId' : 'postId';
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ initData: tg.initData, postId, reason })
+                    body: JSON.stringify({ initData: tg.initData, [bodyKey]: postId, reason })
                 });
                 const data = await res.json();
-                if (data && data.success) tg.showAlert("Thanks — this post has been reported to our team.");
+                if (data && data.success) tg.showAlert("Thanks — this has been reported to our team.");
             } catch(e) { console.error("Report failed:", e); }
         }
 
         // ================= Comments Logic =================
-        window.openComments = async (postId) => {
+        let currentCommentContentType = 'post';
+        window.openComments = async (postId, contentType = 'post') => {
             currentPostIdForComment = postId;
+            currentCommentContentType = contentType;
             document.getElementById('commentModalBg').classList.remove('hidden');
             setTimeout(() => document.getElementById('commentSheet').classList.add('open'), 10);
             fetchComments();
@@ -854,7 +1220,7 @@
             list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading comments...</p>';
             
             try {
-                const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment }) });
+                const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment, contentType: currentCommentContentType }) });
                 const comments = await res.json();
                 list.innerHTML = '';
                 
@@ -880,7 +1246,7 @@
         document.getElementById('sendCommentBtn').onclick = async () => {
             const text = document.getElementById('commentInput').value.trim();
             if(!text) return;
-            const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text }) });
+            const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text, contentType: currentCommentContentType }) });
             const data = await res.json();
             if (data && data.success) {
                 document.getElementById('commentInput').value = '';
