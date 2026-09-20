@@ -19,8 +19,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
 const STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
-const MAX_VIDEO_BYTES = 15 * 1024 * 1024; // 15MB, per spec
-const MAX_VIDEOS_IN_DB = 50;
+const MAX_VIDEO_BYTES = 18 * 1024 * 1024; // 18MB — Telegram Bot API can't reliably stream files near/above ~20MB
+const MAX_VIDEOS_IN_DB = 300;
 
 // ================= Referral Level Mapping =================
 const getLevelData = (refs) => {
@@ -56,10 +56,17 @@ function requireAdminPassword(req, res, next) {
     next();
 }
 
-// Extra guard: the calling Telegram user must also be flagged is_admin in DB.
+// Extra guard: when opened from inside the Telegram app, the calling user must also be
+// flagged is_admin in DB. When opened directly in a browser (e.g. visiting /admin by URL),
+// there's no Telegram initData to check at all — in that case we fall back to the
+// ADMIN_PASSWORD alone (still enforced by requireAdminPassword right after this).
 async function requireAdminUser(req, res, next) {
+    const initData = req.body && req.body.initData;
+    if (!initData) {
+        return next();
+    }
     try {
-        const tgUser = validateTGData(req.body.initData);
+        const tgUser = validateTGData(initData);
         if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
         const { data: user } = await supabase.from('users').select('is_admin').eq('tg_id', tgUser.id.toString()).maybeSingle();
         if (!user || !user.is_admin) return res.status(403).json({ error: "Not an admin" });
@@ -274,7 +281,7 @@ bot.on('channel_post', async (ctx) => {
 });
 
 // Keep only the most recent 500 posts (per the spec's storage cap)
-async function enforcePostCap(cap = 500) {
+async function enforcePostCap(cap = 2500) {
     try {
         const { count } = await supabase.from('posts').select('*', { count: 'exact', head: true });
         if (count && count > cap) {
@@ -518,7 +525,8 @@ app.post('/api/createPost', async (req, res) => {
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id).single();
+        const { data: user, error: userErr } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        if (userErr || !user) return res.status(404).json({ error: "User not found. Please reopen the app and try again." });
 
         let imageUrls = [];
         if (imagesBase64 && imagesBase64.length > 0) {
@@ -716,7 +724,16 @@ app.post('/api/addChannel', async (req, res) => {
                 chatId = `@${path.replace('@', '')}`;
             }
         } else if (/^-?\d+$/.test(input)) {
-            chatId = input; // Raw Numerical ID
+            // Numeric Channel ID — accept it whether or not the -100 prefix is included,
+            // since many Telegram tools show only the bare digits (e.g. "1234567890"
+            // instead of "-1001234567890").
+            if (/^-100\d+$/.test(input)) {
+                chatId = input;
+            } else if (input.startsWith('-')) {
+                chatId = input; // some other valid negative chat id (e.g. a basic group)
+            } else {
+                chatId = `-100${input}`;
+            }
         } else {
             chatId = `@${input.replace('@', '')}`; // Standard public handle
         }
@@ -741,7 +758,10 @@ app.post('/api/addChannel', async (req, res) => {
         const { data: meRow } = await supabase.from('users').select('is_verified').eq('tg_id', tgUser.id.toString()).maybeSingle();
         const limits = (meRow && meRow.is_verified) ? { channels: 5 } : getLevelData(refs || 0);
 
-        const { data: user } = await supabase.from('users').select('*').eq('tg_id', tgUser.id).single();
+        const { data: user, error: userErr } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        if (userErr || !user) {
+            return res.json({ error: "Could not find your user record. Please reopen the app and try again." });
+        }
         let channels = user.channels || [];
         if (channels.length >= limits.channels) {
             return res.json({ error: `At your Level, you can only set up to ${limits.channels} channel(s).` });
@@ -761,7 +781,7 @@ app.post('/api/addChannel', async (req, res) => {
 
         const cleanUsername = chat.username || 'private';
         channels.push({ id: chat.id.toString(), name: chat.title, username: cleanUsername, photo: photoUrl, verified: false });
-        await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id);
+        await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id.toString());
 
         // Send Bot notification for channel registration success
         sendTelegramNotification(
@@ -780,10 +800,16 @@ app.post('/api/addChannel', async (req, res) => {
 app.post('/api/removeChannel', async (req, res) => {
     const { initData, channelId } = req.body;
     const tgUser = validateTGData(initData);
-    const { data: user } = await supabase.from('users').select('channels').eq('tg_id', tgUser.id).single();
-    let channels = user.channels.filter(c => c.id !== channelId);
-    await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id);
-    res.json({ success: true, channels });
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        const { data: user, error } = await supabase.from('users').select('channels').eq('tg_id', tgUser.id.toString()).maybeSingle();
+        if (error || !user) return res.status(404).json({ error: "User not found" });
+        let channels = (user.channels || []).filter(c => c.id !== channelId);
+        await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id.toString());
+        res.json({ success: true, channels });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
 });
 
 // Secure Search Posts API (Bypassing direct client-side RLS Blockage)
@@ -801,8 +827,19 @@ app.post('/api/searchPosts', async (req, res) => {
 // Comments API (contentType: 'post' | 'video', defaults to 'post' for backward compatibility)
 app.post('/api/getComments', async (req, res) => {
     const { postId, contentType = 'post' } = req.body;
-    const { data } = await supabase.from('comments').select('*').eq('post_id', postId).eq('content_type', contentType).order('created_at', { ascending: true });
-    res.json(data);
+    try {
+        let { data, error } = await supabase.from('comments').select('*').eq('post_id', postId).eq('content_type', contentType).order('created_at', { ascending: true });
+        if (error) {
+            console.error("getComments (content_type filter) failed, falling back:", error.message || error);
+            // Most likely the content_type column doesn't exist yet (shorts_migration.sql not run) — fall back to matching by post_id only.
+            const fallback = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+            data = fallback.data;
+        }
+        res.json(data || []);
+    } catch (e) {
+        console.error("getComments crashed:", e);
+        res.json([]);
+    }
 });
 
 app.post('/api/addComment', async (req, res) => {
@@ -815,14 +852,24 @@ app.post('/api/addComment', async (req, res) => {
         const authorName = user ? user.name : tgUser.first_name || "Anonymous";
 
         // FIXED: Removed likes_count parameter to prevent crash if old DB tables do not have likes_count column
-        const { error } = await supabase.from('comments').insert([{
+        let { error } = await supabase.from('comments').insert([{
             post_id: postId,
             author_id: tgUser.id.toString(),
             author_name: authorName,
             text,
             content_type: contentType
         }]);
-        if (error) throw error;
+        if (error) {
+            console.error("addComment (with content_type) failed, retrying without it:", error.message || error);
+            // Fall back for DBs that haven't run shorts_migration.sql yet (no content_type column)
+            const retry = await supabase.from('comments').insert([{
+                post_id: postId,
+                author_id: tgUser.id.toString(),
+                author_name: authorName,
+                text
+            }]);
+            if (retry.error) throw retry.error;
+        }
 
         // Send Bot notification to post/video author or channel owners about the comment
         const table = contentType === 'video' ? 'videos' : 'posts';
