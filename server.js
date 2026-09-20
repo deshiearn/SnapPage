@@ -192,7 +192,7 @@ bot.start(async (ctx) => {
             );
         }
 
-        await supabase.from('users').insert([{
+        const { error: startInsertErr } = await supabase.from('users').insert([{
             tg_id: tgId,
             name: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ') || "Telegram User",
             username: ctx.from.username || '',
@@ -202,6 +202,9 @@ bot.start(async (ctx) => {
             is_verified: false,
             is_admin: false
         }]);
+        if (startInsertErr) {
+            console.error("User insert failed in /start handler:", startInsertErr);
+        }
     }
     ctx.reply('Welcome to SnapPages! 🚀', Markup.inlineKeyboard([ Markup.button.webApp('Open App', process.env.MINI_APP_URL) ]));
 });
@@ -351,6 +354,7 @@ app.post('/api/auth', async (req, res) => {
             const { data: newUser, error: insertErr } = await supabase.from('users').insert([{
                 tg_id: tgId,
                 name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
+                username: tgUser.username || '',
                 photo_url,
                 referred_by,
                 channels: [],
