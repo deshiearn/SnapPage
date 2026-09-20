@@ -91,10 +91,10 @@
     <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
         <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
 
-        <button onclick="exitShorts()" class="fixed top-4 left-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: max(16px, env(safe-area-inset-top));">
+        <button onclick="exitShorts()" class="fixed top-4 left-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: calc(env(safe-area-inset-top, 24px) + 50px);">
             <i class="fas fa-arrow-left"></i>
         </button>
-        <button onclick="toggleShortsSound()" class="fixed top-4 right-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: max(16px, env(safe-area-inset-top));">
+        <button onclick="toggleShortsSound()" class="fixed top-4 right-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: calc(env(safe-area-inset-top, 24px) + 50px);">
             <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
         </button>
         <button onclick="openModal('videoUploadModal')" class="fixed bottom-6 right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">
@@ -282,7 +282,7 @@
             <div class="flex justify-between items-center mb-4"><h3 class="font-bold">Auto Post Channels</h3><button onclick="closeSheet('channelModalBg', 'channelSheet')"><i class="fas fa-times"></i></button></div>
             <p class="text-xs text-red-500 mb-3">* Bot must be an Admin in the channel with post permissions!</p>
             <div class="flex gap-2 mb-4">
-                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm text-gray-900" placeholder="Username, @channel, or link">
+                <input type="text" id="channelInput" class="flex-1 bg-gray-100 rounded-lg px-3 py-2 outline-none text-sm text-gray-900" placeholder="Username, @channel, link, or channel ID">
                 <button id="setupChannelBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">SetUp</button>
             </div>
             <div id="channelList" class="flex-1 overflow-y-auto space-y-2 animate-none"></div>
@@ -395,15 +395,14 @@
                     const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
                     const post = await res.json();
                     if (post && post.id) {
-                        // Wait for the normal feed to finish its initial render, then pin the shared post to the top
-                        setTimeout(() => {
-                            const feed = document.getElementById('feed');
-                            const existing = feed.querySelector(`[data-shared-post="${post.id}"]`);
-                            if (!existing) {
-                                feed.insertAdjacentHTML('afterbegin', renderSharedPostWrapper(post));
-                                feed.firstElementChild.scrollIntoView({ behavior: 'smooth' });
-                            }
-                        }, 400);
+                        const feed = document.getElementById('feed');
+                        const existing = feed.querySelector(`[data-shared-post="${post.id}"]`);
+                        if (!existing) {
+                            feed.insertAdjacentHTML('afterbegin', renderSharedPostWrapper(post));
+                            feed.firstElementChild.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                            existing.scrollIntoView({ behavior: 'smooth' });
+                        }
                     }
                 }
             } catch (e) { console.error("Deep link resolution failed:", e); }
@@ -472,12 +471,12 @@
                 currentUser = { ...liveUser, level: 1, channels: [], is_admin: false, is_verified: false };
             }
 
-            // 3. Load Feed
-            loadPosts(1, true);
+            // 3. Load Feed — must finish before we try to pin a shared post on top of it
+            await loadPosts(1, true);
             setupSearch();
 
             // 4. Deep link handling — someone opened a shared post/video link
-            handleSharedDeepLink();
+            await handleSharedDeepLink();
         }
 
         // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
@@ -548,10 +547,7 @@
         // UI Open / Close modals
         window.openModal = (id) => {
             if (id === 'channelModal') {
-                document.getElementById('channelModalBg').classList.remove('hidden');
-                setTimeout(() => {
-                    document.getElementById('channelSheet').classList.add('open');
-                }, 10);
+                openSheet('channelModalBg', 'channelSheet');
                 renderChannels();
                 return;
             }
@@ -585,9 +581,28 @@
             }
         };
         
+        // Bottom sheets use a separate bg/sheet pair instead of the single-id modal system,
+        // so they need their own entry in the Telegram BackButton stack to close correctly.
+        const SHEET_MAP = {
+            optionsModalBg: 'optionsSheet',
+            reportModalBg: 'reportSheet',
+            commentModalBg: 'commentSheet',
+            referModalBg: 'referSheet',
+            channelModalBg: 'channelSheet'
+        };
+
+        function openSheet(bg, sheet) {
+            document.getElementById(bg).classList.remove('hidden');
+            setTimeout(() => document.getElementById(sheet).classList.add('open'), 10);
+            openModalsStack.push(bg);
+            tg.BackButton.show();
+        }
+
         window.closeSheet = (bg, sheet) => {
             document.getElementById(sheet).classList.remove('open');
             setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
+            openModalsStack = openModalsStack.filter(m => m !== bg);
+            if (openModalsStack.length === 0) tg.BackButton.hide();
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
@@ -597,6 +612,8 @@
                 const lastModal = openModalsStack[openModalsStack.length - 1];
                 if (lastModal === '__shorts__') {
                     exitShorts();
+                } else if (SHEET_MAP[lastModal]) {
+                    closeSheet(lastModal, SHEET_MAP[lastModal]);
                 } else {
                     closeModal(lastModal);
                 }
@@ -880,7 +897,7 @@
             <div class="short-item w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
                 <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="metadata" onclick="toggleShortPlay(this)"></video>
 
-                <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top:max(16px, env(safe-area-inset-top));" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
+                <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 50px);" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
                     <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
                     <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
                 </div>
@@ -979,10 +996,8 @@
         };
 
         window.openShortOptions = (videoId, authorId, type) => {
-            const sheet = document.getElementById('optionsSheet');
             const content = document.getElementById('optionsContent');
-            document.getElementById('optionsModalBg').classList.remove('hidden');
-            setTimeout(() => sheet.classList.add('open'), 10);
+            openSheet('optionsModalBg', 'optionsSheet');
 
             let isMine = false;
             if (currentUser) {
@@ -1106,11 +1121,8 @@
 
         // ================= Three-dot Options Logic sheet (FIXED: Supports own-channel post modifications + Report) =================
         window.openPostOptions = async (postId, authorId, postType) => {
-            const sheet = document.getElementById('optionsSheet');
             const content = document.getElementById('optionsContent');
-            
-            document.getElementById('optionsModalBg').classList.remove('hidden');
-            setTimeout(() => sheet.classList.add('open'), 10);
+            openSheet('optionsModalBg', 'optionsSheet');
 
             // Validates own-channel post modification privileges
             let isMine = false;
@@ -1201,8 +1213,7 @@
             closeSheet('optionsModalBg', 'optionsSheet');
             const list = document.getElementById('reportReasonsList');
             list.innerHTML = REPORT_REASONS.map(r => `<button onclick="submitReport('${postId}', '${r}', '${contentType}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl text-sm font-semibold">${r}</button>`).join('');
-            document.getElementById('reportModalBg').classList.remove('hidden');
-            setTimeout(() => document.getElementById('reportSheet').classList.add('open'), 10);
+            openSheet('reportModalBg', 'reportSheet');
         }
         window.submitReport = async (postId, reason, contentType = 'post') => {
             closeSheet('reportModalBg', 'reportSheet');
@@ -1224,8 +1235,7 @@
         window.openComments = async (postId, contentType = 'post') => {
             currentPostIdForComment = postId;
             currentCommentContentType = contentType;
-            document.getElementById('commentModalBg').classList.remove('hidden');
-            setTimeout(() => document.getElementById('commentSheet').classList.add('open'), 10);
+            openSheet('commentModalBg', 'commentSheet');
             fetchComments();
         }
         window.closeComment = () => closeSheet('commentModalBg', 'commentSheet');
@@ -1282,8 +1292,7 @@
 
         // ================= Referral System Levels Setup =================
         window.openReferSheet = async () => {
-            document.getElementById('referModalBg').classList.remove('hidden');
-            setTimeout(() => document.getElementById('referSheet').classList.add('open'), 10);
+            openSheet('referModalBg', 'referSheet');
             
             const link = `https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`;
             document.getElementById('referInputLink').value = link;
