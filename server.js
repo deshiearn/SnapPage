@@ -153,6 +153,36 @@ async function getTgProfilePic(tgId) {
     return "https://ui-avatars.com/api/?name=User&background=random";
 }
 
+// ================= Self-healing user lookup =================
+// Several actions (add channel, create post, etc.) used to hard-fail with "user not found"
+// if that person's /api/auth insert had failed earlier for any reason (a transient DB error,
+// a since-fixed bug, etc.). Rather than leaving them permanently stuck, try once to (re)create
+// their row here before giving up.
+async function getOrCreateUser(tgUser) {
+    const tgId = tgUser.id.toString();
+    const { data: existing } = await supabase.from('users').select('*').eq('tg_id', tgId).maybeSingle();
+    if (existing) return existing;
+
+    console.warn(`getOrCreateUser: no row for ${tgId}, attempting to create one now.`);
+    const photo_url = await getTgProfilePic(tgId);
+    const { data: created, error: insertErr } = await supabase.from('users').insert([{
+        tg_id: tgId,
+        name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
+        username: tgUser.username || null,
+        photo_url,
+        referred_by: null,
+        channels: [],
+        is_verified: false,
+        is_admin: false
+    }]).select().single();
+
+    if (insertErr) {
+        console.error(`getOrCreateUser: failed to create user ${tgId}:`, insertErr);
+        return null;
+    }
+    return created;
+}
+
 // ================= Maintenance Mode Helper =================
 let maintenanceCache = { enabled: false, ts: 0 };
 async function isMaintenanceMode() {
@@ -545,8 +575,8 @@ app.post('/api/createPost', async (req, res) => {
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { data: user, error: userErr } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
-        if (userErr || !user) return res.status(404).json({ error: "User not found. Please reopen the app and try again." });
+        const user = await getOrCreateUser(tgUser);
+        if (!user) return res.status(404).json({ error: "Could not create your user record. Please check Render logs for details." });
 
         let imageUrls = [];
         let uploadFailures = 0;
@@ -789,9 +819,9 @@ app.post('/api/addChannel', async (req, res) => {
         const { data: meRow } = await supabase.from('users').select('is_verified').eq('tg_id', tgUser.id.toString()).maybeSingle();
         const limits = (meRow && meRow.is_verified) ? { channels: 5 } : getLevelData(refs || 0);
 
-        const { data: user, error: userErr } = await supabase.from('users').select('*').eq('tg_id', tgUser.id.toString()).maybeSingle();
-        if (userErr || !user) {
-            return res.json({ error: "Could not find your user record. Please reopen the app and try again." });
+        const user = await getOrCreateUser(tgUser);
+        if (!user) {
+            return res.json({ error: "Could not create your user record. Please check Render logs for details." });
         }
         let channels = user.channels || [];
         if (channels.length >= limits.channels) {
@@ -925,7 +955,11 @@ app.post('/api/addComment', async (req, res) => {
 
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: e.message || e });
+        const msg = e.message || String(e);
+        if (msg.includes('invalid input syntax for type uuid')) {
+            return res.status(500).json({ error: "Video comments need a database fix: please run fix_comments_post_id_type.sql in Supabase, then try again." });
+        }
+        res.status(500).json({ error: msg });
     }
 });
 
@@ -1473,8 +1507,11 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
             }
             const cleanUsername = cleanInput.replace('@', '').toLowerCase();
 
-            const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+            const { data: allUsers, error: fetchErr } = await supabase.from('users').select('tg_id, channels');
+            if (fetchErr) throw fetchErr;
+
             let matched = false;
+            let writeError = null;
             for (const owner of (allUsers || [])) {
                 if (!owner.channels || owner.channels.length === 0) continue;
                 let changed = false;
@@ -1483,14 +1520,22 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
                     const usernameMatch = c.username && c.username !== 'private' && c.username.toLowerCase() === cleanUsername;
                     if (idMatch || usernameMatch) {
                         changed = true;
-                        matched = true;
                         return { ...c, verified };
                     }
                     return c;
                 });
                 if (changed) {
-                    await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+                    const { error: updateErr } = await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+                    if (updateErr) {
+                        writeError = updateErr;
+                        console.error(`setBadge: failed to save channel badge for owner ${owner.tg_id}:`, updateErr);
+                    } else {
+                        matched = true;
+                    }
                 }
+            }
+            if (writeError && !matched) {
+                return res.status(500).json({ error: `Found the channel but failed to save the badge: ${writeError.message || writeError}` });
             }
             if (!matched) {
                 return res.status(404).json({ error: "No matching channel found. Make sure it has already been added by a user via Auto Post Channels." });
