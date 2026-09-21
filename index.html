@@ -34,6 +34,7 @@
         .dark-mode { background-color: #111827 !important; color: #f3f4f6 !important; }
         .dark-mode header { background-color: rgba(17, 24, 39, 0.9) !important; border-bottom: 1px solid #374151; }
         .dark-mode .bg-white { background-color: #1f2937 !important; color: #f3f4f6 !important; }
+        .dark-mode #appLoadingScreen { background-color: #111827 !important; }
         .dark-mode .text-gray-900,
         .dark-mode .text-gray-800,
         .dark-mode .text-gray-700 { color: #f3f4f6 !important; }
@@ -57,6 +58,13 @@
     </style>
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
+
+    <!-- APP LOADING SCREEN — shown until auth + the first page of the feed are ready -->
+    <div id="appLoadingScreen" class="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center gap-3">
+        <i class="fas fa-bolt text-4xl text-blue-600"></i>
+        <div class="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full" style="animation: spin 0.8s linear infinite;"></div>
+        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
 
     <!-- MAINTENANCE MODE OVERLAY -->
     <div id="maintenanceOverlay" class="hidden fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6 text-center">
@@ -91,12 +99,14 @@
     <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
         <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
 
-        <button onclick="exitShorts()" class="fixed top-4 left-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: calc(env(safe-area-inset-top, 24px) + 50px);">
-            <i class="fas fa-arrow-left"></i>
-        </button>
-        <button onclick="toggleShortsSound()" class="fixed top-4 right-4 z-40 text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center" style="top: calc(env(safe-area-inset-top, 24px) + 50px);">
-            <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
-        </button>
+        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(env(safe-area-inset-top, 24px) + 60px);">
+            <button onclick="toggleShortsSound()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
+                <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
+            </button>
+            <button onclick="refreshShorts()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
+                <i class="fas fa-rotate-right" id="shortsRefreshIcon"></i>
+            </button>
+        </div>
         <button onclick="openModal('videoUploadModal')" class="fixed bottom-6 right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">
             <i class="fas fa-plus"></i>
         </button>
@@ -146,7 +156,7 @@
             <button id="adminPanelBtn" onclick="goToAdminPanel()" class="hidden w-full text-left p-4 border-b flex items-center justify-between hover:bg-gray-50 text-red-500 font-bold">
                 <span><i class="fas fa-user-shield w-6"></i> Admin Panel</span>
             </button>
-            <a href="https://t.me/+GyFgfeJIub81MDg9" target="_blank" class="block w-full p-4 hover:bg-gray-50 text-blue-600 font-bold">
+            <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="block w-full p-4 hover:bg-gray-50 text-blue-600 font-bold">
                 <i class="fas fa-headset w-6"></i> Support
             </a>
         </div>
@@ -361,13 +371,11 @@
         window.openProfileLink = (type, authorId, username) => {
             if (username && username !== 'private') {
                 tg.openTelegramLink(`https://t.me/${username}`);
+            } else if (type === 'channel') {
+                // A private channel with no public username can't be opened by outsiders
+                tg.showAlert("This is a private channel and can't be opened.");
             } else {
-                if (type === 'channel') {
-                    const cleanId = String(authorId).replace('-100', '');
-                    tg.openTelegramLink(`https://t.me/c/${cleanId}`);
-                } else {
-                    tg.openTelegramLink(`tg://user?id=${authorId}`);
-                }
+                tg.openTelegramLink(`tg://user?id=${authorId}`);
             }
         }
 
@@ -414,6 +422,17 @@
             return `<div data-shared-post="${post.id}" class="ring-2 ring-blue-400 rounded-xl">${html}</div>`;
         }
 
+        // Support link can be changed from the Admin Panel; falls back to the default set in the HTML
+        async function loadSupportLink() {
+            try {
+                const res = await fetch('/api/appStatus');
+                const status = await res.json();
+                if (status && status.supportLink) {
+                    document.getElementById('supportLink').href = status.supportLink;
+                }
+            } catch (e) { /* keep the default link */ }
+        }
+
         async function initApp() {
             // 0. Check maintenance mode before anything else renders
             try {
@@ -422,6 +441,7 @@
                 if (status && status.maintenance) {
                     // Still resolve currentUser quietly so an admin can be let through later if needed;
                     // for now, all non-admin visitors are blocked.
+                    document.getElementById('appLoadingScreen').classList.add('hidden');
                     document.getElementById('maintenanceOverlay').classList.remove('hidden');
                     return;
                 }
@@ -437,7 +457,9 @@
             document.getElementById('settingsProfileUsername').innerText = liveUser.username ? `@${liveUser.username}` : '';
             document.getElementById('settingsProfileLevel').innerText = `Level 1`;
             
-            const link = `https://t.me/SnapPagesBot/app?startapp=ref_${liveUser.tg_id}`;
+            // Refer link opens the BOT CHAT (not the Mini App) so /start runs and the
+            // referral gets verified and counted server-side.
+            const link = `https://t.me/SnapPagesBot?start=ref_${liveUser.tg_id}`;
             document.getElementById('referInputLink').value = link;
 
             try {
@@ -472,11 +494,19 @@
             }
 
             // 3. Load Feed — must finish before we try to pin a shared post on top of it
-            await loadPosts(1, true);
-            setupSearch();
+            try {
+                await loadPosts(1, true);
+                setupSearch();
+                await loadSupportLink();
 
-            // 4. Deep link handling — someone opened a shared post/video link
-            await handleSharedDeepLink();
+                // 4. Deep link handling — someone opened a shared post/video link
+                await handleSharedDeepLink();
+            } catch (e) {
+                console.error("Initial load failed:", e);
+            } finally {
+                // 5. Everything the user will see first is ready (or failed) — reveal the app either way
+                document.getElementById('appLoadingScreen').classList.add('hidden');
+            }
         }
 
         // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
@@ -697,7 +727,7 @@
                     
                     const apiData = await apiRes.json();
                     if (apiData && apiData.success) {
-                        tg.showAlert("Post published successfully!");
+                        tg.showAlert(apiData.warning || "Post published successfully!");
                     } else {
                         throw new Error(apiData.error || "Creation failed");
                     }
@@ -897,7 +927,7 @@
             <div class="short-item w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
                 <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="metadata" onclick="toggleShortPlay(this)"></video>
 
-                <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 50px);" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
+                <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 60px);" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
                     <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
                     <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
                 </div>
@@ -944,6 +974,15 @@
             document.querySelectorAll('#shortsFeed video').forEach(v => { v.muted = shortsMuted; });
             const icon = document.getElementById('shortsSoundIcon');
             if (icon) icon.className = shortsMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+        };
+
+        // Reloads the Shorts feed from the top with fresh videos
+        window.refreshShorts = async () => {
+            const icon = document.getElementById('shortsRefreshIcon');
+            if (icon) icon.classList.add('fa-spin');
+            document.getElementById('shortsFeed').scrollTo({ top: 0 });
+            await loadShorts(true);
+            if (icon) icon.classList.remove('fa-spin');
         };
 
         // Autoplay the Short in view, pause the rest — classic TikTok scroll behavior
@@ -1294,7 +1333,7 @@
         window.openReferSheet = async () => {
             openSheet('referModalBg', 'referSheet');
             
-            const link = `https://t.me/SnapPagesBot/app?startapp=ref_${currentUser.tg_id}`;
+            const link = `https://t.me/SnapPagesBot?start=ref_${currentUser.tg_id}`;
             document.getElementById('referInputLink').value = link;
 
             const list = document.getElementById('referHistoryList');
@@ -1395,8 +1434,13 @@
             const list = document.getElementById('channelList');
             list.innerHTML = '';
             (currentUser.channels || []).forEach(c => {
+                const isVerified = c.verified || (currentUser && currentUser.is_verified);
+                const badge = isVerified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
                 list.innerHTML += `<div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border text-gray-900 animate-none">
-                    <div class="flex items-center gap-2"><img src="${c.photo}" class="w-8 h-8 rounded-full"> <span class="font-bold text-sm">${c.name}${c.verified ? ' <i class=\"fas fa-check-circle verified-badge\"></i>' : ''}</span></div>
+                    <div class="flex items-center gap-2 cursor-pointer" onclick="openProfileLink('channel', '${c.id}', '${c.username || ''}')">
+                        <img src="${c.photo}" class="w-8 h-8 rounded-full">
+                        <span class="font-bold text-sm">${c.name}${badge}</span>
+                    </div>
                     <button onclick="removeChannel('${c.id}')" class="text-red-500 bg-red-100 p-2 rounded-full"><i class="fas fa-trash"></i></button>
                 </div>`;
             });
@@ -1496,14 +1540,16 @@
                 return;
             }
             posts.forEach(p => {
+                const contentType = p.content_type || 'post';
+                const typeBadge = contentType === 'video' ? '<i class="fas fa-video text-purple-400 mr-1"></i>' : '';
                 container.innerHTML += `
                 <div class="bg-white p-3 rounded-lg border flex gap-3 items-start shadow-sm text-gray-900">
                     <img src="${p.author_photo || 'https://ui-avatars.com/api/?name=U'}" class="w-8 h-8 rounded-full object-cover">
                     <div class="flex-1">
                         <span class="text-xs text-gray-400 font-bold">${p.author_name}</span>
-                        <p class="text-xs text-gray-700 mt-1 line-clamp-2">${p.text || '[Image Post]'}</p>
+                        <p class="text-xs text-gray-700 mt-1 line-clamp-2">${typeBadge}${p.text || '[Image Post]'}</p>
                     </div>
-                    <button onclick="openComments('${p.id}')" class="bg-blue-100 text-blue-600 p-2 rounded-full text-xs"><i class="fas fa-chevron-right"></i></button>
+                    <button onclick="openComments('${p.id}', '${contentType}')" class="bg-blue-100 text-blue-600 p-2 rounded-full text-xs"><i class="fas fa-chevron-right"></i></button>
                 </div>`;
             });
         }
