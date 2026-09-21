@@ -152,6 +152,22 @@
                     <div class="toggle-switch"><input type="checkbox" id="adminMaintenanceToggle" onchange="toggleMaintenance(this.checked)"><span class="toggle-slider"></span></div>
                 </div>
 
+                <div class="bg-white p-4 rounded-xl border space-y-3">
+                    <h4 class="font-bold text-sm"><i class="fas fa-headset text-blue-500"></i> Support Link</h4>
+                    <input type="text" id="adminSupportLinkInput" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="https://t.me/...">
+                    <button onclick="saveSupportLink()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Save Support Link</button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border space-y-3">
+                    <h4 class="font-bold text-sm text-orange-600"><i class="fas fa-user-slash"></i> Delete User Data</h4>
+                    <input type="text" id="adminDeleteUserTarget" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Username or chat ID">
+                    <div class="flex gap-2">
+                        <button onclick="deleteUserDataAction(false)" class="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm font-bold">Delete Data</button>
+                        <button onclick="deleteUserDataAction(true)" class="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold">Delete Data & Ban</button>
+                    </div>
+                    <p class="text-[11px] text-gray-400">Removes their posts, videos, comments, and their auto-post channels' content. "Ban" also blocks them from registering again.</p>
+                </div>
+
                 <div class="bg-white p-4 rounded-xl border space-y-2">
                     <h4 class="font-bold text-sm text-red-600"><i class="fas fa-radiation"></i> Danger Zone</h4>
                     <button onclick="wipeDatabaseAction()" class="w-full bg-red-600 text-white py-2 rounded-lg text-sm font-bold">Remove All Database</button>
@@ -175,10 +191,22 @@
         let adminActivityChartInstance = null;
 
         function showAlert(msg) {
-            if (tg && tg.showAlert) tg.showAlert(msg); else alert(msg);
+            // tg.showAlert() silently does nothing when this page isn't actually running
+            // inside a Telegram WebView (e.g. opened directly in a normal browser at /admin),
+            // which is exactly how this admin panel is meant to be usable. Detect that case
+            // and fall back to a real browser alert so admin actions always give feedback.
+            if (tg && tg.showAlert && initData) {
+                try { tg.showAlert(msg); } catch (e) { alert(msg); }
+            } else {
+                alert(msg);
+            }
         }
         function showConfirm(msg, cb) {
-            if (tg && tg.showConfirm) tg.showConfirm(msg, cb); else cb(confirm(msg));
+            if (tg && tg.showConfirm && initData) {
+                try { tg.showConfirm(msg, cb); } catch (e) { cb(confirm(msg)); }
+            } else {
+                cb(confirm(msg));
+            }
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -330,6 +358,7 @@
         function loadAdminSettings() {
             fetch('/api/appStatus').then(r => r.json()).then(s => {
                 document.getElementById('adminMaintenanceToggle').checked = !!s.maintenance;
+                if (s.supportLink) document.getElementById('adminSupportLinkInput').value = s.supportLink;
             }).catch(() => {});
         }
 
@@ -364,6 +393,35 @@
                 showAlert(`Failed to update maintenance mode: ${data ? data.error : 'Server error'}`);
                 document.getElementById('adminMaintenanceToggle').checked = !enabled;
             }
+        };
+
+        window.saveSupportLink = async () => {
+            const link = document.getElementById('adminSupportLinkInput').value.trim();
+            if (!link) return showAlert("Enter a link first.");
+            const data = await adminFetch('/api/admin/setSupportLink', { link });
+            if (data && data.success) {
+                showAlert("Support link updated!");
+            } else {
+                showAlert(`Failed: ${(data && data.error) || 'Server error'}`);
+            }
+        };
+
+        window.deleteUserDataAction = (alsoBan) => {
+            const targetId = document.getElementById('adminDeleteUserTarget').value.trim();
+            if (!targetId) return showAlert("Enter a username or chat ID first.");
+            const confirmMsg = alsoBan
+                ? `This will permanently delete ALL data for "${targetId}" (posts, videos, comments, their channels' content) AND ban them from returning. Continue?`
+                : `This will permanently delete ALL data for "${targetId}" (posts, videos, comments, their channels' content), but they can register again later. Continue?`;
+            showConfirm(confirmMsg, async (ok) => {
+                if (!ok) return;
+                const data = await adminFetch('/api/admin/deleteUserData', { targetId, alsoBan });
+                if (data && data.success) {
+                    showAlert(alsoBan ? "User's data deleted and banned." : "User's data deleted.");
+                    document.getElementById('adminDeleteUserTarget').value = '';
+                } else {
+                    showAlert(`Failed: ${(data && data.error) || 'Server error'}`);
+                }
+            });
         };
 
         window.wipeDatabaseAction = () => {
