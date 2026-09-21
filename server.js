@@ -195,7 +195,7 @@ bot.start(async (ctx) => {
         const { error: startInsertErr } = await supabase.from('users').insert([{
             tg_id: tgId,
             name: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ') || "Telegram User",
-            username: ctx.from.username || '',
+            username: ctx.from.username || null,
             photo_url,
             referred_by,
             channels: [],
@@ -317,10 +317,24 @@ async function enforceVideoCap(cap = MAX_VIDEOS_IN_DB) {
 
 // ================= APIs =================
 
-// Public: lets the frontend know if the app is in maintenance mode before doing anything else
+// ================= Support Link Helper =================
+const DEFAULT_SUPPORT_LINK = "https://t.me/+lNYv0-1Y_Lo3NjVl";
+let supportLinkCache = { link: null, ts: 0 };
+async function getSupportLink() {
+    if (Date.now() - supportLinkCache.ts < 5000 && supportLinkCache.link) return supportLinkCache.link;
+    try {
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'support_link').maybeSingle();
+        supportLinkCache = { link: (data && data.value) ? data.value : DEFAULT_SUPPORT_LINK, ts: Date.now() };
+    } catch (e) { supportLinkCache = { link: DEFAULT_SUPPORT_LINK, ts: Date.now() }; }
+    return supportLinkCache.link;
+}
+
+// Public: lets the frontend know if the app is in maintenance mode before doing anything else,
+// and hands over the current support link (admin-configurable).
 app.get('/api/appStatus', async (req, res) => {
     const maintenance = await isMaintenanceMode();
-    res.json({ maintenance });
+    const supportLink = await getSupportLink();
+    res.json({ maintenance, supportLink });
 });
 
 app.post('/api/auth', async (req, res) => {
@@ -354,7 +368,7 @@ app.post('/api/auth', async (req, res) => {
             const { data: newUser, error: insertErr } = await supabase.from('users').insert([{
                 tg_id: tgId,
                 name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
-                username: tgUser.username || '',
+                username: tgUser.username || null,
                 photo_url,
                 referred_by,
                 channels: [],
@@ -444,13 +458,15 @@ async function enrichPosts(posts) {
                 const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
                 authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
             } else if (post.type === 'channel') {
-                const { data: u } = await supabase.from('users').select('channels').contains('channels', [{ id: post.author_id }]);
+                const { data: u } = await supabase.from('users').select('channels, is_verified').contains('channels', [{ id: post.author_id }]);
                 if (u && u.length > 0) {
-                    const ch = u[0].channels.find(c => String(c.id) === String(post.author_id));
+                    const owner = u[0];
+                    const ch = owner.channels.find(c => String(c.id) === String(post.author_id));
                     if (ch) {
                         if (ch.photo) authPhoto = ch.photo;
                         if (ch.username) authorUsername = ch.username;
-                        authorVerified = !!ch.verified;
+                        // A verified user's own channels inherit the blue badge too
+                        authorVerified = !!ch.verified || !!owner.is_verified;
                     }
                 }
             }
@@ -533,10 +549,15 @@ app.post('/api/createPost', async (req, res) => {
         if (userErr || !user) return res.status(404).json({ error: "User not found. Please reopen the app and try again." });
 
         let imageUrls = [];
+        let uploadFailures = 0;
         if (imagesBase64 && imagesBase64.length > 0) {
             for (let img of imagesBase64) {
                 const uploadedUrl = await uploadImageToImgBB(img);
-                if (uploadedUrl) imageUrls.push(uploadedUrl);
+                if (uploadedUrl) {
+                    imageUrls.push(uploadedUrl);
+                } else {
+                    uploadFailures++;
+                }
             }
         }
 
@@ -554,7 +575,13 @@ app.post('/api/createPost', async (req, res) => {
 
         if (error) throw error;
         await enforcePostCap();
-        res.json({ success: true });
+
+        const response = { success: true };
+        if (uploadFailures > 0) {
+            console.error(`createPost: ${uploadFailures} image(s) failed to upload to ImgBB — check IMGBB_API_KEY is a valid personal key.`);
+            response.warning = `Post created, but ${uploadFailures} image(s) failed to upload. Ask the admin to check the ImgBB API key.`;
+        }
+        res.json(response);
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -820,9 +847,16 @@ app.post('/api/removeChannel', async (req, res) => {
 app.post('/api/searchPosts', async (req, res) => {
     const { query } = req.body;
     try {
-        const { data, error } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).limit(15);
-        if (error) throw error;
-        res.json(await enrichPosts(data || []));
+        const { data: posts, error: postsErr } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).order('created_at', { ascending: false }).limit(15);
+        if (postsErr) throw postsErr;
+
+        const { data: videos, error: videosErr } = await supabase.from('videos').select('*').ilike('caption', `%${query}%`).order('created_at', { ascending: false }).limit(15);
+        if (videosErr) console.error("Video search failed:", videosErr.message || videosErr);
+
+        const enrichedPosts = (await enrichPosts(posts || [])).map(p => ({ ...p, content_type: 'post' }));
+        const enrichedVideos = (await enrichVideos(videos || [])).map(v => ({ ...v, content_type: 'video', text: v.caption }));
+
+        res.json([...enrichedPosts, ...enrichedVideos]);
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -926,13 +960,14 @@ async function enrichVideos(videos) {
                 const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', v.author_id);
                 authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
             } else if (v.type === 'channel') {
-                const { data: u } = await supabase.from('users').select('channels').contains('channels', [{ id: v.author_id }]);
+                const { data: u } = await supabase.from('users').select('channels, is_verified').contains('channels', [{ id: v.author_id }]);
                 if (u && u.length > 0) {
-                    const ch = u[0].channels.find(c => String(c.id) === String(v.author_id));
+                    const owner = u[0];
+                    const ch = owner.channels.find(c => String(c.id) === String(v.author_id));
                     if (ch) {
                         if (ch.photo) authPhoto = ch.photo;
                         if (ch.username) authorUsername = ch.username;
-                        authorVerified = !!ch.verified;
+                        authorVerified = !!ch.verified || !!owner.is_verified;
                     }
                 }
             }
@@ -1307,21 +1342,39 @@ app.post('/api/admin/banChannel', requireAdminUser, requireAdminPassword, async 
     } catch (e) { res.status(500).json({ error: e.message || e }); }
 });
 
-async function banUserInternal(tgId) {
-    await supabase.from('banned_users').upsert([{ tg_id: tgId.toString(), banned_at: new Date().toISOString() }]);
-    await supabase.from('posts').delete().eq('author_id', tgId.toString());
-    await supabase.from('comments').delete().eq('author_id', tgId.toString());
+// Deletes everything belonging to a user: their own posts/videos/comments, AND anything
+// posted through channels they registered for auto-posting (since those exist because of
+// this user). Does NOT add them to banned_users — call banUserInternal for that.
+async function deleteUserDataInternal(tgId) {
+    const id = tgId.toString();
+    const { data: userRow } = await supabase.from('users').select('channels').eq('tg_id', id).maybeSingle();
+    if (!userRow) return false;
 
-    // Also purge any videos this user uploaded, cleaning up storage channel messages we own
-    const { data: userVideos } = await supabase.from('videos').select('id, owned_storage, storage_chat_id, storage_message_id').eq('author_id', tgId.toString());
+    // Remove content from channels this user registered for auto-posting
+    for (const ch of (userRow.channels || [])) {
+        await supabase.from('posts').delete().eq('author_id', ch.id.toString());
+        await supabase.from('videos').delete().eq('author_id', ch.id.toString());
+    }
+
+    await supabase.from('posts').delete().eq('author_id', id);
+    await supabase.from('comments').delete().eq('author_id', id);
+
+    // Purge any videos this user uploaded, cleaning up storage channel messages we own
+    const { data: userVideos } = await supabase.from('videos').select('id, owned_storage, storage_chat_id, storage_message_id').eq('author_id', id);
     for (const v of (userVideos || [])) {
         if (v.owned_storage && v.storage_chat_id && v.storage_message_id) {
             try { await bot.telegram.deleteMessage(v.storage_chat_id, v.storage_message_id); } catch (e) {}
         }
     }
-    await supabase.from('videos').delete().eq('author_id', tgId.toString());
+    await supabase.from('videos').delete().eq('author_id', id);
 
-    await supabase.from('users').delete().eq('tg_id', tgId.toString());
+    await supabase.from('users').delete().eq('tg_id', id);
+    return true;
+}
+
+async function banUserInternal(tgId) {
+    await deleteUserDataInternal(tgId);
+    await supabase.from('banned_users').upsert([{ tg_id: tgId.toString(), banned_at: new Date().toISOString() }]);
 }
 
 async function banChannelInternal(channelId) {
@@ -1335,6 +1388,37 @@ async function banChannelInternal(channelId) {
         await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
     }
 }
+
+// Resolves an admin-provided "chat ID or @username" into that user's tg_id
+async function resolveUserIdByInput(targetId) {
+    const clean = targetId.toString().trim().replace('@', '');
+    let query = supabase.from('users').select('tg_id');
+    if (/^\d+$/.test(clean)) {
+        query = query.eq('tg_id', clean);
+    } else {
+        query = query.ilike('username', clean);
+    }
+    const { data } = await query.maybeSingle();
+    return data ? data.tg_id : null;
+}
+
+app.post('/api/admin/deleteUserData', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const { targetId, alsoBan } = req.body;
+    if (!targetId) return res.status(400).json({ error: "Provide a username or chat ID" });
+    try {
+        const tgId = await resolveUserIdByInput(targetId);
+        if (!tgId) return res.status(404).json({ error: "No user found with that username or chat ID" });
+
+        if (alsoBan) {
+            await banUserInternal(tgId);
+        } else {
+            await deleteUserDataInternal(tgId);
+        }
+        res.json({ success: true, banned: !!alsoBan });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
 
 app.post('/api/admin/broadcast', requireAdminUser, requireAdminPassword, async (req, res) => {
     const { message, imageUrl, buttonText, buttonUrl, pinAll } = req.body;
@@ -1376,10 +1460,40 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
     try {
         const verified = action === 'add';
         if (type === 'channel') {
-            const { data: owners } = await supabase.from('users').select('tg_id, channels').contains('channels', [{ id: targetId.toString() }]);
-            for (const owner of (owners || [])) {
-                const updated = (owner.channels || []).map(c => String(c.id) === String(targetId) ? { ...c, verified } : c);
-                await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+            const cleanInput = targetId.toString().trim();
+            // Normalize a bare numeric channel ID the same way addChannel does (some UIs show
+            // the ID without its -100 prefix), and also allow matching by @username.
+            let normalizedId = null;
+            if (/^-100\d+$/.test(cleanInput)) {
+                normalizedId = cleanInput;
+            } else if (/^-\d+$/.test(cleanInput)) {
+                normalizedId = cleanInput;
+            } else if (/^\d+$/.test(cleanInput)) {
+                normalizedId = `-100${cleanInput}`;
+            }
+            const cleanUsername = cleanInput.replace('@', '').toLowerCase();
+
+            const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+            let matched = false;
+            for (const owner of (allUsers || [])) {
+                if (!owner.channels || owner.channels.length === 0) continue;
+                let changed = false;
+                const updated = owner.channels.map(c => {
+                    const idMatch = normalizedId && String(c.id) === String(normalizedId);
+                    const usernameMatch = c.username && c.username !== 'private' && c.username.toLowerCase() === cleanUsername;
+                    if (idMatch || usernameMatch) {
+                        changed = true;
+                        matched = true;
+                        return { ...c, verified };
+                    }
+                    return c;
+                });
+                if (changed) {
+                    await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+                }
+            }
+            if (!matched) {
+                return res.status(404).json({ error: "No matching channel found. Make sure it has already been added by a user via Auto Post Channels." });
             }
         } else {
             // Resolve by tg_id or by @username
@@ -1390,8 +1504,11 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
             } else {
                 query = query.eq('username', clean);
             }
-            const { error } = await query;
+            const { data, error } = await query.select();
             if (error) throw error;
+            if (!data || data.length === 0) {
+                return res.status(404).json({ error: "No matching user found with that chat ID or username." });
+            }
         }
         res.json({ success: true });
     } catch (e) {
@@ -1420,6 +1537,20 @@ app.post('/api/admin/maintenance', requireAdminUser, requireAdminPassword, async
     try {
         await supabase.from('app_settings').upsert([{ key: 'maintenance_mode', value: enabled ? 'true' : 'false' }]);
         maintenanceCache = { enabled: !!enabled, ts: Date.now() };
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+app.post('/api/admin/setSupportLink', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const { link } = req.body;
+    if (!link || !/^https?:\/\//.test(link)) {
+        return res.status(400).json({ error: "Please provide a valid https:// link" });
+    }
+    try {
+        await supabase.from('app_settings').upsert([{ key: 'support_link', value: link }]);
+        supportLinkCache = { link, ts: Date.now() };
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
