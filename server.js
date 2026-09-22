@@ -154,6 +154,27 @@ async function getTgProfilePic(tgId) {
 }
 
 // ================= Self-healing user lookup =================
+// Inserts a new user row, and if the DB schema is missing a column the payload references
+// (PostgREST error PGRST204 — e.g. "Could not find the 'referred_by' column"), retries once
+// with that field stripped out. This is a safety net for schema drift; the real fix is still
+// to run fix_missing_referred_by_column.sql, which this will keep reminding you about.
+async function insertUserRow(payload) {
+    let { data, error } = await supabase.from('users').insert([payload]).select().single();
+    if (error && error.code === 'PGRST204') {
+        const match = error.message && error.message.match(/'([^']+)' column/);
+        const missingCol = match ? match[1] : null;
+        if (missingCol && missingCol in payload) {
+            console.error(`insertUserRow: '${missingCol}' column is missing from the users table — please run fix_missing_referred_by_column.sql (or the matching migration) in Supabase. Retrying without it for now.`);
+            const retryPayload = { ...payload };
+            delete retryPayload[missingCol];
+            const retry = await supabase.from('users').insert([retryPayload]).select().single();
+            data = retry.data;
+            error = retry.error;
+        }
+    }
+    return { data, error };
+}
+
 // Several actions (add channel, create post, etc.) used to hard-fail with "user not found"
 // if that person's /api/auth insert had failed earlier for any reason (a transient DB error,
 // a since-fixed bug, etc.). Rather than leaving them permanently stuck, try once to (re)create
@@ -165,7 +186,7 @@ async function getOrCreateUser(tgUser) {
 
     console.warn(`getOrCreateUser: no row for ${tgId}, attempting to create one now.`);
     const photo_url = await getTgProfilePic(tgId);
-    const { data: created, error: insertErr } = await supabase.from('users').insert([{
+    const { data: created, error: insertErr } = await insertUserRow({
         tg_id: tgId,
         name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
         username: tgUser.username || null,
@@ -174,7 +195,7 @@ async function getOrCreateUser(tgUser) {
         channels: [],
         is_verified: false,
         is_admin: false
-    }]).select().single();
+    });
 
     if (insertErr) {
         console.error(`getOrCreateUser: failed to create user ${tgId}:`, insertErr);
@@ -222,7 +243,7 @@ bot.start(async (ctx) => {
             );
         }
 
-        const { error: startInsertErr } = await supabase.from('users').insert([{
+        const { error: startInsertErr } = await insertUserRow({
             tg_id: tgId,
             name: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ') || "Telegram User",
             username: ctx.from.username || null,
@@ -231,7 +252,7 @@ bot.start(async (ctx) => {
             channels: [],
             is_verified: false,
             is_admin: false
-        }]);
+        });
         if (startInsertErr) {
             console.error("User insert failed in /start handler:", startInsertErr);
         }
@@ -395,7 +416,7 @@ app.post('/api/auth', async (req, res) => {
                 );
             }
 
-            const { data: newUser, error: insertErr } = await supabase.from('users').insert([{
+            const { data: newUser, error: insertErr } = await insertUserRow({
                 tg_id: tgId,
                 name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || "User",
                 username: tgUser.username || null,
@@ -404,10 +425,10 @@ app.post('/api/auth', async (req, res) => {
                 channels: [],
                 is_verified: false,
                 is_admin: false
-            }]).select().single();
+            });
 
             if (insertErr || !newUser) {
-                console.error("User insert failed (did you run admin_panel_migration.sql?):", insertErr);
+                console.error("User insert failed (check fix_missing_referred_by_column.sql / admin_panel_migration.sql have been run):", insertErr);
                 return res.status(500).json({ error: `Failed to create user: ${insertErr ? insertErr.message : 'unknown error'}` });
             }
             user = newUser;
