@@ -14,7 +14,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb";
+const IMGBB_API = process.env.IMGBB_API_KEY || "a851fbf33917e751cb199be63c5663d7";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
