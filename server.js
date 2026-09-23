@@ -14,7 +14,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = process.env.IMGBB_API_KEY || "a851fbf33917e751cb199be63c5663d7";
+const IMGBB_API = process.env.IMGBB_API_KEY || "348c88ef05445299a559f02b83ace6bbbb";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
@@ -24,9 +24,9 @@ const MAX_VIDEOS_IN_DB = 300;
 
 // ================= Referral Level Mapping =================
 const getLevelData = (refs) => {
-    if (refs >= 5) return { level: 3, limit: 999, channels: 5 };
-    if (refs >= 3) return { level: 2, limit: 10, channels: 2 };
-    return { level: 1, limit: 2, channels: 1 };
+    if (refs >= 3) return { level: 3, channels: 5 };
+    if (refs >= 2) return { level: 2, channels: 3 };
+    return { level: 1, channels: 1 };
 };
 
 const validateTGData = (initData) => {
@@ -257,13 +257,25 @@ bot.start(async (ctx) => {
             console.error("User insert failed in /start handler:", startInsertErr);
         }
     }
-    ctx.reply('Welcome to SnapPages! 🚀', Markup.inlineKeyboard([ Markup.button.webApp('Open App', process.env.MINI_APP_URL) ]));
+    ctx.reply(`👋 Hi ${ctx.from.first_name}! SnapPages — a Telegram-based social feed mini-app. Hope you enjoy using it!`, Markup.inlineKeyboard([ Markup.button.webApp('Open App', process.env.MINI_APP_URL) ]));
 });
 
 // ================= Channel Auto Sync =================
 bot.on('channel_post', async (ctx) => {
     const channelId = ctx.update.channel_post.chat.id.toString();
     const msg = ctx.update.channel_post;
+
+    // Ignore service updates (title/photo changed, pinned message, member changes, etc.) —
+    // only actual text/photo/video content should ever become a post or Short.
+    const isServiceUpdate = msg.new_chat_title || msg.new_chat_photo || msg.delete_chat_photo ||
+        msg.pinned_message || msg.new_chat_members || msg.left_chat_member ||
+        msg.migrate_to_chat_id || msg.migrate_from_chat_id || msg.group_chat_created ||
+        msg.channel_chat_created || msg.message_auto_delete_timer_changed;
+    if (isServiceUpdate) return;
+
+    // Only these content types are synced — no documents, polls, stickers, voice notes, etc.
+    const hasSupportedContent = (msg.text && !msg.photo && !msg.video) || msg.photo || msg.video;
+    if (!hasSupportedContent) return;
 
     // Skip banned channels entirely
     const { data: bannedChannel } = await supabase.from('banned_channels').select('channel_id').eq('channel_id', channelId).maybeSingle();
@@ -285,11 +297,17 @@ bot.on('channel_post', async (ctx) => {
         try {
             // Videos go to the Shorts feed (videos table); everything else stays a regular post.
             if (msg.video) {
+                // Enforce the same 18MB cap as user uploads — Telegram tells us the file size upfront.
+                if (msg.video.file_size && msg.video.file_size > MAX_VIDEO_BYTES) {
+                    console.warn(`Auto Sync: skipped video from ${channelId} — ${msg.video.file_size} bytes exceeds the ${MAX_VIDEO_BYTES} byte cap.`);
+                    return;
+                }
                 await supabase.from('videos').insert([{
                     author_id: channelId,
                     author_name: msg.chat.title || 'Channel Post',
                     type: 'channel',
                     caption: msg.caption || '',
+                    entities: msg.caption_entities || null,
                     file_id: msg.video.file_id,
                     storage_chat_id: channelId,
                     storage_message_id: msg.message_id,
@@ -314,12 +332,14 @@ bot.on('channel_post', async (ctx) => {
             }
 
             const textContent = msg.text || msg.caption || '';
+            const entities = msg.entities || msg.caption_entities || null;
 
             await supabase.from('posts').insert([{
                 author_id: channelId,
                 author_name: msg.chat.title || 'Channel Post',
                 type: 'channel',
                 text: textContent,
+                entities,
                 image_urls: imageUrls,
                 likes_count: 0,
                 likes_users: [],
@@ -598,6 +618,13 @@ app.post('/api/createPost', async (req, res) => {
     try {
         const user = await getOrCreateUser(tgUser);
         if (!user) return res.status(404).json({ error: "Could not create your user record. Please check Render logs for details." });
+
+        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgUser.id.toString());
+        const level = user.is_verified ? 3 : getLevelData(refCount || 0).level;
+
+        if (imagesBase64 && imagesBase64.length > 0 && level < 2) {
+            return res.status(403).json({ error: "Image posts unlock at Level 2 (2 referrals). Invite friends to level up!" });
+        }
 
         let imageUrls = [];
         let uploadFailures = 0;
@@ -989,6 +1016,38 @@ app.post('/api/deleteComment', async (req, res) => {
     const tgUser = validateTGData(initData);
     await supabase.from('comments').delete().match({ id: commentId, author_id: tgUser.id.toString() });
     res.json({ success: true });
+});
+
+app.post('/api/likeComment', async (req, res) => {
+    const { initData, commentId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+
+    try {
+        const { data: comment, error: fetchErr } = await supabase.from('comments').select('likes_count, likes_users').eq('id', commentId).maybeSingle();
+        if (fetchErr || !comment) return res.status(404).json({ error: "Comment not found" });
+
+        let likesUsers = comment.likes_users || [];
+        let likesCount = comment.likes_count || 0;
+        const userId = tgUser.id.toString();
+        let hasLiked = false;
+
+        if (likesUsers.includes(userId)) {
+            likesUsers = likesUsers.filter(id => id !== userId);
+            likesCount = Math.max(0, likesCount - 1);
+        } else {
+            likesUsers.push(userId);
+            likesCount += 1;
+            hasLiked = true;
+        }
+
+        const { error: updateErr } = await supabase.from('comments').update({ likes_count: likesCount, likes_users: likesUsers }).eq('id', commentId);
+        if (updateErr) throw updateErr;
+
+        res.json({ success: true, likesCount, hasLiked });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
 });
 
 // ================= SHORTS VIDEO APIs =================
