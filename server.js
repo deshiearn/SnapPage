@@ -125,12 +125,12 @@ async function sendTelegramNotification(targetTgId, text, startappParam = "") {
 async function notifyPostOwners(postAuthorId, postType, messageText, startappParam) {
     try {
         if (postType === 'channel') {
-            const { data: owners } = await supabase.from('users').select('tg_id').contains('channels', [{ id: postAuthorId }]);
-            if (owners && owners.length > 0) {
-                owners.forEach(owner => {
+            const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+            (allUsers || []).forEach(owner => {
+                if (owner.channels && owner.channels.some(c => String(c.id) === String(postAuthorId))) {
                     sendTelegramNotification(owner.tg_id, messageText, startappParam);
-                });
-            }
+                }
+            });
         } else {
             sendTelegramNotification(postAuthorId, messageText, startappParam);
         }
@@ -281,17 +281,33 @@ bot.on('channel_post', async (ctx) => {
     const { data: bannedChannel } = await supabase.from('banned_channels').select('channel_id').eq('channel_id', channelId).maybeSingle();
     if (bannedChannel) return;
 
-    const { data: users, error } = await supabase.from('users').select('channels');
+    const { data: users, error } = await supabase.from('users').select('tg_id, channels');
     if (error) return;
 
     let isRegistered = false;
+    let registeredOwner = null;
     users?.forEach(u => {
         if (u.channels && Array.isArray(u.channels)) {
             if (u.channels.some(c => String(c.id) === String(channelId))) {
                 isRegistered = true;
+                registeredOwner = u;
             }
         }
     });
+
+    // Self-heal stale cached channel info (e.g. it was private when added, is public now) —
+    // Telegram includes the channel's current username/title on every channel_post.
+    if (isRegistered && registeredOwner) {
+        const freshUsername = msg.chat.username || 'private';
+        const freshTitle = msg.chat.title;
+        const current = registeredOwner.channels.find(c => String(c.id) === String(channelId));
+        if (current && (current.username !== freshUsername || current.name !== freshTitle)) {
+            const updatedChannels = registeredOwner.channels.map(c =>
+                String(c.id) === String(channelId) ? { ...c, username: freshUsername, name: freshTitle || c.name } : c
+            );
+            await supabase.from('users').update({ channels: updatedChannels }).eq('tg_id', registeredOwner.tg_id);
+        }
+    }
 
     if (isRegistered) {
         try {
@@ -511,6 +527,19 @@ app.post('/api/getPosts', async (req, res) => {
 
 async function enrichPosts(posts) {
     if (!posts) return [];
+    // Pre-fetch all users' channels once — per-post .contains() queries proved unreliable
+    // for this JSONB shape (the same issue we hit and fixed in the admin setBadge endpoint).
+    const { data: allUsersForChannels } = await supabase.from('users').select('tg_id, channels, is_verified');
+    const ownerLevelCache = {};
+    async function getOwnerLevel(owner) {
+        if (owner.is_verified) return 3;
+        if (ownerLevelCache[owner.tg_id] !== undefined) return ownerLevelCache[owner.tg_id];
+        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', owner.tg_id);
+        const level = getLevelData(refCount || 0).level;
+        ownerLevelCache[owner.tg_id] = level;
+        return level;
+    }
+
     return Promise.all(posts.map(async post => {
         let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_name || 'U')}`;
         let authorLevel = 1;
@@ -529,15 +558,17 @@ async function enrichPosts(posts) {
                 const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
                 authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
             } else if (post.type === 'channel') {
-                const { data: u } = await supabase.from('users').select('channels, is_verified').contains('channels', [{ id: post.author_id }]);
-                if (u && u.length > 0) {
-                    const owner = u[0];
+                for (const owner of (allUsersForChannels || [])) {
+                    if (!owner.channels || !owner.channels.length) continue;
                     const ch = owner.channels.find(c => String(c.id) === String(post.author_id));
                     if (ch) {
                         if (ch.photo) authPhoto = ch.photo;
                         if (ch.username) authorUsername = ch.username;
-                        // A verified user's own channels inherit the blue badge too
+                        // A channel inherits its owning user's badge AND their referral level
+                        // (a verified owner unlocks Level 3 link privileges for their channels too).
                         authorVerified = !!ch.verified || !!owner.is_verified;
+                        authorLevel = await getOwnerLevel(owner);
+                        break;
                     }
                 }
             }
@@ -1057,6 +1088,17 @@ app.post('/api/likeComment', async (req, res) => {
 
 async function enrichVideos(videos) {
     if (!videos) return [];
+    const { data: allUsersForChannels } = await supabase.from('users').select('tg_id, channels, is_verified');
+    const ownerLevelCache = {};
+    async function getOwnerLevel(owner) {
+        if (owner.is_verified) return 3;
+        if (ownerLevelCache[owner.tg_id] !== undefined) return ownerLevelCache[owner.tg_id];
+        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', owner.tg_id);
+        const level = getLevelData(refCount || 0).level;
+        ownerLevelCache[owner.tg_id] = level;
+        return level;
+    }
+
     return Promise.all(videos.map(async v => {
         let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(v.author_name || 'U')}`;
         let authorLevel = 1;
@@ -1074,14 +1116,15 @@ async function enrichVideos(videos) {
                 const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', v.author_id);
                 authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
             } else if (v.type === 'channel') {
-                const { data: u } = await supabase.from('users').select('channels, is_verified').contains('channels', [{ id: v.author_id }]);
-                if (u && u.length > 0) {
-                    const owner = u[0];
+                for (const owner of (allUsersForChannels || [])) {
+                    if (!owner.channels || !owner.channels.length) continue;
                     const ch = owner.channels.find(c => String(c.id) === String(v.author_id));
                     if (ch) {
                         if (ch.photo) authPhoto = ch.photo;
                         if (ch.username) authorUsername = ch.username;
                         authorVerified = !!ch.verified || !!owner.is_verified;
+                        authorLevel = await getOwnerLevel(owner);
+                        break;
                     }
                 }
             }
@@ -1496,9 +1539,10 @@ async function banChannelInternal(channelId) {
     await supabase.from('posts').delete().eq('author_id', channelId.toString());
     await supabase.from('videos').delete().eq('author_id', channelId.toString()); // channel-owned messages, never delete the source message
     // strip the channel out of every user's channels array
-    const { data: owners } = await supabase.from('users').select('tg_id, channels').contains('channels', [{ id: channelId.toString() }]);
-    for (const owner of (owners || [])) {
-        const updated = (owner.channels || []).filter(c => String(c.id) !== String(channelId));
+    const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+    for (const owner of (allUsers || [])) {
+        if (!owner.channels || !owner.channels.some(c => String(c.id) === String(channelId))) continue;
+        const updated = owner.channels.filter(c => String(c.id) !== String(channelId));
         await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
     }
 }
