@@ -85,6 +85,11 @@
     <!-- MAIN TABS -->
     <!-- Home Tab -->
     <main id="tab-home" class="p-4 max-w-lg mx-auto space-y-4 fade-in">
+        <div class="relative">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" placeholder="Search posts & videos...">
+            <button id="homeSearchClearBtn" onclick="clearHomeSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-times-circle"></i></button>
+        </div>
         <div id="feed" class="space-y-4">
             <div class="text-center text-gray-400 py-10">
                 <i class="fas fa-spinner fa-spin text-3xl"></i>
@@ -114,6 +119,11 @@
         <div id="shortsEmptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-white gap-2">
             <i class="fas fa-video-slash text-4xl text-gray-500"></i>
             <p class="text-gray-400 text-sm">No Shorts yet — be the first to upload!</p>
+        </div>
+
+        <div id="shortsEntryLoading" class="hidden absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black">
+            <div class="w-10 h-10 border-4 border-white/20 border-t-white rounded-full" style="animation: spin 0.8s linear infinite;"></div>
+            <p class="text-gray-400 text-xs">Loading Shorts...</p>
         </div>
     </div>
 
@@ -235,7 +245,7 @@
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
-            <div class="flex gap-2">
+            <div id="commentInputRow" class="flex gap-2">
                 <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900 animate-none" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
             </div>
@@ -555,6 +565,7 @@
             tg.BackButton.show();
 
             if (document.getElementById('shortsFeed').children.length === 0) {
+                document.getElementById('shortsEntryLoading').classList.remove('hidden');
                 loadShorts(true);
             }
         }
@@ -595,6 +606,13 @@
             if(id === 'postModal') {
                 document.getElementById('postModalTitle').innerText = "Create Post";
                 editModePostId = null;
+                const canPostImages = currentUser && (currentUser.is_verified || (currentUser.level || 1) >= 2);
+                const addPhotosBtn = document.getElementById('addPhotosBtn');
+                addPhotosBtn.disabled = !canPostImages;
+                addPhotosBtn.classList.toggle('opacity-40', !canPostImages);
+                addPhotosBtn.innerHTML = canPostImages
+                    ? '<i class="fas fa-image"></i> Add Photos (Max 4)'
+                    : '<i class="fas fa-lock"></i> Image posts unlock at Level 2';
             }
         };
         
@@ -651,14 +669,66 @@
         });
 
         // Caption URL restriction logic based on level
-        function formatCaption(text, level) {
-            if (!text) return '';
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            if (level >= 3) {
-                return text.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-blue-500 underline">${url}</a>`);
-            } else {
-                return text.replace(urlRegex, (url) => `<span>${url}</span>`);
+        function escapeHtml(str) {
+            return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Converts Telegram's message/caption entities (bold, italic, links, text-links, etc.)
+        // into HTML, so a channel post shows in the app exactly as it looked in Telegram.
+        // Link privileges follow the referral level system:
+        //   Level 1: no clickable links at all
+        //   Level 2+: plain typed URLs are clickable
+        //   Level 3+ (or a verified blue-badge account): bold/styled "text link" entities are also clickable
+        const ENTITY_TAG_MAP = { bold: 'b', italic: 'i', underline: 'u', strikethrough: 's', code: 'code', pre: 'pre', spoiler: 'span' };
+        function entitiesToHtml(text, entities, level) {
+            if (!entities || !Array.isArray(entities) || entities.length === 0) return null;
+            const supported = entities.filter(e => ENTITY_TAG_MAP[e.type] || e.type === 'url' || e.type === 'text_link');
+            if (supported.length === 0) return null;
+
+            const points = new Set([0, text.length]);
+            supported.forEach(e => { points.add(e.offset); points.add(e.offset + e.length); });
+            const sorted = Array.from(points).sort((a, b) => a - b);
+
+            let html = '';
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const start = sorted[i], end = sorted[i + 1];
+                if (start >= end) continue;
+                const segment = text.slice(start, end);
+                const escaped = escapeHtml(segment);
+                const covering = supported.filter(e => e.offset <= start && (e.offset + e.length) >= end);
+
+                let opening = '', closing = '';
+                const linkEntity = covering.find(e => e.type === 'url' || e.type === 'text_link');
+                if (linkEntity) {
+                    const allowPlainUrl = linkEntity.type === 'url' && level >= 2;
+                    const allowTextLink = linkEntity.type === 'text_link' && level >= 3;
+                    if (allowPlainUrl || allowTextLink) {
+                        const href = linkEntity.type === 'text_link' ? linkEntity.url : segment;
+                        opening += `<a href="${href}" target="_blank" class="text-blue-500 underline">`;
+                        closing = '</a>' + closing;
+                    }
+                }
+                covering.forEach(e => {
+                    const tag = ENTITY_TAG_MAP[e.type];
+                    if (tag) { opening += `<${tag}>`; closing = `</${tag}>` + closing; }
+                });
+                html += opening + escaped + closing;
             }
+            return html;
+        }
+
+        function formatCaption(text, level, entities) {
+            if (!text) return '';
+            const richHtml = entitiesToHtml(text, entities, level);
+            if (richHtml !== null) return richHtml;
+
+            // Fallback for plain text with no Telegram entities: auto-detect URLs
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const escaped = escapeHtml(text);
+            if (level >= 2) {
+                return escaped.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-blue-500 underline">${url}</a>`);
+            }
+            return escaped.replace(urlRegex, (url) => `<span>${url}</span>`);
         }
 
         // Dynamic Post Previews uploads
@@ -833,7 +903,7 @@
                 if(imageUrls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
             }
 
-            const captionHtml = formatCaption(post.text, post.author_level || 1);
+            const captionHtml = formatCaption(post.text, post.author_level || 1, post.entities);
             const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
             const likeCount = post.likes_count || 0;
             const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
@@ -845,7 +915,7 @@
                 : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
 
             return `
-                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
                     <div class="flex justify-between items-center mb-3">
                         <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileLink('${post.type}', '${post.author_id}', '${post.author_username || ''}')">
                             <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
@@ -915,6 +985,7 @@
             } catch (e) {
                 console.error("Shorts load failed:", e);
             } finally {
+                document.getElementById('shortsEntryLoading').classList.add('hidden');
                 isLoadingShorts = false;
             }
         }
@@ -922,10 +993,28 @@
         function renderShortItem(v) {
             const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
             const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
-            const caption = (v.caption || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const captionHtml = formatCaption(v.caption, v.author_level || 1, v.entities);
+            const plainLength = (v.caption || '').length;
             return `
-            <div class="short-item w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
-                <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="metadata" onclick="toggleShortPlay(this)"></video>
+            <div class="short-item fade-in w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
+                <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="auto"
+                    onwaiting="this.nextElementSibling.classList.remove('hidden')"
+                    onplaying="this.nextElementSibling.classList.add('hidden')"
+                    oncanplay="this.nextElementSibling.classList.add('hidden')"></video>
+
+                <div class="short-loading hidden absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="w-10 h-10 border-4 border-white/30 border-t-white rounded-full" style="animation: spin 0.8s linear infinite;"></div>
+                </div>
+
+                <!-- Tap zones: middle tap toggles play/pause; double-tap left/right seeks -5s/+5s -->
+                <div class="absolute inset-0" onclick="handleShortTap(event, '${v.id}')">
+                    <div class="short-seek-left absolute left-0 top-0 h-full w-1/2 flex items-center justify-center gap-1 opacity-0 pointer-events-none transition-opacity duration-300">
+                        <i class="fas fa-backward text-white text-2xl"></i><span class="text-white text-xs font-bold">5s</span>
+                    </div>
+                    <div class="short-seek-right absolute right-0 top-0 h-full w-1/2 flex items-center justify-center gap-1 opacity-0 pointer-events-none transition-opacity duration-300">
+                        <i class="fas fa-forward text-white text-2xl"></i><span class="text-white text-xs font-bold">5s</span>
+                    </div>
+                </div>
 
                 <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 60px);" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
                     <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
@@ -950,22 +1039,54 @@
                     </button>
                 </div>
 
-                <div class="absolute left-3 right-20 bottom-8 text-white">
-                    <p class="text-sm caption-clamp" data-full="${caption.replace(/"/g, '&quot;')}">${caption}</p>
-                    ${caption.length > 90 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-gray-300 mt-1">See more</button>` : ''}
+                <div class="absolute left-3 right-20 bottom-8 text-white pointer-events-none">
+                    <div class="pointer-events-auto inline-block">
+                        <p class="text-sm caption-clamp" data-full="${escapeHtml(v.caption || '').replace(/"/g, '&quot;')}">${captionHtml}</p>
+                        ${plainLength > 90 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-gray-300 mt-1">See more</button>` : ''}
+                    </div>
                 </div>
             </div>`;
         }
+
+        // Double-tap left/right to seek -5s/+5s; a single tap in the middle toggles play/pause
+        let shortTapState = {};
+        window.handleShortTap = (e, videoId) => {
+            const container = e.currentTarget.closest('.short-item');
+            const video = container.querySelector('video');
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX;
+            const isRight = (x - rect.left) > rect.width / 2;
+            const now = Date.now();
+            const key = videoId + (isRight ? '_r' : '_l');
+            const last = shortTapState[key] || 0;
+
+            if (now - last < 350) {
+                shortTapState[key] = 0;
+                if (video) {
+                    video.currentTime = isRight
+                        ? Math.min(video.duration || (video.currentTime + 5), video.currentTime + 5)
+                        : Math.max(0, video.currentTime - 5);
+                }
+                const indicator = container.querySelector(isRight ? '.short-seek-right' : '.short-seek-left');
+                if (indicator) {
+                    indicator.classList.remove('opacity-0');
+                    setTimeout(() => indicator.classList.add('opacity-0'), 400);
+                }
+            } else {
+                shortTapState[key] = now;
+                setTimeout(() => {
+                    if (shortTapState[key] === now && video) {
+                        if (video.paused) video.play().catch(() => {}); else video.pause();
+                    }
+                }, 300);
+            }
+        };
 
         window.toggleCaption = (btn) => {
             const p = btn.previousElementSibling;
             const expanded = p.classList.toggle('caption-expanded');
             p.classList.toggle('caption-clamp', !expanded);
             btn.innerText = expanded ? 'See less' : 'See more';
-        };
-
-        window.toggleShortPlay = (video) => {
-            if (video.paused) video.play().catch(() => {}); else video.pause();
         };
 
         // Global sound toggle — flips the shared mute preference and applies it live
@@ -1181,7 +1302,6 @@
                 `;
             } else {
                 content.innerHTML = `
-                    <button onclick="triggerRepost('${postId}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl font-bold text-purple-600 flex items-center gap-2"><i class="fas fa-retweet"></i> Repost This Post</button>
                     <button onclick="openReportSheet('${postId}')" class="w-full text-left py-3 px-4 bg-gray-50 rounded-xl font-bold text-orange-600 flex items-center gap-2"><i class="fas fa-flag"></i> Report Post</button>
                 `;
             }
@@ -1226,26 +1346,6 @@
             });
         }
 
-        window.triggerRepost = async (postId) => {
-            closeSheet('optionsModalBg', 'optionsSheet');
-            const { data: post } = await supabase.from('posts').select('*').eq('id', postId).single();
-            if (post) {
-                const repostText = `[Reposted from ${post.author_name}]:\n\n${post.text || ''}`;
-                
-                await fetch('/api/createPost', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({
-                        initData: tg.initData,
-                        text: repostText,
-                        imagesBase64: post.image_urls || []
-                    })
-                });
-                tg.showAlert("Post reposted successfully!");
-                loadPosts(1, true);
-            }
-        }
-
         // ================= Report Post/Video Logic =================
         const REPORT_REASONS = ["Spam", "Nudity or sexual content", "Hate speech or symbols", "Violence", "False information", "Something else"];
         window.openReportSheet = (postId, contentType = 'post') => {
@@ -1286,10 +1386,16 @@
             try {
                 const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment, contentType: currentCommentContentType }) });
                 const comments = await res.json();
+
+                if (!comments || comments.length === 0) {
+                    list.innerHTML = '<p class="text-center text-gray-400 text-sm py-6">No Comments</p>';
+                    return;
+                }
+
                 list.innerHTML = '';
-                
                 comments.forEach(c => {
                     const isMine = currentUser && String(c.author_id) === String(currentUser.tg_id);
+                    const hasLiked = c.likes_users && currentUser && c.likes_users.includes(currentUser.tg_id);
                     const safeCommentText = (c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const likeCount = c.likes_count || 0;
 
@@ -1297,7 +1403,7 @@
                         <span class="font-bold text-gray-900">${c.author_name}</span>
                         <p class="mt-1 text-gray-800">${safeCommentText}</p>
                         <div class="mt-2 flex gap-4 text-xs text-gray-500">
-                            <button onclick="likeComment(this, '${c.id}')" class="hover:text-red-500 flex items-center gap-1"><i class="fas fa-heart"></i> ${likeCount} Like</button>
+                            <button onclick="likeComment(this, '${c.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1"><i class="${hasLiked ? 'fas' : 'far'} fa-heart"></i> <span class="comment-like-count">${likeCount}</span> Like</button>
                             ${isMine ? `<button onclick="removeCommentDirect('${c.id}')" class="text-red-400 hover:text-red-600 flex items-center gap-1"><i class="fas fa-trash-alt"></i> Delete</button>` : ''}
                         </div>
                     </div>`;
@@ -1306,6 +1412,20 @@
                 list.innerHTML = '<p class="text-center text-red-400 text-sm">Error loading comments.</p>';
             }
         }
+
+        // Keep the comment input row visible above the on-screen keyboard: as the keyboard
+        // opens, the visual viewport shrinks — push the input row up by that difference.
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                const row = document.getElementById('commentInputRow');
+                if (!row) return;
+                const keyboardGap = window.innerHeight - window.visualViewport.height;
+                row.style.transform = keyboardGap > 80 ? `translateY(-${keyboardGap}px)` : '';
+            });
+        }
+        document.getElementById('commentInput').addEventListener('focus', () => {
+            setTimeout(() => document.getElementById('commentInputRow').scrollIntoView({ behavior: 'smooth', block: 'end' }), 250);
+        });
 
         document.getElementById('sendCommentBtn').onclick = async () => {
             const text = document.getElementById('commentInput').value.trim();
@@ -1321,7 +1441,19 @@
         };
 
         window.likeComment = async (btn, commentId) => {
-            btn.classList.toggle('text-red-500');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/likeComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, commentId }) });
+                const data = await res.json();
+                if (data && data.success) {
+                    btn.querySelector('.comment-like-count').innerText = data.likesCount;
+                    btn.classList.toggle('text-red-500', data.hasLiked);
+                    btn.classList.toggle('font-bold', data.hasLiked);
+                    const icon = btn.querySelector('i');
+                    icon.className = data.hasLiked ? 'fas fa-heart' : 'far fa-heart';
+                }
+            } catch(e) { console.error("Comment like failed:", e); }
+            finally { btn.disabled = false; }
         }
 
         window.removeCommentDirect = async (id) => {
@@ -1453,6 +1585,69 @@
         };
 
         // ================= Search Setup =================
+        // ================= Home Page Top Search Bar =================
+        let homeSearchTimeout = null;
+        document.getElementById('homeSearchInput').addEventListener('input', function() {
+            clearTimeout(homeSearchTimeout);
+            const val = this.value.trim();
+            document.getElementById('homeSearchClearBtn').classList.toggle('hidden', !val);
+            if (!val) { clearHomeSearch(); return; }
+            homeSearchTimeout = setTimeout(() => performHomeSearch(val), 350);
+        });
+
+        async function performHomeSearch(query) {
+            const feed = document.getElementById('feed');
+            feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
+            try {
+                const res = await fetch('/api/searchPosts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
+                const results = await res.json();
+                if (!results || results.length === 0) {
+                    feed.innerHTML = '<div class="text-center text-gray-400 py-10">No matching posts or videos found.</div>';
+                    return;
+                }
+                feed.innerHTML = results.map(r => r.content_type === 'video' ? buildVideoResultCardHtml(r) : buildPostCardHtml(r)).join('');
+            } catch (e) {
+                feed.innerHTML = '<div class="text-center text-red-500 py-10">Search failed. Check your connection.</div>';
+            }
+        }
+
+        window.clearHomeSearch = () => {
+            document.getElementById('homeSearchInput').value = '';
+            document.getElementById('homeSearchClearBtn').classList.add('hidden');
+            loadPosts(1, true);
+        };
+
+        function buildVideoResultCardHtml(v) {
+            const captionHtml = formatCaption(v.caption || v.text, v.author_level || 1, v.entities);
+            return `
+                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
+                    <div class="flex items-center gap-3 mb-3 cursor-pointer" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
+                        <img src="${v.author_photo}" class="w-10 h-10 rounded-full object-cover">
+                        <div>
+                            <h3 class="font-bold text-sm text-gray-900">${v.author_name}</h3>
+                            <span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold"><i class="fas fa-video"></i> Short</span>
+                        </div>
+                    </div>
+                    <p class="mb-3 text-sm text-gray-800">${captionHtml}</p>
+                    <button onclick="openVideoInShorts('${v.id}')" class="w-full bg-purple-600 text-white py-2 rounded-lg text-sm font-bold"><i class="fas fa-play"></i> Watch in Shorts</button>
+                </div>`;
+        }
+
+        window.openVideoInShorts = async (videoId) => {
+            switchTab('shorts');
+            try {
+                const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+                const video = await res.json();
+                if (video && video.id) {
+                    const feed = document.getElementById('shortsFeed');
+                    feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
+                    document.getElementById('shortsEmptyState').classList.add('hidden');
+                    observeShorts();
+                    feed.firstElementChild.scrollIntoView();
+                }
+            } catch (e) { console.error(e); }
+        };
+
         function setupSearch() {
             renderSearchHistory();
             document.getElementById('searchInput').addEventListener('keypress', function(e) {
