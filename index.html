@@ -128,22 +128,6 @@
     </div>
 
     <!-- Search Tab -->
-    <main id="tab-search" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <div class="bg-white rounded-xl p-3 shadow-sm border flex gap-2">
-            <input type="text" id="searchInput" class="flex-1 bg-gray-50 rounded-lg px-3 py-2 outline-none text-sm animate-none" placeholder="Search posts...">
-            <button onclick="triggerSearch()" class="bg-blue-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
-        </div>
-        <div>
-            <h4 class="font-bold text-sm mb-2 flex items-center gap-2"><i class="fas fa-history text-gray-400"></i> Search History</h4>
-            <div id="searchHistoryList" class="flex flex-wrap gap-2 animate-none"></div>
-        </div>
-        <hr class="border-gray-200 my-2">
-        <div>
-            <h4 class="font-bold text-sm mb-3 flex items-center gap-2 text-blue-500"><i class="fas fa-fire"></i> Top Posts</h4>
-            <div id="topPostsList" class="space-y-4 animate-none"></div>
-        </div>
-    </main>
-
     <!-- Settings Tab -->
     <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
         <!-- Live User Profile Card -->
@@ -176,7 +160,6 @@
     <nav id="bottomNav" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
         <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
         <button onclick="switchTab('shorts')" class="nav-btn text-gray-400 transition" id="nav-shorts"><i class="fas fa-play-circle text-2xl"></i></button>
-        <button onclick="switchTab('search')" class="nav-btn text-gray-400 transition" id="nav-search"><i class="fas fa-search text-2xl"></i></button>
         <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
             <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
         </button>
@@ -506,7 +489,6 @@
             // 3. Load Feed — must finish before we try to pin a shared post on top of it
             try {
                 await loadPosts(1, true);
-                setupSearch();
                 await loadSupportLink();
 
                 // 4. Deep link handling — someone opened a shared post/video link
@@ -528,7 +510,7 @@
             }
             if (shortsActive) leaveShortsUI();
 
-            ['home', 'search', 'settings'].forEach(t => {
+            ['home', 'settings'].forEach(t => {
                 const element = document.getElementById(`tab-${t}`);
                 if(element) element.classList.add('hidden');
             });
@@ -544,13 +526,12 @@
             if (tab === 'home') {
                 loadPosts(1, true); // Clean re-fetch on Home nav click
             }
-            if (tab === 'search') loadTopPosts();
         };
 
         // Shorts is a full-screen, immersive mode: header + bottom nav hide while it's open.
         function enterShorts() {
             shortsActive = true;
-            ['home', 'search', 'settings'].forEach(t => {
+            ['home', 'settings'].forEach(t => {
                 const element = document.getElementById(`tab-${t}`);
                 if(element) element.classList.add('hidden');
             });
@@ -679,7 +660,17 @@
         //   Level 1: no clickable links at all
         //   Level 2+: plain typed URLs are clickable
         //   Level 3+ (or a verified blue-badge account): bold/styled "text link" entities are also clickable
+        // Bot mentions (@SomethingBot / @something_bot) are always clickable and bold, regardless
+        // of level — they link straight to the bot's chat (the @ is stripped from the URL only).
         const ENTITY_TAG_MAP = { bold: 'b', italic: 'i', underline: 'u', strikethrough: 's', code: 'code', pre: 'pre', spoiler: 'span' };
+        const BOT_MENTION_REGEX = /@([A-Za-z0-9_]{3,}[Bb]ot)\b/g;
+
+        function linkifyBotMentions(escapedText) {
+            return escapedText.replace(BOT_MENTION_REGEX, (match, username) =>
+                `<a href="https://t.me/${username}" target="_blank" class="text-blue-500 underline font-bold">@${username}</a>`
+            );
+        }
+
         function entitiesToHtml(text, entities, level) {
             if (!entities || !Array.isArray(entities) || entities.length === 0) return null;
             const supported = entities.filter(e => ENTITY_TAG_MAP[e.type] || e.type === 'url' || e.type === 'text_link');
@@ -694,10 +685,11 @@
                 const start = sorted[i], end = sorted[i + 1];
                 if (start >= end) continue;
                 const segment = text.slice(start, end);
-                const escaped = escapeHtml(segment);
+                let escaped = escapeHtml(segment);
                 const covering = supported.filter(e => e.offset <= start && (e.offset + e.length) >= end);
 
                 let opening = '', closing = '';
+                let didWrapLink = false;
                 const linkEntity = covering.find(e => e.type === 'url' || e.type === 'text_link');
                 if (linkEntity) {
                     const allowPlainUrl = linkEntity.type === 'url' && level >= 2;
@@ -706,8 +698,12 @@
                         const href = linkEntity.type === 'text_link' ? linkEntity.url : segment;
                         opening += `<a href="${href}" target="_blank" class="text-blue-500 underline">`;
                         closing = '</a>' + closing;
+                        didWrapLink = true;
                     }
                 }
+                // Only auto-link bot mentions in segments not already wrapped as a link (avoids nested <a> tags)
+                if (!didWrapLink) escaped = linkifyBotMentions(escaped);
+
                 covering.forEach(e => {
                     const tag = ENTITY_TAG_MAP[e.type];
                     if (tag) { opening += `<${tag}>`; closing = `</${tag}>` + closing; }
@@ -722,13 +718,16 @@
             const richHtml = entitiesToHtml(text, entities, level);
             if (richHtml !== null) return richHtml;
 
-            // Fallback for plain text with no Telegram entities: auto-detect URLs
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            // Fallback for plain text with no Telegram entities: auto-detect URLs and bot mentions together
             const escaped = escapeHtml(text);
-            if (level >= 2) {
-                return escaped.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-blue-500 underline">${url}</a>`);
-            }
-            return escaped.replace(urlRegex, (url) => `<span>${url}</span>`);
+            const combinedRegex = /(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{3,}[Bb]ot\b)/g;
+            return escaped.replace(combinedRegex, (match, url, mention) => {
+                if (url) {
+                    return level >= 2 ? `<a href="${url}" target="_blank" class="text-blue-500 underline">${url}</a>` : `<span>${url}</span>`;
+                }
+                const username = mention.slice(1);
+                return `<a href="https://t.me/${username}" target="_blank" class="text-blue-500 underline font-bold">@${username}</a>`;
+            });
         }
 
         // Dynamic Post Previews uploads
@@ -1655,107 +1654,6 @@
                 }
             } catch (e) { console.error(e); }
         };
-
-        function setupSearch() {
-            renderSearchHistory();
-            document.getElementById('searchInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') triggerSearch();
-            });
-        }
-
-        window.triggerSearch = () => {
-            const val = document.getElementById('searchInput').value.trim();
-            if(!val) return;
-
-            let history = JSON.parse(localStorage.getItem('search_history') || '[]');
-            if(!history.includes(val)) {
-                history.unshift(val);
-                if(history.length > 5) history.pop();
-                localStorage.setItem('search_history', JSON.stringify(history));
-                renderSearchHistory();
-            }
-            performSearch(val);
-        };
-
-        function renderSearchHistory() {
-            const list = document.getElementById('searchHistoryList');
-            const history = JSON.parse(localStorage.getItem('search_history') || '[]');
-            list.innerHTML = '';
-            if(history.length === 0) {
-                list.innerHTML = '<span class="text-xs text-gray-400">No search history</span>';
-                return;
-            }
-            history.forEach(h => {
-                list.innerHTML += `<span class="bg-gray-100 text-xs px-3 py-1.5 rounded-full flex items-center gap-2">
-                    <span class="cursor-pointer text-gray-900 dark:text-white" onclick="document.getElementById('searchInput').value='${h}'; performSearch('${h}')">${h}</span>
-                    <button onclick="removeHistoryItem('${h}')" class="text-red-400"><i class="fas fa-times-circle"></i></button>
-                </span>`;
-            });
-        }
-
-        window.removeHistoryItem = (item) => {
-            let history = JSON.parse(localStorage.getItem('search_history') || '[]');
-            history = history.filter(x => x !== item);
-            localStorage.setItem('search_history', JSON.stringify(history));
-            renderSearchHistory();
-        }
-
-        // FIXED: Routed search via secure RLS-Bypassing backend API (/api/searchPosts)
-        async function performSearch(query) {
-            const topList = document.getElementById('topPostsList');
-            topList.innerHTML = '<p class="text-center text-xs py-4 text-gray-400"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
-            
-            try {
-                const res = await fetch('/api/searchPosts', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ query })
-                });
-                const data = await res.json();
-                renderPostListHelper(data, topList, "No matching posts found");
-            } catch (err) {
-                console.error("Search failed:", err);
-                topList.innerHTML = '<p class="text-center text-xs py-4 text-red-500">Search service is temporarily unavailable.</p>';
-            }
-        }
-
-        async function loadTopPosts() {
-            const list = document.getElementById('topPostsList');
-            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading top posts...</p>';
-            
-            try {
-                const res = await fetch('/api/getPosts', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ initData: tg.initData, page: 1, limit: 5 })
-                });
-                const data = await res.json();
-                renderPostListHelper(data, list, "No top posts yet.");
-            } catch (err) {
-                list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">No top posts yet.</p>';
-            }
-        }
-
-        function renderPostListHelper(posts, container, emptyMsg) {
-            container.innerHTML = '';
-            if(!posts || posts.length === 0) {
-                container.innerHTML = `<p class="text-xs text-gray-400 text-center py-4">${emptyMsg}</p>`;
-                return;
-            }
-            posts.forEach(p => {
-                const contentType = p.content_type || 'post';
-                const typeBadge = contentType === 'video' ? '<i class="fas fa-video text-purple-400 mr-1"></i>' : '';
-                container.innerHTML += `
-                <div class="bg-white p-3 rounded-lg border flex gap-3 items-start shadow-sm text-gray-900">
-                    <img src="${p.author_photo || 'https://ui-avatars.com/api/?name=U'}" class="w-8 h-8 rounded-full object-cover">
-                    <div class="flex-1">
-                        <span class="text-xs text-gray-400 font-bold">${p.author_name}</span>
-                        <p class="text-xs text-gray-700 mt-1 line-clamp-2">${typeBadge}${p.text || '[Image Post]'}</p>
-                    </div>
-                    <button onclick="openComments('${p.id}', '${contentType}')" class="bg-blue-100 text-blue-600 p-2 rounded-full text-xs"><i class="fas fa-chevron-right"></i></button>
-                </div>`;
-            });
-        }
 
         initApp();
     </script>
