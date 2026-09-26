@@ -14,8 +14,14 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = process.env.IMGBB_API_KEY || "a851fbf33917e751cb199be63c5663d7";
+const IMGBB_API = (process.env.IMGBB_API_KEY || "a851fbf33917e751cb199be63c5663d7").trim();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
+// Diagnostic only — confirms at boot whether Render actually picked up your IMGBB_API_KEY
+// env var, without printing the full key. If this ever says "FALLBACK (shared/dead key)",
+// the env var isn't set/reaching the process — that alone would explain every upload failing.
+console.log(process.env.IMGBB_API_KEY
+    ? `IMGBB_API_KEY loaded from environment (starts with ${IMGBB_API.slice(0, 4)}..., length ${IMGBB_API.length})`
+    : "IMGBB_API_KEY is NOT set — falling back to the shared/dead demo key. Set IMGBB_API_KEY in Render's Environment tab.");
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
 const STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
@@ -93,14 +99,26 @@ async function uploadImageToImgBB(base64Str) {
         const res = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}`, params, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            },
+            timeout: 20000
         });
 
         if (res.data && res.data.data && res.data.data.url) {
             return res.data.data.url;
         }
+        console.error("ImgBB upload: request succeeded but response had no image URL:", JSON.stringify(res.data));
     } catch (e) {
-        console.error("ImgBB upload failed details:", e.response ? e.response.data : e.message);
+        if (e.response) {
+            // ImgBB was reached and responded — so this is NOT a Render connectivity problem.
+            // Common causes: invalid/expired key, key not verified, rate limit, payload too large.
+            console.error(`ImgBB upload REJECTED by API (status ${e.response.status}):`, JSON.stringify(e.response.data));
+        } else if (e.request) {
+            // The request was sent but no response ever came back — this IS a connectivity issue
+            // (DNS failure, Render blocking egress, timeout, etc).
+            console.error(`ImgBB upload got NO RESPONSE (network/connectivity issue). Code: ${e.code || 'unknown'}, message: ${e.message}`);
+        } else {
+            console.error("ImgBB upload failed before the request was even sent:", e.message);
+        }
     }
     return null;
 }
