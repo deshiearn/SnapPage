@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
-const axios = require('axios');
 const crypto = require('crypto');
 const cors = require('cors');
 const path = require('path');
@@ -14,14 +13,9 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const IMGBB_API = (process.env.IMGBB_API_KEY || "a851fbf33917e751cb199be63c5663d7").trim();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
-// Diagnostic only — confirms at boot whether Render actually picked up your IMGBB_API_KEY
-// env var, without printing the full key. If this ever says "FALLBACK (shared/dead key)",
-// the env var isn't set/reaching the process — that alone would explain every upload failing.
-console.log(process.env.IMGBB_API_KEY
-    ? `IMGBB_API_KEY loaded from environment (starts with ${IMGBB_API.slice(0, 4)}..., length ${IMGBB_API.length})`
-    : "IMGBB_API_KEY is NOT set — falling back to the shared/dead demo key. Set IMGBB_API_KEY in Render's Environment tab.");
+// Images no longer go through ImgBB at all (see uploadImageToTelegram below) — ImgBB was
+// blacklisting every request from this deployment regardless of which API key was used.
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
 const STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
@@ -83,44 +77,41 @@ async function requireAdminUser(req, res, next) {
     }
 }
 
-// ================= Smart ImgBB Base64 Upload Wrapper =================
-async function uploadImageToImgBB(base64Str) {
+// ================= Telegram-native image hosting (replaces ImgBB) =================
+// ImgBB started rejecting every request from this deployment with "You have been forbidden
+// to use this website" (error 103) — a known ImgBB behavior of blacklisting cloud-hosting IP
+// ranges (Render, AWS, etc), unrelated to which API key is used. Rather than depend on a
+// third-party host at all, images are now stored the same way videos already are: as a
+// Telegram file_id (in the private storage channel for user uploads, or referenced directly
+// from the origin channel for channel posts), streamed on demand via /api/tgImage/:fileId.
+function tgImageUrl(fileId) {
+    return `/api/tgImage/${fileId}`;
+}
+
+async function uploadImageToTelegram(base64Str) {
+    if (!STORAGE_CHANNEL_ID) {
+        console.error("uploadImageToTelegram: STORAGE_CHANNEL_ID is not configured — cannot store the image anywhere.");
+        return null;
+    }
     try {
-        // Telegram's getFileLink can resolve to a URL object rather than a plain string
-        // depending on the Telegraf version — normalize to string first.
         let cleanBase64 = typeof base64Str === 'string' ? base64Str : String(base64Str);
         if (cleanBase64.includes(',')) {
             cleanBase64 = cleanBase64.split(',')[1];
         }
+        const buffer = Buffer.from(cleanBase64, 'base64');
 
-        const params = new URLSearchParams();
-        params.append('image', cleanBase64);
-
-        const res = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API}`, params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            timeout: 20000
-        });
-
-        if (res.data && res.data.data && res.data.data.url) {
-            return res.data.data.url;
+        const sentMsg = await bot.telegram.sendPhoto(STORAGE_CHANNEL_ID, { source: buffer, filename: `img_${Date.now()}.jpg` });
+        const sizes = sentMsg.photo;
+        if (!sizes || sizes.length === 0) {
+            console.error("uploadImageToTelegram: sendPhoto succeeded but returned no photo sizes.");
+            return null;
         }
-        console.error("ImgBB upload: request succeeded but response had no image URL:", JSON.stringify(res.data));
+        const fileId = sizes[sizes.length - 1].file_id; // largest resolution
+        return tgImageUrl(fileId);
     } catch (e) {
-        if (e.response) {
-            // ImgBB was reached and responded — so this is NOT a Render connectivity problem.
-            // Common causes: invalid/expired key, key not verified, rate limit, payload too large.
-            console.error(`ImgBB upload REJECTED by API (status ${e.response.status}):`, JSON.stringify(e.response.data));
-        } else if (e.request) {
-            // The request was sent but no response ever came back — this IS a connectivity issue
-            // (DNS failure, Render blocking egress, timeout, etc).
-            console.error(`ImgBB upload got NO RESPONSE (network/connectivity issue). Code: ${e.code || 'unknown'}, message: ${e.message}`);
-        } else {
-            console.error("ImgBB upload failed before the request was even sent:", e.message);
-        }
+        console.error("uploadImageToTelegram failed:", e.message || e);
+        return null;
     }
-    return null;
 }
 
 // ================= Bot Notification Helper (with Inline WebApp Button) =================
@@ -162,10 +153,9 @@ async function getTgProfilePic(tgId) {
     try {
         const photos = await bot.telegram.getUserProfilePhotos(tgId, 0, 1);
         if (photos.total_count > 0) {
-            const fileId = photos.photos[0][0].file_id;
-            const link = await bot.telegram.getFileLink(fileId);
-            const uploadedUrl = await uploadImageToImgBB(link);
-            if (uploadedUrl) return uploadedUrl;
+            const sizes = photos.photos[0];
+            const fileId = sizes[sizes.length - 1].file_id; // largest resolution
+            return tgImageUrl(fileId);
         }
     } catch (e) { console.log("Photo fetch failed"); }
     return "https://ui-avatars.com/api/?name=User&background=random";
@@ -356,13 +346,9 @@ bot.on('channel_post', async (ctx) => {
 
             let imageUrls = [];
             if (msg.photo) {
-                try {
-                    const fileLink = await bot.telegram.getFileLink(msg.photo[msg.photo.length - 1].file_id);
-                    const uploadedUrl = await uploadImageToImgBB(fileLink);
-                    if (uploadedUrl) imageUrls.push(uploadedUrl);
-                } catch(imgErr) {
-                    console.error("Auto Sync ImgBB upload failed:", imgErr);
-                }
+                // Already hosted on Telegram — just reference the file_id, no re-upload needed.
+                const fileId = msg.photo[msg.photo.length - 1].file_id;
+                imageUrls.push(tgImageUrl(fileId));
             }
 
             const textContent = msg.text || msg.caption || '';
@@ -658,7 +644,7 @@ app.post('/api/getReferStats', async (req, res) => {
     }
 });
 
-// Create Post (Using ImgBB upload and RLS Bypass)
+// Create Post (images hosted directly on Telegram; RLS Bypass)
 app.post('/api/createPost', async (req, res) => {
     const { initData, text, imagesBase64 } = req.body;
     const tgUser = validateTGData(initData);
@@ -679,7 +665,7 @@ app.post('/api/createPost', async (req, res) => {
         let uploadFailures = 0;
         if (imagesBase64 && imagesBase64.length > 0) {
             for (let img of imagesBase64) {
-                const uploadedUrl = await uploadImageToImgBB(img);
+                const uploadedUrl = await uploadImageToTelegram(img);
                 if (uploadedUrl) {
                     imageUrls.push(uploadedUrl);
                 } else {
@@ -705,8 +691,8 @@ app.post('/api/createPost', async (req, res) => {
 
         const response = { success: true };
         if (uploadFailures > 0) {
-            console.error(`createPost: ${uploadFailures} image(s) failed to upload to ImgBB — check IMGBB_API_KEY is a valid personal key.`);
-            response.warning = `Post created, but ${uploadFailures} image(s) failed to upload. Ask the admin to check the ImgBB API key.`;
+            console.error(`createPost: ${uploadFailures} image(s) failed to upload — check STORAGE_CHANNEL_ID is set and the bot is an admin there.`);
+            response.warning = `Post created, but ${uploadFailures} image(s) failed to upload. Ask the admin to check the storage channel setup.`;
         }
         res.json(response);
     } catch (e) {
@@ -925,16 +911,9 @@ app.post('/api/addChannel', async (req, res) => {
             return res.json({ error: `At your Level, you can only set up to ${limits.channels} channel(s).` });
         }
 
-        // Robust ImgBB photo upload in try-catch to prevent status code 400 crashes
         let photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.title || 'C')}`;
         if (chat.photo) {
-            try {
-                const link = await bot.telegram.getFileLink(chat.photo.small_file_id);
-                const uploadedUrl = await uploadImageToImgBB(link);
-                if (uploadedUrl) photoUrl = uploadedUrl;
-            } catch(imgErr) {
-                console.log("Channel avatar upload failed, falling back gracefully:", imgErr);
-            }
+            photoUrl = tgImageUrl(chat.photo.small_file_id);
         }
 
         const cleanUsername = chat.username || 'private';
@@ -1212,6 +1191,17 @@ app.get('/api/videoStream/:id', async (req, res) => {
         res.redirect(link.href || link.toString());
     } catch (e) {
         res.status(500).send("Could not resolve video stream");
+    }
+});
+
+// Same idea as videoStream, but for images (profile photos, channel avatars, post/channel
+// photos) — replaces the old ImgBB-hosted URLs entirely.
+app.get('/api/tgImage/:fileId', async (req, res) => {
+    try {
+        const link = await bot.telegram.getFileLink(req.params.fileId);
+        res.redirect(link.href || link.toString());
+    } catch (e) {
+        res.status(404).send("Image not found");
     }
 });
 
