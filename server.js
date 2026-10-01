@@ -269,6 +269,43 @@ bot.start(async (ctx) => {
 });
 
 // ================= Channel Auto Sync =================
+// Telegram sends a multi-photo channel post (an "album") as several separate channel_post
+// updates that all share the same media_group_id, arriving within a fraction of a second of
+// each other. We buffer them briefly and merge into a single post with all the images once
+// no more arrive, rather than creating one post per photo.
+const mediaGroupBuffers = {};
+function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, caption, entities }) {
+    if (!mediaGroupBuffers[groupId]) {
+        mediaGroupBuffers[groupId] = { channelId, channelName, fileIds: [], caption: '', entities: null, timer: null };
+    }
+    const buf = mediaGroupBuffers[groupId];
+    buf.fileIds.push(fileId);
+    // Telegram only attaches the caption to (usually) the first message in the album.
+    if (caption) { buf.caption = caption; buf.entities = entities || null; }
+
+    if (buf.timer) clearTimeout(buf.timer);
+    buf.timer = setTimeout(async () => {
+        delete mediaGroupBuffers[groupId];
+        try {
+            await supabase.from('posts').insert([{
+                author_id: buf.channelId,
+                author_name: buf.channelName,
+                type: 'channel',
+                text: buf.caption || '',
+                entities: buf.entities,
+                image_urls: buf.fileIds.map(id => tgImageUrl(id)),
+                likes_count: 0,
+                likes_users: [],
+                is_pinned: false,
+                created_at: new Date().toISOString()
+            }]);
+            await enforcePostCap();
+        } catch (e) {
+            console.error("Media group finalize failed:", e);
+        }
+    }, 1500); // Telegram delivers all of an album's updates within ~1s of each other
+}
+
 bot.on('channel_post', async (ctx) => {
     const channelId = ctx.update.channel_post.chat.id.toString();
     const msg = ctx.update.channel_post;
@@ -341,6 +378,20 @@ bot.on('channel_post', async (ctx) => {
                     created_at: new Date().toISOString()
                 }]);
                 await enforceVideoCap();
+                return;
+            }
+
+            // A multi-photo album: buffer this photo and merge with the rest of the album
+            // (they arrive as separate updates sharing the same media_group_id) into one post.
+            if (msg.photo && msg.media_group_id) {
+                const fileId = msg.photo[msg.photo.length - 1].file_id;
+                bufferMediaGroupPhoto(msg.media_group_id, {
+                    channelId,
+                    channelName: msg.chat.title || 'Channel Post',
+                    fileId,
+                    caption: msg.caption,
+                    entities: msg.caption_entities
+                });
                 return;
             }
 
@@ -723,13 +774,32 @@ app.post('/api/editPost', async (req, res) => {
 
         if (!isOwner) return res.status(403).json({ error: "You do not own this post!" });
 
+        // imageUrls can be a mix of already-hosted URLs (kept as-is) and newly-picked images
+        // that arrive as raw base64 data URIs — those still need to be uploaded.
+        let finalImageUrls = [];
+        let uploadFailures = 0;
+        for (const entry of (imageUrls || [])) {
+            if (typeof entry === 'string' && entry.startsWith('data:')) {
+                const uploadedUrl = await uploadImageToTelegram(entry);
+                if (uploadedUrl) finalImageUrls.push(uploadedUrl);
+                else uploadFailures++;
+            } else if (entry) {
+                finalImageUrls.push(entry); // already a hosted URL — keep it
+            }
+        }
+
         const { error } = await supabase.from('posts').update({
             text,
-            image_urls: imageUrls
+            image_urls: finalImageUrls
         }).eq('id', postId);
 
         if (error) throw error;
-        res.json({ success: true });
+
+        const response = { success: true };
+        if (uploadFailures > 0) {
+            response.warning = `Post updated, but ${uploadFailures} new image(s) failed to upload.`;
+        }
+        res.json(response);
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
