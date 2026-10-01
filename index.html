@@ -95,7 +95,7 @@
                 <i class="fas fa-spinner fa-spin text-3xl"></i>
             </div>
         </div>
-        <button onclick="openModal('postModal')" class="fixed bottom-20 right-4 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105">
+        <button onclick="openNewPostModal()" class="fixed bottom-20 right-4 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40 hover:scale-105">
             <i class="fas fa-plus"></i>
         </button>
     </main>
@@ -376,7 +376,12 @@
         // passes this through tg.initDataUnsafe.start_param when the app is launched from it.
         async function handleSharedDeepLink() {
             try {
-                const startParam = tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+                // tg.initDataUnsafe.start_param is only populated by t.me/bot/app?startapp= deep
+                // links (our own Share buttons). Notification buttons instead open a web_app
+                // button whose URL just carries ?startapp=... as a normal query string, which we
+                // have to read from the page's own URL instead.
+                const urlParams = new URLSearchParams(window.location.search);
+                const startParam = (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || urlParams.get('startapp');
                 if (!startParam) return;
 
                 if (startParam.startsWith('video_')) {
@@ -585,8 +590,9 @@
             }
 
             if(id === 'postModal') {
-                document.getElementById('postModalTitle').innerText = "Create Post";
-                editModePostId = null;
+                // NOTE: this must NOT reset the title/editModePostId here — triggerEditPost()
+                // sets those up *before* calling openModal(), and doing it here would silently
+                // flip an edit back into "Create Post" mode. See openNewPostModal() for that reset.
                 const canPostImages = currentUser && (currentUser.is_verified || (currentUser.level || 1) >= 2);
                 const addPhotosBtn = document.getElementById('addPhotosBtn');
                 addPhotosBtn.disabled = !canPostImages;
@@ -595,6 +601,16 @@
                     ? '<i class="fas fa-image"></i> Add Photos (Max 4)'
                     : '<i class="fas fa-lock"></i> Image posts unlock at Level 2';
             }
+        };
+
+        // Resets the post composer to "new post" mode, then opens it — used by the floating + button
+        window.openNewPostModal = () => {
+            editModePostId = null;
+            imagesArray = [];
+            document.getElementById('postText').value = '';
+            renderPreviews();
+            openModal('postModal');
+            document.getElementById('postModalTitle').innerText = "Create Post";
         };
         
         window.closeModal = (id) => {
@@ -778,7 +794,7 @@
                     });
                     const data = await res.json();
                     if (data && data.success) {
-                        tg.showAlert("Post edited successfully!");
+                        tg.showAlert(data.warning || "Post edited successfully!");
                     } else {
                         throw new Error(data.error || "Update failed");
                     }
