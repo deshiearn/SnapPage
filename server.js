@@ -1253,12 +1253,22 @@ app.post('/api/getPostById', async (req, res) => {
 
 // Resolves a video's file_id to a fresh, short-lived Telegram CDN link and redirects to it.
 // We never persist the raw link since Telegram's file links expire (~1 hour).
+const fileLinkCache = new Map();
+async function getCachedFileLink(fileId) {
+    const hit = fileLinkCache.get(fileId);
+    if (hit && hit.exp > Date.now()) return hit.url;
+    const link = await bot.telegram.getFileLink(fileId);
+    const url = link.href || link.toString();
+    fileLinkCache.set(fileId, { url, exp: Date.now() + 50 * 60 * 1000 });
+    if (fileLinkCache.size > 3000) fileLinkCache.delete(fileLinkCache.keys().next().value);
+    return url;
+}
+
 app.get('/api/videoStream/:id', async (req, res) => {
     try {
         const { data: video } = await supabase.from('videos').select('file_id').eq('id', req.params.id).maybeSingle();
         if (!video) return res.status(404).send("Video not found");
-        const link = await bot.telegram.getFileLink(video.file_id);
-        res.redirect(link.href || link.toString());
+        res.redirect(await getCachedFileLink(video.file_id));
     } catch (e) {
         res.status(500).send("Could not resolve video stream");
     }
@@ -1268,8 +1278,8 @@ app.get('/api/videoStream/:id', async (req, res) => {
 // photos) — replaces the old ImgBB-hosted URLs entirely.
 app.get('/api/tgImage/:fileId', async (req, res) => {
     try {
-        const link = await bot.telegram.getFileLink(req.params.fileId);
-        res.redirect(link.href || link.toString());
+        res.set('Cache-Control', 'public, max-age=3000');
+        res.redirect(await getCachedFileLink(req.params.fileId));
     } catch (e) {
         res.status(404).send("Image not found");
     }
