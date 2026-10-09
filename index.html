@@ -30,23 +30,57 @@
             padding-top: env(safe-area-inset-top, 24px);
         }
 
-        /* Dark Mode Styling & Contrast Overrides (FIXED: Invisible captions in dark mode card styles) */
-        .dark-mode { background-color: #111827 !important; color: #f3f4f6 !important; }
-        .dark-mode header { background-color: rgba(17, 24, 39, 0.9) !important; border-bottom: 1px solid #374151; }
-        .dark-mode .bg-white { background-color: #1f2937 !important; color: #f3f4f6 !important; }
-        .dark-mode #appLoadingScreen { background-color: #111827 !important; }
-        .dark-mode .text-gray-900,
-        .dark-mode .text-gray-800,
-        .dark-mode .text-gray-700 { color: #f3f4f6 !important; }
-        .dark-mode .text-gray-500 { color: #9ca3af !important; }
-        .dark-mode .border { border-color: #374151 !important; }
-        .dark-mode .border-b { border-color: #374151 !important; }
-        .dark-mode .bg-gray-50 { background-color: #374151 !important; color: #f3f4f6 !important; }
-        .dark-mode .bg-gray-100 { background-color: #111827 !important; color: #f3f4f6 !important; }
-        .dark-mode .bottom-nav { background: rgba(31, 41, 55, 0.9) !important; border-color: #4b5563 !important; }
-        .dark-mode .bottom-sheet { background-color: #1f2937 !important; color: #f3f4f6 !important; }
-        .dark-mode input, .dark-mode textarea { background-color: #2d3748 !important; color: #ffffff !important; border-color: #4a5568 !important; }
-        .dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #a0aec0 !important; }
+        /* Dark Mode — dark grey theme with full contrast coverage */
+        .dark-mode { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
+        .dark-mode header { background-color: rgba(28,28,30,0.92) !important; border-bottom: 1px solid #38383a; }
+        .dark-mode .bg-white { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
+        .dark-mode #appLoadingScreen, .dark-mode #maintenanceOverlay { background-color: #1c1c1e !important; }
+        .dark-mode .text-gray-900, .dark-mode .text-gray-800, .dark-mode .text-gray-700, .dark-mode .text-gray-600 { color: #f2f2f7 !important; }
+        .dark-mode .text-gray-500, .dark-mode .text-gray-400 { color: #a1a1a6 !important; }
+        .dark-mode .border, .dark-mode .border-b, .dark-mode .border-t { border-color: #3a3a3c !important; }
+        .dark-mode .bg-gray-50 { background-color: #3a3a3c !important; color: #f2f2f7 !important; }
+        .dark-mode .bg-gray-100, .dark-mode .bg-gray-200 { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
+        .dark-mode .hover\:bg-gray-50:hover { background-color: #3a3a3c !important; }
+        .dark-mode .bottom-nav { background: rgba(44,44,46,0.92) !important; border-color: #48484a !important; }
+        .dark-mode .bottom-sheet { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
+        .dark-mode input, .dark-mode textarea, .dark-mode select { background-color: #3a3a3c !important; color: #fff !important; border-color: #48484a !important; }
+        .dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #8e8e93 !important; }
+        .dark-mode .bg-blue-50 { background-color: rgba(10,132,255,0.15) !important; } .dark-mode .bg-blue-100 { background-color: rgba(10,132,255,0.22) !important; }
+        .dark-mode .bg-purple-50 { background-color: rgba(191,90,242,0.15) !important; } .dark-mode .bg-purple-100 { background-color: rgba(191,90,242,0.22) !important; }
+        .dark-mode .bg-pink-50 { background-color: rgba(255,55,95,0.15) !important; } .dark-mode .bg-pink-100 { background-color: rgba(255,55,95,0.22) !important; }
+        .dark-mode .bg-green-50, .dark-mode .bg-green-100 { background-color: rgba(48,209,88,0.18) !important; }
+        .dark-mode .bg-yellow-100 { background-color: rgba(255,214,10,0.2) !important; }
+        .dark-mode .bg-red-50, .dark-mode .bg-red-100 { background-color: rgba(255,69,58,0.18) !important; }
+        .dark-mode .text-blue-600, .dark-mode .text-blue-800 { color: #64b5ff !important; }
+        .dark-mode .text-purple-600, .dark-mode .text-purple-800 { color: #d49bff !important; }
+        .dark-mode .text-pink-600 { color: #ff8aa8 !important; }
+        .dark-mode .text-green-600, .dark-mode .text-green-800 { color: #5ee08a !important; }
+        .dark-mode .text-yellow-800 { color: #ffd60a !important; }
+        .dark-mode .text-red-600, .dark-mode .text-red-500 { color: #ff6b61 !important; }
+        .dark-mode .border-blue-100, .dark-mode .border-purple-100, .dark-mode .border-pink-100 { border-color: #48484a !important; }
+        .dark-mode .img-skeleton { background: linear-gradient(90deg,#2c2c2e,#3a3a3c,#2c2c2e) !important; background-size: 200% 100% !important; }
+        .dark-mode .bg-gradient-to-br { color: #fff !important; }
+
+        /* Animations */
+        .emoji-pop { display: inline-block; animation: emojiPop 1.8s ease-in-out infinite; transform-origin: center bottom; }
+        @keyframes emojiPop { 0%,100% { transform: translateY(0) scale(1) rotate(0); } 25% { transform: translateY(-3px) scale(1.2) rotate(-8deg); } 50% { transform: translateY(0) scale(1); } 75% { transform: translateY(-2px) scale(1.12) rotate(8deg); } }
+        .img-skeleton { background: linear-gradient(90deg,#e5e7eb,#f3f4f6,#e5e7eb); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+        .post-img { opacity: 0; transform: scale(1.04); transition: opacity .5s ease, transform .6s ease; }
+        .post-img.loaded { opacity: 1; transform: scale(1); }
+        .img-dot { width: 6px; height: 6px; border-radius: 9999px; background: #cbd5e1; transition: all .3s ease; }
+        .img-dot.active { width: 18px; background: linear-gradient(90deg,#3b82f6,#a855f7,#ec4899); }
+        .icon-pop { animation: iconPop .45s cubic-bezier(.3,1.6,.5,1); }
+        @keyframes iconPop { 0% { transform: scale(1); } 40% { transform: scale(1.5); } 100% { transform: scale(1); } }
+        .nav-btn i, .nav-btn img { transition: transform .25s ease; }
+        .nav-btn.active i, .nav-btn.active img { transform: translateY(-3px) scale(1.18); animation: navBounce .5s ease; }
+        @keyframes navBounce { 0% { transform: scale(.8); } 60% { transform: translateY(-5px) scale(1.28); } 100% { transform: translateY(-3px) scale(1.18); } }
+        .fa-bolt.logo-pulse { animation: logoPulse 1.4s ease-in-out infinite; }
+        @keyframes logoPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes stickerFloat { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.05); } }
+        .load-sticker { width: 160px; height: 160px; object-fit: contain; animation: stickerFloat 1.8s ease-in-out infinite; }
+        .refer-hero { background: linear-gradient(135deg,#2563eb,#7c3aed 60%,#ec4899); color: #fff; }
 
         /* Blue verified badge */
         .verified-badge { color: #2563eb; font-size: 12px; margin-left: 2px; }
@@ -60,10 +94,9 @@
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
 
     <!-- APP LOADING SCREEN — shown until auth + the first page of the feed are ready -->
-    <div id="appLoadingScreen" class="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center gap-3">
-        <i class="fas fa-bolt text-4xl text-blue-600"></i>
-        <div class="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full" style="animation: spin 0.8s linear infinite;"></div>
-        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    <div id="appLoadingScreen" class="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center gap-4">
+        <img src="https://imghippo.nexpoint.click/8553762945/BQACAgUAAyEFAATk6e-_AAIOCWqMHyZxVof1tI4b-uvczoUglJhWAAJpIQACfadhVAEJgt88S9kZPQQ.webp" class="load-sticker" alt="">
+        <div class="w-7 h-7 border-4 border-blue-200 border-t-blue-600 rounded-full" style="animation: spin 0.8s linear infinite;"></div>
     </div>
 
     <!-- MAINTENANCE MODE OVERLAY -->
@@ -239,12 +272,23 @@
     <div id="referModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="referSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="font-bold text-lg"><i class="fas fa-gift text-green-500"></i> Referral Center</h3>
+                <h3 class="font-bold text-lg"><i class="fas fa-gift text-pink-500"></i> Referral Center</h3>
                 <button onclick="closeSheet('referModalBg', 'referSheet')"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div class="space-y-4 flex-1 overflow-y-auto pr-1">
+                <div class="refer-hero rounded-2xl p-4 shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] opacity-80 font-semibold tracking-wide">YOUR LEVEL</p>
+                            <p id="referLevelLabel" class="text-2xl font-extrabold">Level 1</p>
+                        </div>
+                        <i class="fas fa-crown text-3xl opacity-90 icon-pop"></i>
+                    </div>
+                    <div class="mt-3 h-2 rounded-full bg-white/25 overflow-hidden"><div id="referProgressBar" class="h-full bg-white rounded-full transition-all duration-700" style="width:0%"></div></div>
+                    <p id="referProgressLabel" class="text-[11px] mt-1.5 opacity-90"></p>
+                </div>
                 <div class="p-4 bg-gray-50 rounded-xl border">
-                    <label class="text-xs text-gray-500 font-bold block mb-1">YOUR REFERRAL LINK</label>
+                    <label class="text-[11px] text-gray-500 font-bold block mb-1 tracking-wide"><i class="fas fa-link"></i> YOUR REFERRAL LINK</label>
                     <div class="flex gap-2">
                         <input type="text" id="referInputLink" readonly class="flex-1 bg-white border rounded-lg px-3 py-2 text-xs outline-none text-gray-900" value="">
                         <button onclick="copyReferLinkDirect()" class="bg-blue-600 text-white px-4 rounded-lg flex items-center gap-1 text-sm font-semibold">
@@ -253,7 +297,7 @@
                     </div>
                 </div>
                 <div>
-                    <h4 class="font-bold text-sm mb-2 text-gray-700">Referral Level Earnings</h4>
+                    <h4 class="font-bold text-sm mb-2 text-gray-700"><i class="fas fa-users text-blue-500"></i> Your Network</h4>
                     <div class="grid grid-cols-3 gap-2">
                         <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
                             <div class="text-xs text-blue-600 font-bold">Lvl 1</div>
@@ -271,7 +315,7 @@
                 </div>
                 <div>
                     <h4 class="font-bold text-sm mb-2 text-gray-700">Referral History</h4>
-                    <div id="referHistoryList" class="space-y-2 max-h-40 overflow-y-auto">
+                    <div id="referHistoryList" class="space-y-2">
                         <p class="text-xs text-gray-400 text-center py-4">No refer stats yet.</p>
                     </div>
                 </div>
@@ -908,17 +952,17 @@
 
             let imgHtml = '';
             if(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "") {
-                imgHtml = `<div class="flex img-slider gap-1 mb-3 rounded-lg overflow-x-auto">`;
-                imageUrls.forEach(url => {
-                    if (url) {
-                        imgHtml += `<img src="${url}" onclick="openLightbox('${url}')" class="img-snap w-full max-h-72 object-cover flex-shrink-0 cursor-pointer">`;
-                    }
+                const valid = imageUrls.filter(Boolean);
+                imgHtml = `<div class="mb-3"><div class="flex img-slider gap-1 rounded-lg overflow-x-auto" onscroll="handleImgSliderScroll(this)">`;
+                valid.forEach(url => {
+                    imgHtml += `<div class="img-snap w-full flex-shrink-0 img-skeleton rounded-lg overflow-hidden" style="min-height:180px"><img src="${url}" loading="lazy" onload="this.classList.add('loaded');this.parentElement.classList.remove('img-skeleton');this.parentElement.style.minHeight=0" onclick="openLightbox('${url}')" class="post-img w-full max-h-72 object-cover cursor-pointer"></div>`;
                 });
                 imgHtml += `</div>`;
-                if(imageUrls.length > 1) imgHtml += `<p class="text-center text-xs text-gray-400 mb-2">Swipe to see more <i class="fas fa-exchange-alt"></i></p>`;
+                if (valid.length > 1) imgHtml += `<div class="flex justify-center gap-1.5 mt-2">${valid.map((_, i) => `<span class="img-dot ${i === 0 ? 'active' : ''}"></span>`).join('')}</div>`;
+                imgHtml += `</div>`;
             }
 
-            const captionHtml = formatCaption(post.text, post.author_level || 1, post.entities);
+            const captionHtml = animateEmojis(formatCaption(post.text, post.author_level || 1, post.entities));
             const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
             const likeCount = post.likes_count || 0;
             const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
@@ -942,7 +986,8 @@
                         <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
                     </div>
                     <p class="mb-1 text-sm whitespace-pre-wrap text-gray-800 caption-clamp">${captionHtml}</p>
-                    ${(post.text || '').length > 140 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-blue-500 mb-3">See more</button>` : '<div class="mb-3"></div>'}
+                    <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-blue-500 mb-3">See more</button>
+                    <div class="mb-3 see-more-spacer"></div>
                     ${imgHtml}
                     <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                         <button onclick="likePost(this, '${post.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
@@ -1008,7 +1053,7 @@
         function renderShortItem(v) {
             const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
             const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
-            const captionHtml = formatCaption(v.caption, v.author_level || 1, v.entities);
+            const captionHtml = animateEmojis(formatCaption(v.caption, v.author_level || 1, v.entities));
             const plainLength = (v.caption || '').length;
             return `
             <div class="short-item fade-in w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
@@ -1065,7 +1110,7 @@
                 <div class="absolute left-3 right-20 bottom-8 text-white pointer-events-none">
                     <div class="pointer-events-auto inline-block">
                         <p class="text-sm caption-clamp" data-full="${escapeHtml(v.caption || '').replace(/"/g, '&quot;')}">${captionHtml}</p>
-                        ${plainLength > 90 ? `<button onclick="toggleCaption(this)" class="text-xs font-bold text-gray-300 mt-1">See more</button>` : ''}
+                        <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-gray-300 mt-1">See more</button>
                     </div>
                 </div>
             </div>`;
@@ -1110,6 +1155,36 @@
             const expanded = p.classList.toggle('caption-expanded');
             p.classList.toggle('caption-clamp', !expanded);
             btn.innerText = expanded ? 'See less' : 'See more';
+        };
+
+        // Show "See more" only for captions that are actually clipped
+        window.refreshCaptionOverflows = (root) => {
+            (root || document).querySelectorAll('.caption-clamp').forEach(p => {
+                const btn = p.nextElementSibling;
+                if (!btn || !btn.classList.contains('see-more-btn')) return;
+                const overflow = p.scrollHeight > p.clientHeight + 1;
+                btn.classList.toggle('hidden', !overflow);
+                const sp = btn.nextElementSibling;
+                if (sp && sp.classList.contains('see-more-spacer')) sp.classList.toggle('hidden', overflow);
+            });
+        };
+
+        // Re-check "See more" whenever content is (re)rendered
+        { let t; new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => refreshCaptionOverflows(), 80); })
+            .observe(document.body, { childList: true, subtree: true }); }
+        window.addEventListener('resize', () => refreshCaptionOverflows());
+
+        // Wrap emoji in animated spans (text nodes only, never inside tags)
+        function animateEmojis(html) {
+            if (!html) return html;
+            const re = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*)/gu;
+            return html.split(/(<[^>]*>)/).map(part => part.startsWith('<') ? part : part.replace(re, '<span class="emoji-pop">$1</span>')).join('');
+        }
+
+        window.handleImgSliderScroll = (el) => {
+            const idx = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1));
+            const dots = el.parentElement.querySelectorAll('.img-dot');
+            dots.forEach((d, i) => d.classList.toggle('active', i === idx));
         };
 
         // Global sound toggle — flips the shared mute preference and applies it live
@@ -1172,7 +1247,7 @@
                 if (data && data.success) {
                     btn.querySelector('.like-count').innerText = data.likesCount;
                     const icon = btn.querySelector('i');
-                    icon.className = data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl';
+                    icon.className = (data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl') + ' icon-pop';
                 }
             } catch(e) { console.error("Video like failed:", e); }
             finally { btn.disabled = false; }
@@ -1289,6 +1364,7 @@
                     btn.classList.toggle('text-red-500', data.hasLiked);
                     btn.classList.toggle('font-bold', data.hasLiked);
                     const icon = btn.querySelector('i');
+                    if (icon) { icon.classList.remove('icon-pop'); void icon.offsetWidth; icon.classList.add('icon-pop'); }
                     if (data.hasLiked) {
                         icon.className = 'fas fa-heart text-red-500';
                     } else {
@@ -1511,16 +1587,30 @@
                 document.getElementById('lvl2Count').innerText = level2Users.length;
                 document.getElementById('lvl3Count').innerText = level3Users.length;
 
+                const direct = level1Users.length;
+                const lvl = direct >= 3 ? 3 : (direct >= 2 ? 2 : 1);
+                const lvlLabel = (currentUser && currentUser.is_verified) ? 'Level 3 · Verified' : 'Level ' + lvl;
+                document.getElementById('referLevelLabel').innerText = lvlLabel;
+                const need = direct >= 3 ? 0 : (direct >= 2 ? 3 - direct : 2 - direct);
+                document.getElementById('referProgressBar').style.width = Math.min(100, Math.round(direct / 3 * 100)) + '%';
+                document.getElementById('referProgressLabel').innerText = need > 0 ? `${direct}/${direct >= 2 ? 3 : 2} direct referrals — invite ${need} more to reach Level ${lvl + 1}` : 'Max level reached 🎉';
+
                 list.innerHTML = '';
                 const renderRow = (user, level) => {
                     const color = level === 1 ? 'blue' : (level === 2 ? 'purple' : 'pink');
+                    const tierLabel = level === 1 ? 'Direct' : (level === 2 ? '2nd Tier' : '3rd Tier');
+                    const avatar = user.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`;
+                    const handle = user.username ? `@${user.username}` : 'No username';
                     return `
-                    <div class="flex justify-between items-center bg-gray-50 p-2 rounded-lg border text-xs">
-                        <div>
-                            <p class="font-bold text-gray-800">${user.name}</p>
-                            <p class="text-[10px] text-gray-400">@${user.username || 'tg_user'}</p>
+                    <div class="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border text-xs">
+                        <div class="flex items-center gap-2.5">
+                            <img src="${avatar}" class="w-8 h-8 rounded-full object-cover">
+                            <div>
+                                <p class="font-bold text-gray-800">${escapeHtml(user.name || 'User')}</p>
+                                <p class="text-[10px] text-gray-400">${escapeHtml(handle)}</p>
+                            </div>
                         </div>
-                        <span class="bg-${color}-100 text-${color}-600 text-[10px] px-2 py-0.5 rounded-full font-bold">Lvl ${level}</span>
+                        <span class="bg-${color}-100 text-${color}-600 text-[10px] px-2 py-0.5 rounded-full font-bold">${tierLabel}</span>
                     </div>`;
                 };
 
@@ -1641,7 +1731,7 @@
         };
 
         function buildVideoResultCardHtml(v) {
-            const captionHtml = formatCaption(v.caption || v.text, v.author_level || 1, v.entities);
+            const captionHtml = animateEmojis(formatCaption(v.caption || v.text, v.author_level || 1, v.entities));
             return `
                 <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
                     <div class="flex items-center gap-3 mb-3 cursor-pointer" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
@@ -1663,15 +1753,4 @@
                 const video = await res.json();
                 if (video && video.id) {
                     const feed = document.getElementById('shortsFeed');
-                    feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
-                    document.getElementById('shortsEmptyState').classList.add('hidden');
-                    observeShorts();
-                    feed.firstElementChild.scrollIntoView();
-                }
-            } catch (e) { console.error(e); }
-        };
-
-        initApp();
-    </script>
-</body>
-</html>
+                    feed.insertAdjacentHTML('afterbegin', renderShortIt
