@@ -343,18 +343,6 @@
     </div>
 
     <!-- ================= JAVASCRIPT ================= -->
-
-    <!-- SAFETY FALLBACK: even if the main script crashes, the loading screen goes away after 10s -->
-    <script>
-        window.__appReady = false;
-        setTimeout(function () {
-            if (!window.__appReady) {
-                var l = document.getElementById('appLoadingScreen');
-                if (l) l.classList.add('hidden');
-            }
-        }, 10000);
-    </script>
-
     <script type="module">
         const tg = window.Telegram.WebApp;
         let currentUser = null;
@@ -370,34 +358,14 @@
         let isLoadingFeed = false;
         let hasMorePosts = true;
 
-        // FIXED: tg.requestFullscreen() THROWS on Telegram < 8.0, which used to kill the whole
-        // script (loading screen stuck forever). Now it is version-checked and wrapped in try/catch.
-        tg.ready();
-        try {
-            tg.expand();
-            if (tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && !tg.isFullscreen) {
-                tg.requestFullscreen();
-            }
-        } catch (e) { console.warn('Fullscreen not supported:', e); }
+        // Apply Full Screen App natively if API is supported, otherwise expand
+        try { tg.ready(); } catch (e) {}
+        try { tg.expand(); } catch (e) {}
+        try { if (tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen(); } catch (e) {}
+        try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
 
-        // Safe area: Telegram's own top bar in fullscreen mode must not overlap the header
-        function applySafeArea() {
-            const top = (tg.safeAreaInset && tg.safeAreaInset.top || 0) + (tg.contentSafeAreaInset && tg.contentSafeAreaInset.top || 0);
-            document.body.style.paddingTop = (top || 24) + 'px';
-        }
-        applySafeArea();
-        tg.onEvent('safeAreaChanged', applySafeArea);
-        tg.onEvent('contentSafeAreaChanged', applySafeArea);
-        tg.onEvent('fullscreenChanged', applySafeArea);
-
-        // A hanging request must never freeze the app: abort after a timeout
-        const _fetch = window.fetch.bind(window);
-        window.fetch = (url, opts = {}) => {
-            const c = new AbortController();
-            const ms = /create|save|edit/i.test(String(url)) ? 120000 : 15000;
-            const t = setTimeout(() => c.abort(), ms);
-            return _fetch(url, { ...opts, signal: c.signal }).finally(() => clearTimeout(t));
-        };
+        // Failsafe: never leave the user on the loading screen forever
+        setTimeout(() => { const l = document.getElementById('appLoadingScreen'); if (l) l.classList.add('hidden'); }, 10000);
 
         // Automatic Dark / Light mode detection
         function applyAutoTheme() {
@@ -514,7 +482,6 @@
                 if (status && status.maintenance) {
                     // Still resolve currentUser quietly so an admin can be let through later if needed;
                     // for now, all non-admin visitors are blocked.
-                    window.__appReady = true;
                     document.getElementById('appLoadingScreen').classList.add('hidden');
                     document.getElementById('maintenanceOverlay').classList.remove('hidden');
                     return;
@@ -578,7 +545,6 @@
                 console.error("Initial load failed:", e);
             } finally {
                 // 5. Everything the user will see first is ready (or failed) — reveal the app either way
-                window.__appReady = true;
                 document.getElementById('appLoadingScreen').classList.add('hidden');
             }
         }
@@ -959,8 +925,6 @@
                 }
             } catch(e) {
                 console.error(e);
-                const indicator = document.getElementById('feed-scroll-loading');
-                if (indicator) indicator.remove();
                 if (clearFeed) {
                     feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database. Check your connection.</div>`;
                 }
@@ -1441,19 +1405,17 @@
             }
         }
 
-        // FIXED: no longer depends on the Supabase CDN import — uses the existing /api/getPostById
         window.triggerEditPost = async (postId) => {
             closeSheet('optionsModalBg', 'optionsSheet');
             let post = null;
             try {
                 const r = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
                 post = await r.json();
-            } catch (e) { return tg.showAlert("Failed to load post."); }
-
+            } catch (e) {}
             if (post && post.id) {
                 editModePostId = postId;
                 document.getElementById('postModalTitle').innerText = "Edit Post";
-                document.getElementById('postText').value = post.text || '';
+                document.getElementById('postText').value = post.text;
                 
                 let imageUrls = post.image_urls;
                 if (typeof imageUrls === 'string') {
@@ -1463,7 +1425,7 @@
                         try { imageUrls = JSON.parse(imageUrls); } catch(e) { imageUrls = [imageUrls]; }
                     }
                 }
-                imagesArray = (imageUrls || []).filter(Boolean);
+                imagesArray = imageUrls || [];
                 renderPreviews();
                 openModal('postModal');
             }
@@ -1761,4 +1723,48 @@
                 }
                 feed.innerHTML = results.map(r => r.content_type === 'video' ? buildVideoResultCardHtml(r) : buildPostCardHtml(r)).join('');
             } catch (e) {
-                feed.innerHTML = '<div class="text-center text-red-500 py-10">Sear
+                feed.innerHTML = '<div class="text-center text-red-500 py-10">Search failed. Check your connection.</div>';
+            }
+        }
+
+        window.clearHomeSearch = () => {
+            document.getElementById('homeSearchInput').value = '';
+            document.getElementById('homeSearchClearBtn').classList.add('hidden');
+            loadPosts(1, true);
+        };
+
+        function buildVideoResultCardHtml(v) {
+            const captionHtml = animateEmojis(formatCaption(v.caption || v.text, v.author_level || 1, v.entities));
+            return `
+                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
+                    <div class="flex items-center gap-3 mb-3 cursor-pointer" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
+                        <img src="${v.author_photo}" class="w-10 h-10 rounded-full object-cover">
+                        <div>
+                            <h3 class="font-bold text-sm text-gray-900">${v.author_name}</h3>
+                            <span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold"><i class="fas fa-video"></i> Short</span>
+                        </div>
+                    </div>
+                    <p class="mb-3 text-sm text-gray-800">${captionHtml}</p>
+                    <button onclick="openVideoInShorts('${v.id}')" class="w-full bg-purple-600 text-white py-2 rounded-lg text-sm font-bold"><i class="fas fa-play"></i> Watch in Shorts</button>
+                </div>`;
+        }
+
+        window.openVideoInShorts = async (videoId) => {
+            switchTab('shorts');
+            try {
+                const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+                const video = await res.json();
+                if (video && video.id) {
+                    const feed = document.getElementById('shortsFeed');
+                    feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
+                    document.getElementById('shortsEmptyState').classList.add('hidden');
+                    observeShorts();
+                    feed.firstElementChild.scrollIntoView();
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        initApp();
+    </script>
+</body>
+</html>
