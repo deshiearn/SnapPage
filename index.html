@@ -343,28 +343,63 @@
     </div>
 
     <!-- ================= JAVASCRIPT ================= -->
+
+    <!-- SAFETY FALLBACK: even if the main script crashes, the loading screen goes away after 10s -->
+    <script>
+        window.__appReady = false;
+        setTimeout(function () {
+            if (!window.__appReady) {
+                var l = document.getElementById('appLoadingScreen');
+                if (l) l.classList.add('hidden');
+            }
+        }, 10000);
+    </script>
+
     <script type="module">
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-        const supabase = createClient('https://znecyxkatbuzgnvcwitm.supabase.co', 'sb_publishable_9sYA9S0ph32WedvLdRtyEA_gxjkz8L2');
-        
         const tg = window.Telegram.WebApp;
         let currentUser = null;
         let imagesArray = [];
         let currentPostIdForComment = null;
         let editModePostId = null;
 
+        // FIXED Modal navigation stack to handle Telegram's Native Back Button
         let openModalsStack = [];
 
+        // Pagination/Infinite scroll variables (10 posts at a time)
         let currentPage = 1;
         let isLoadingFeed = false;
         let hasMorePosts = true;
 
-        if (tg.requestFullscreen) {
-            tg.requestFullscreen();
-        } else {
+        // FIXED: tg.requestFullscreen() THROWS on Telegram < 8.0, which used to kill the whole
+        // script (loading screen stuck forever). Now it is version-checked and wrapped in try/catch.
+        tg.ready();
+        try {
             tg.expand();
-        }
+            if (tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && !tg.isFullscreen) {
+                tg.requestFullscreen();
+            }
+        } catch (e) { console.warn('Fullscreen not supported:', e); }
 
+        // Safe area: Telegram's own top bar in fullscreen mode must not overlap the header
+        function applySafeArea() {
+            const top = (tg.safeAreaInset && tg.safeAreaInset.top || 0) + (tg.contentSafeAreaInset && tg.contentSafeAreaInset.top || 0);
+            document.body.style.paddingTop = (top || 24) + 'px';
+        }
+        applySafeArea();
+        tg.onEvent('safeAreaChanged', applySafeArea);
+        tg.onEvent('contentSafeAreaChanged', applySafeArea);
+        tg.onEvent('fullscreenChanged', applySafeArea);
+
+        // A hanging request must never freeze the app: abort after a timeout
+        const _fetch = window.fetch.bind(window);
+        window.fetch = (url, opts = {}) => {
+            const c = new AbortController();
+            const ms = /create|save|edit/i.test(String(url)) ? 120000 : 15000;
+            const t = setTimeout(() => c.abort(), ms);
+            return _fetch(url, { ...opts, signal: c.signal }).finally(() => clearTimeout(t));
+        };
+
+        // Automatic Dark / Light mode detection
         function applyAutoTheme() {
             if (tg.colorScheme === 'dark') {
                 document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
@@ -387,22 +422,39 @@
             };
         }
 
+        // Referral & Leveling Calculation
+        function calculateLevel(refCount) {
+            if (refCount >= 5) return 3;
+            if (refCount >= 3) return 2;
+            return 1;
+        }
+
+        // Navigate to the standalone Admin Panel page, forwarding initData since a full
+        // page navigation loses Telegram's initData (it's only attached to the launch URL).
         window.goToAdminPanel = () => {
             window.location.href = `/admin?tgInitData=${encodeURIComponent(tg.initData || '')}`;
         };
 
+        // Redirect handler for clicking on post profiles (Loads Telegram profile or Channel directly)
         window.openProfileLink = (type, authorId, username) => {
             if (username && username !== 'private') {
                 tg.openTelegramLink(`https://t.me/${username}`);
             } else if (type === 'channel') {
+                // A private channel with no public username can't be opened by outsiders
                 tg.showAlert("This is a private channel and can't be opened.");
             } else {
                 tg.openTelegramLink(`tg://user?id=${authorId}`);
             }
         }
 
+        // Resolve a shared link like ?startapp=post_123 or ?startapp=video_45 — Telegram
+        // passes this through tg.initDataUnsafe.start_param when the app is launched from it.
         async function handleSharedDeepLink() {
             try {
+                // tg.initDataUnsafe.start_param is only populated by t.me/bot/app?startapp= deep
+                // links (our own Share buttons). Notification buttons instead open a web_app
+                // button whose URL just carries ?startapp=... as a normal query string, which we
+                // have to read from the page's own URL instead.
                 const urlParams = new URLSearchParams(window.location.search);
                 const startParam = (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || urlParams.get('startapp');
                 if (!startParam) return;
@@ -438,10 +490,12 @@
         }
 
         function renderSharedPostWrapper(post) {
+            // Reuses the same card markup as the main feed, but wrapped with a highlight ring
             const html = buildPostCardHtml(post);
             return `<div data-shared-post="${post.id}" class="ring-2 ring-blue-400 rounded-xl">${html}</div>`;
         }
 
+        // Support link can be changed from the Admin Panel; falls back to the default set in the HTML
         async function loadSupportLink() {
             try {
                 const res = await fetch('/api/appStatus');
@@ -449,32 +503,41 @@
                 if (status && status.supportLink) {
                     document.getElementById('supportLink').href = status.supportLink;
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) { /* keep the default link */ }
         }
 
         async function initApp() {
+            // 0. Check maintenance mode before anything else renders
             try {
                 const statusRes = await fetch('/api/appStatus');
                 const status = await statusRes.json();
                 if (status && status.maintenance) {
+                    // Still resolve currentUser quietly so an admin can be let through later if needed;
+                    // for now, all non-admin visitors are blocked.
+                    window.__appReady = true;
                     document.getElementById('appLoadingScreen').classList.add('hidden');
                     document.getElementById('maintenanceOverlay').classList.remove('hidden');
                     return;
                 }
-            } catch (e) { /* fail open */ }
+            } catch (e) { /* if the status check fails, fail open so the app is still usable */ }
 
             const liveUser = getTelegramUser();
             
-            document.getElementById('navProfilePic').src = liveUser.photo_url;
-            document.getElementById('settingsProfilePic').src = liveUser.photo_url;
+            // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY
+            const safePhoto = liveUser.photo_url;
+            document.getElementById('navProfilePic').src = safePhoto;
+            document.getElementById('settingsProfilePic').src = safePhoto;
             document.getElementById('settingsProfileName').innerText = liveUser.name;
             document.getElementById('settingsProfileUsername').innerText = liveUser.username ? `@${liveUser.username}` : '';
             document.getElementById('settingsProfileLevel').innerText = `Level 1`;
             
+            // Refer link opens the BOT CHAT (not the Mini App) so /start runs and the
+            // referral gets verified and counted server-side.
             const link = `https://t.me/SnapPagesBot?start=ref_${liveUser.tg_id}`;
             document.getElementById('referInputLink').value = link;
 
             try {
+                // 2. Fetch/Create User dynamically via secure Auth API
                 const authRes = await fetch('/api/auth', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -489,6 +552,7 @@
                     throw new Error("Auth API response failed");
                 }
 
+                // Refresh UI with calculated DB details
                 const nameEl = document.getElementById('settingsProfileName');
                 nameEl.innerHTML = liveUser.name + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
                 document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
@@ -503,21 +567,23 @@
                 currentUser = { ...liveUser, level: 1, channels: [], is_admin: false, is_verified: false };
             }
 
+            // 3. Load Feed — must finish before we try to pin a shared post on top of it
             try {
                 await loadPosts(1, true);
                 await loadSupportLink();
+
+                // 4. Deep link handling — someone opened a shared post/video link
                 await handleSharedDeepLink();
             } catch (e) {
                 console.error("Initial load failed:", e);
             } finally {
-                // Ensure loading screen is always hidden regardless of API response status
+                // 5. Everything the user will see first is ready (or failed) — reveal the app either way
+                window.__appReady = true;
                 document.getElementById('appLoadingScreen').classList.add('hidden');
             }
         }
 
-        // Run App Initialization immediately on script load
-        initApp();
-
+        // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
         let shortsActive = false;
         window.switchTab = (tab) => {
             if (tab === 'shorts') {
@@ -540,10 +606,11 @@
             else document.getElementById('navProfilePic').classList.remove('border-blue-600');
 
             if (tab === 'home') {
-                loadPosts(1, true);
+                loadPosts(1, true); // Clean re-fetch on Home nav click
             }
         };
 
+        // Shorts is a full-screen, immersive mode: header + bottom nav hide while it's open.
         function enterShorts() {
             shortsActive = true;
             ['home', 'settings'].forEach(t => {
@@ -581,6 +648,7 @@
             switchTab('home');
         };
 
+        // UI Open / Close modals
         window.openModal = (id) => {
             if (id === 'channelModal') {
                 openSheet('channelModalBg', 'channelSheet');
@@ -591,11 +659,17 @@
             const el = document.getElementById(id);
             if (el) {
                 el.classList.remove('hidden');
+                
+                // Track modal stack to invoke native BackButton on Telegram header
                 openModalsStack.push(id);
                 tg.BackButton.show();
+                
             }
 
             if(id === 'postModal') {
+                // NOTE: this must NOT reset the title/editModePostId here — triggerEditPost()
+                // sets those up *before* calling openModal(), and doing it here would silently
+                // flip an edit back into "Create Post" mode. See openNewPostModal() for that reset.
                 const canPostImages = currentUser && (currentUser.is_verified || (currentUser.level || 1) >= 2);
                 const addPhotosBtn = document.getElementById('addPhotosBtn');
                 addPhotosBtn.disabled = !canPostImages;
@@ -606,6 +680,7 @@
             }
         };
 
+        // Resets the post composer to "new post" mode, then opens it — used by the floating + button
         window.openNewPostModal = () => {
             editModePostId = null;
             imagesArray = [];
@@ -620,12 +695,16 @@
             if (el) {
                 el.classList.add('hidden');
                 openModalsStack = openModalsStack.filter(m => m !== id);
+                
+                // If all modals are closed, hide Telegram's Native BackButton
                 if (openModalsStack.length === 0) {
                     tg.BackButton.hide();
                 }
             }
         };
         
+        // Bottom sheets use a separate bg/sheet pair instead of the single-id modal system,
+        // so they need their own entry in the Telegram BackButton stack to close correctly.
         const SHEET_MAP = {
             optionsModalBg: 'optionsSheet',
             reportModalBg: 'reportSheet',
@@ -649,6 +728,33 @@
         }
         window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
+        // Telegram Native BackButton Event registration
+        tg.BackButton.onClick(() => {
+            if (openModalsStack.length > 0) {
+                const lastModal = openModalsStack[openModalsStack.length - 1];
+                if (lastModal === '__shorts__') {
+                    exitShorts();
+                } else if (SHEET_MAP[lastModal]) {
+                    closeSheet(lastModal, SHEET_MAP[lastModal]);
+                } else {
+                    closeModal(lastModal);
+                }
+            }
+        });
+
+        // Caption URL restriction logic based on level
+        function escapeHtml(str) {
+            return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Converts Telegram's message/caption entities (bold, italic, links, text-links, etc.)
+        // into HTML, so a channel post shows in the app exactly as it looked in Telegram.
+        // Link privileges follow the referral level system:
+        //   Level 1: no clickable links at all
+        //   Level 2+: plain typed URLs are clickable
+        //   Level 3+ (or a verified blue-badge account): bold/styled "text link" entities are also clickable
+        // Bot mentions (@SomethingBot / @something_bot) are always clickable and bold, regardless
+        // of level — they link straight to the bot's chat (the @ is stripped from the URL only).
         const ENTITY_TAG_MAP = { bold: 'b', italic: 'i', underline: 'u', strikethrough: 's', code: 'code', pre: 'pre', spoiler: 'span' };
         const BOT_MENTION_REGEX = /@([A-Za-z0-9_]{3,}[Bb]ot)\b/g;
 
@@ -688,6 +794,7 @@
                         didWrapLink = true;
                     }
                 }
+                // Only auto-link bot mentions in segments not already wrapped as a link (avoids nested <a> tags)
                 if (!didWrapLink) escaped = linkifyBotMentions(escaped);
 
                 covering.forEach(e => {
@@ -704,6 +811,7 @@
             const richHtml = entitiesToHtml(text, entities, level);
             if (richHtml !== null) return richHtml;
 
+            // Fallback for plain text with no Telegram entities: auto-detect URLs and bot mentions together
             const escaped = escapeHtml(text);
             const combinedRegex = /(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{3,}[Bb]ot\b)/g;
             return escaped.replace(combinedRegex, (match, url, mention) => {
@@ -715,6 +823,7 @@
             });
         }
 
+        // Dynamic Post Previews uploads
         document.getElementById('imageUpload').addEventListener('change', function(e) {
             const files = Array.from(e.target.files);
             if (imagesArray.length + files.length > 4) return tg.showAlert("Maximum 4 images allowed!");
@@ -741,6 +850,7 @@
         }
         window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
+        // Create / Edit Post Submission
         document.getElementById('submitPostBtn').addEventListener('click', async () => {
             const text = document.getElementById('postText').value;
             if(!text && imagesArray.length === 0) return;
@@ -766,6 +876,7 @@
                         throw new Error(data.error || "Update failed");
                     }
                 } else {
+                    // Route insert through secure Service Role backend API first to bypass DB RLS Blocks
                     const apiRes = await fetch('/api/createPost', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -797,6 +908,7 @@
             loadPosts(1, true);
         });
 
+        // Load Posts Feed with Pagination and Infinite Scroll (10 posts at a time)
         async function loadPosts(page = 1, clearFeed = true) {
             if (isLoadingFeed) return;
             isLoadingFeed = true;
@@ -847,6 +959,8 @@
                 }
             } catch(e) {
                 console.error(e);
+                const indicator = document.getElementById('feed-scroll-loading');
+                if (indicator) indicator.remove();
                 if (clearFeed) {
                     feed.innerHTML = `<div class="text-center text-red-500 py-10">Failed to load posts from Database. Check your connection.</div>`;
                 }
@@ -855,7 +969,9 @@
             }
         }
 
+        // Builds one post card's HTML — used by the main feed and by shared deep links
         function buildPostCardHtml(post) {
+            // FIXED: Fallback parser to cleanly convert raw PostgreSQL string arrays into JavaScript arrays
             let imageUrls = post.image_urls;
             if (typeof imageUrls === 'string') {
                 if (imageUrls.startsWith('{') && imageUrls.endsWith('}')) {
@@ -887,6 +1003,7 @@
             const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
             const pinnedBadge = post.is_pinned ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold ml-1"><i class="fas fa-thumbtack"></i> Pinned</span>' : '';
 
+            // FIXED: Dynamic Level Badge with [Channel] or [User] labels
             const labelBadge = post.type === 'channel'
                 ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">Channel</span>'
                 : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
@@ -917,6 +1034,7 @@
                 </div>`;
         }
 
+        // Register window scroll listener for infinite scroll mechanism
         window.addEventListener('scroll', () => {
             if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100) {
                 if (!isLoadingFeed && hasMorePosts) {
@@ -926,10 +1044,13 @@
             }
         });
 
+        // ================= SHORTS (TikTok-style video feed) =================
         let shortsPage = 1;
         let isLoadingShorts = false;
         let hasMoreShorts = true;
         let shortsObserver = null;
+        // Videos must start muted so autoplay isn't blocked by the browser; tapping the
+        // sound button is a real user gesture, so we can safely unmute from then on.
         let shortsMuted = true;
 
         async function loadShorts(reset = false) {
@@ -968,6 +1089,7 @@
             const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
             const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
             const captionHtml = animateEmojis(formatCaption(v.caption, v.author_level || 1, v.entities));
+            const plainLength = (v.caption || '').length;
             return `
             <div class="short-item fade-in w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
                 <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="auto"
@@ -987,6 +1109,7 @@
                     </div>
                 </div>
 
+                <!-- Tap zones: middle tap toggles play/pause; double-tap left/right seeks -5s/+5s -->
                 <div class="absolute inset-0" onclick="handleShortTap(event, '${v.id}')">
                     <div class="short-seek-left absolute left-0 top-0 h-full w-1/2 flex items-center justify-center gap-1 opacity-0 pointer-events-none transition-opacity duration-300">
                         <i class="fas fa-backward text-white text-2xl"></i><span class="text-white text-xs font-bold">5s</span>
@@ -1028,6 +1151,7 @@
             </div>`;
         }
 
+        // Double-tap left/right to seek -5s/+5s; a single tap in the middle toggles play/pause
         let shortTapState = {};
         window.handleShortTap = (e, videoId) => {
             const container = e.currentTarget.closest('.short-item');
@@ -1068,6 +1192,7 @@
             btn.innerText = expanded ? 'See less' : 'See more';
         };
 
+        // Show "See more" only for captions that are actually clipped
         window.refreshCaptionOverflows = (root) => {
             (root || document).querySelectorAll('.caption-clamp').forEach(p => {
                 const btn = p.nextElementSibling;
@@ -1079,10 +1204,12 @@
             });
         };
 
+        // Re-check "See more" whenever content is (re)rendered
         { let t; new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => refreshCaptionOverflows(), 80); })
             .observe(document.body, { childList: true, subtree: true }); }
         window.addEventListener('resize', () => refreshCaptionOverflows());
 
+        // Wrap emoji in animated spans (text nodes only, never inside tags)
         function animateEmojis(html) {
             if (!html) return html;
             const re = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*)/gu;
@@ -1095,6 +1222,7 @@
             dots.forEach((d, i) => d.classList.toggle('active', i === idx));
         };
 
+        // Global sound toggle — flips the shared mute preference and applies it live
         window.toggleShortsSound = () => {
             shortsMuted = !shortsMuted;
             document.querySelectorAll('#shortsFeed video').forEach(v => { v.muted = shortsMuted; });
@@ -1102,6 +1230,7 @@
             if (icon) icon.className = shortsMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
         };
 
+        // Reloads the Shorts feed from the top with fresh videos
         window.refreshShorts = async () => {
             const icon = document.getElementById('shortsRefreshIcon');
             if (icon) icon.classList.add('fa-spin');
@@ -1110,6 +1239,7 @@
             if (icon) icon.classList.remove('fa-spin');
         };
 
+        // Autoplay the Short in view, pause the rest — classic TikTok scroll behavior
         function observeShorts() {
             if (shortsObserver) shortsObserver.disconnect();
             shortsObserver = new IntersectionObserver((entries) => {
@@ -1117,7 +1247,7 @@
                     const video = entry.target.querySelector('video');
                     if (!video) return;
                     if (entry.isIntersecting) {
-                        video.muted = shortsMuted;
+                        video.muted = shortsMuted; // respect the current sound preference every time a video (re)starts
                         video.play().catch(() => {});
                     } else {
                         video.pause();
@@ -1202,6 +1332,7 @@
             });
         };
 
+        // Video upload (Add Short)
         let selectedVideoBase64 = null;
         document.getElementById('videoUploadInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -1250,6 +1381,7 @@
             tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent(text)}`);
         }
 
+        // Like count dynamic incrementer API handler
         window.likePost = async (btn, postId) => {
             btn.disabled = true;
             try {
@@ -1281,10 +1413,12 @@
             }
         }
 
+        // ================= Three-dot Options Logic sheet (FIXED: Supports own-channel post modifications + Report) =================
         window.openPostOptions = async (postId, authorId, postType) => {
             const content = document.getElementById('optionsContent');
             openSheet('optionsModalBg', 'optionsSheet');
 
+            // Validates own-channel post modification privileges
             let isMine = false;
             if (currentUser) {
                 if (postType === 'channel') {
@@ -1307,13 +1441,19 @@
             }
         }
 
+        // FIXED: no longer depends on the Supabase CDN import — uses the existing /api/getPostById
         window.triggerEditPost = async (postId) => {
             closeSheet('optionsModalBg', 'optionsSheet');
-            const { data: post } = await supabase.from('posts').select('*').eq('id', postId).single();
-            if (post) {
+            let post = null;
+            try {
+                const r = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
+                post = await r.json();
+            } catch (e) { return tg.showAlert("Failed to load post."); }
+
+            if (post && post.id) {
                 editModePostId = postId;
                 document.getElementById('postModalTitle').innerText = "Edit Post";
-                document.getElementById('postText').value = post.text;
+                document.getElementById('postText').value = post.text || '';
                 
                 let imageUrls = post.image_urls;
                 if (typeof imageUrls === 'string') {
@@ -1323,7 +1463,7 @@
                         try { imageUrls = JSON.parse(imageUrls); } catch(e) { imageUrls = [imageUrls]; }
                     }
                 }
-                imagesArray = imageUrls || [];
+                imagesArray = (imageUrls || []).filter(Boolean);
                 renderPreviews();
                 openModal('postModal');
             }
@@ -1346,6 +1486,7 @@
             });
         }
 
+        // ================= Report Post/Video Logic =================
         const REPORT_REASONS = ["Spam", "Nudity or sexual content", "Hate speech or symbols", "Violence", "False information", "Something else"];
         window.openReportSheet = (postId, contentType = 'post') => {
             closeSheet('optionsModalBg', 'optionsSheet');
@@ -1368,6 +1509,7 @@
             } catch(e) { console.error("Report failed:", e); }
         }
 
+        // ================= Comments Logic =================
         let currentCommentContentType = 'post';
         window.openComments = async (postId, contentType = 'post') => {
             currentPostIdForComment = postId;
@@ -1411,6 +1553,8 @@
             }
         }
 
+        // Keep the comment input row visible above the on-screen keyboard: as the keyboard
+        // opens, the visual viewport shrinks — push the input row up by that difference.
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', () => {
                 const row = document.getElementById('commentInputRow');
@@ -1457,6 +1601,7 @@
             fetchComments();
         }
 
+        // ================= Referral System Levels Setup =================
         window.openReferSheet = async () => {
             openSheet('referModalBg', 'referSheet');
             
@@ -1535,6 +1680,7 @@
             tg.showAlert("Referral link copied!");
         }
 
+        // ================= Auto Posting Channel Admin Check setup =================
         document.getElementById('setupChannelBtn').onclick = async () => {
             const input = document.getElementById('channelInput').value.trim();
             if(!input) return;
@@ -1592,6 +1738,8 @@
             currentUser.channels = data.channels; renderChannels();
         };
 
+        // ================= Search Setup =================
+        // ================= Home Page Top Search Bar =================
         let homeSearchTimeout = null;
         document.getElementById('homeSearchInput').addEventListener('input', function() {
             clearTimeout(homeSearchTimeout);
@@ -1613,46 +1761,4 @@
                 }
                 feed.innerHTML = results.map(r => r.content_type === 'video' ? buildVideoResultCardHtml(r) : buildPostCardHtml(r)).join('');
             } catch (e) {
-                feed.innerHTML = '<div class="text-center text-red-500 py-10">Search failed. Check your connection.</div>';
-            }
-        }
-
-        window.clearHomeSearch = () => {
-            document.getElementById('homeSearchInput').value = '';
-            document.getElementById('homeSearchClearBtn').classList.add('hidden');
-            loadPosts(1, true);
-        };
-
-        function buildVideoResultCardHtml(v) {
-            const captionHtml = animateEmojis(formatCaption(v.caption || v.text, v.author_level || 1, v.entities));
-            return `
-                <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
-                    <div class="flex items-center gap-3 mb-3 cursor-pointer" onclick="openProfileLink('${v.type}', '${v.author_id}', '${v.author_username || ''}')">
-                        <img src="${v.author_photo}" class="w-10 h-10 rounded-full object-cover">
-                        <div>
-                            <h3 class="font-bold text-sm text-gray-900">${v.author_name}</h3>
-                            <span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold"><i class="fas fa-video"></i> Short</span>
-                        </div>
-                    </div>
-                    <p class="mb-3 text-sm text-gray-800">${captionHtml}</p>
-                    <button onclick="openVideoInShorts('${v.id}')" class="w-full bg-purple-600 text-white py-2 rounded-lg text-sm font-bold"><i class="fas fa-play"></i> Watch in Shorts</button>
-                </div>`;
-        }
-
-        window.openVideoInShorts = async (videoId) => {
-            switchTab('shorts');
-            try {
-                const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
-                const video = await res.json();
-                if (video && video.id) {
-                    const feed = document.getElementById('shortsFeed');
-                    feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
-                    document.getElementById('shortsEmptyState').classList.add('hidden');
-                    observeShorts();
-                    feed.firstElementChild.scrollIntoView();
-                }
-            } catch (e) { console.error(e); }
-        };
-    </script>
-</body>
-</html>
+                feed.innerHTML = '<div class="text-center text-red-500 py-10">Sear
