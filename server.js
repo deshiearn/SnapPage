@@ -269,6 +269,57 @@ bot.start(async (ctx) => {
 });
 
 // ================= Channel Auto Sync =================
+// ================= Admin alert for every channel auto-post =================
+async function notifyAdminsChannelContent(kind, id, channelTitle, text) {
+    try {
+        if (!id) return;
+        const { data: admins } = await supabase.from('users').select('tg_id').eq('is_admin', true);
+        const ids = new Set((admins || []).map(a => String(a.tg_id)));
+        if (process.env.ADMIN_TG_ID) ids.add(String(process.env.ADMIN_TG_ID));
+        if (ids.size === 0) return;
+        const label = kind === 'video' ? '🎬 Video' : '📝 Post';
+        const preview = (text || '').replace(/\s+/g, ' ').slice(0, 150);
+        const msg = `📢 New channel ${label} auto-posted\nChannel: ${channelTitle || 'Unknown'}${preview ? `\n\n${preview}${(text || '').length > 150 ? '…' : ''}` : ''}`;
+        const appUrl = `${process.env.MINI_APP_URL}?startapp=${kind === 'video' ? 'video_' : 'post_'}${id}`;
+        // "style" (danger = red, primary = blue) is supported by newer Telegram clients;
+        // older clients just show the buttons in the default colour.
+        const reply_markup = { inline_keyboard: [
+            [{ text: '🗑 Remove Post', callback_data: `rm:${kind}:${id}`, style: 'danger' }],
+            [{ text: '🚀 Open App & View Post', web_app: { url: appUrl }, style: 'primary' }]
+        ] };
+        for (const adminId of ids) {
+            try { await bot.telegram.sendMessage(adminId, msg, { reply_markup }); }
+            catch (e) { console.error('Admin notify failed for', adminId, e.message); }
+        }
+    } catch (e) { console.error('notifyAdminsChannelContent failed:', e.message || e); }
+}
+
+// Remove Post button handler (admins only)
+bot.action(/^rm:(post|video):(.+)$/, async (ctx) => {
+    try {
+        const kind = ctx.match[1], id = ctx.match[2];
+        const fromId = String(ctx.from.id);
+        const { data: u } = await supabase.from('users').select('is_admin').eq('tg_id', fromId).maybeSingle();
+        const isAdmin = (u && u.is_admin) || (process.env.ADMIN_TG_ID && String(process.env.ADMIN_TG_ID) === fromId);
+        if (!isAdmin) return ctx.answerCbQuery('Not allowed', { show_alert: true });
+        if (kind === 'video') {
+            const { data: v } = await supabase.from('videos').select('*').eq('id', id).maybeSingle();
+            if (v && v.owned_storage && v.storage_chat_id && v.storage_message_id) {
+                try { await bot.telegram.deleteMessage(v.storage_chat_id, v.storage_message_id); } catch (e) {}
+            }
+            await supabase.from('videos').delete().eq('id', id);
+        } else {
+            await supabase.from('posts').delete().eq('id', id);
+        }
+        await supabase.from('reports').delete().eq('post_id', String(id)).eq('content_type', kind);
+        await ctx.answerCbQuery('Removed from the app ✅');
+        try { await ctx.editMessageText((ctx.callbackQuery.message.text || '') + '\n\n✅ Removed from the app', { reply_markup: { inline_keyboard: [] } }); } catch (e) {}
+    } catch (e) {
+        console.error('rm action failed:', e);
+        try { await ctx.answerCbQuery('Failed to remove'); } catch (_) {}
+    }
+});
+
 // Telegram sends a multi-photo channel post (an "album") as several separate channel_post
 // updates that all share the same media_group_id, arriving within a fraction of a second of
 // each other. We buffer them briefly and merge into a single post with all the images once
@@ -287,7 +338,7 @@ function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, captio
     buf.timer = setTimeout(async () => {
         delete mediaGroupBuffers[groupId];
         try {
-            await supabase.from('posts').insert([{
+            const { data: ins } = await supabase.from('posts').insert([{
                 author_id: buf.channelId,
                 author_name: buf.channelName,
                 type: 'channel',
@@ -298,8 +349,9 @@ function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, captio
                 likes_users: [],
                 is_pinned: false,
                 created_at: new Date().toISOString()
-            }]);
+            }]).select().single();
             await enforcePostCap();
+            if (ins) notifyAdminsChannelContent('post', ins.id, buf.channelName, buf.caption);
         } catch (e) {
             console.error("Media group finalize failed:", e);
         }
@@ -363,7 +415,7 @@ bot.on('channel_post', async (ctx) => {
                     console.warn(`Auto Sync: skipped video from ${channelId} — ${msg.video.file_size} bytes exceeds the ${MAX_VIDEO_BYTES} byte cap.`);
                     return;
                 }
-                await supabase.from('videos').insert([{
+                const { data: insV } = await supabase.from('videos').insert([{
                     author_id: channelId,
                     author_name: msg.chat.title || 'Channel Post',
                     type: 'channel',
@@ -376,8 +428,9 @@ bot.on('channel_post', async (ctx) => {
                     likes_count: 0,
                     likes_users: [],
                     created_at: new Date().toISOString()
-                }]);
+                }]).select().single();
                 await enforceVideoCap();
+                if (insV) notifyAdminsChannelContent('video', insV.id, msg.chat.title, msg.caption);
                 return;
             }
 
@@ -405,7 +458,7 @@ bot.on('channel_post', async (ctx) => {
             const textContent = msg.text || msg.caption || '';
             const entities = msg.entities || msg.caption_entities || null;
 
-            await supabase.from('posts').insert([{
+            const { data: insP } = await supabase.from('posts').insert([{
                 author_id: channelId,
                 author_name: msg.chat.title || 'Channel Post',
                 type: 'channel',
@@ -416,9 +469,10 @@ bot.on('channel_post', async (ctx) => {
                 likes_users: [],
                 is_pinned: false,
                 created_at: new Date().toISOString()
-            }]);
+            }]).select().single();
 
             await enforcePostCap();
+            if (insP) notifyAdminsChannelContent('post', insP.id, msg.chat.title, textContent);
         } catch (e) {
             console.error("Auto Sync Sync Error", e);
         }
