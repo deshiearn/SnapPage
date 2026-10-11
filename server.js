@@ -269,13 +269,18 @@ bot.start(async (ctx) => {
 });
 
 // ================= Channel Auto Sync =================
-// ================= Admin alert for every channel auto-post =================
+// ================= Channel-owner alert for every channel auto-post =================
 async function notifyAdminsChannelContent(kind, id, channelTitle, text) {
     try {
         if (!id) return;
-        const { data: admins } = await supabase.from('users').select('tg_id').eq('is_admin', true);
-        const ids = new Set((admins || []).map(a => String(a.tg_id)));
-        if (process.env.ADMIN_TG_ID) ids.add(String(process.env.ADMIN_TG_ID));
+        // Recipients = the user(s) who added this channel to the Mini App (its owners)
+        const table = kind === 'video' ? 'videos' : 'posts';
+        const { data: row } = await supabase.from(table).select('author_id').eq('id', id).maybeSingle();
+        if (!row) return;
+        const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+        const ids = new Set((allUsers || [])
+            .filter(u => Array.isArray(u.channels) && u.channels.some(c => String(c.id) === String(row.author_id)))
+            .map(u => String(u.tg_id)));
         if (ids.size === 0) return;
         const label = kind === 'video' ? '🎬 Video' : '📝 Post';
         const preview = (text || '').replace(/\s+/g, ' ').slice(0, 150);
@@ -294,14 +299,17 @@ async function notifyAdminsChannelContent(kind, id, channelTitle, text) {
     } catch (e) { console.error('notifyAdminsChannelContent failed:', e.message || e); }
 }
 
-// Remove Post button handler (admins only)
+// Remove Post button handler (the channel's owner, or an app admin)
 bot.action(/^rm:(post|video):(.+)$/, async (ctx) => {
     try {
         const kind = ctx.match[1], id = ctx.match[2];
         const fromId = String(ctx.from.id);
-        const { data: u } = await supabase.from('users').select('is_admin').eq('tg_id', fromId).maybeSingle();
-        const isAdmin = (u && u.is_admin) || (process.env.ADMIN_TG_ID && String(process.env.ADMIN_TG_ID) === fromId);
-        if (!isAdmin) return ctx.answerCbQuery('Not allowed', { show_alert: true });
+        const table = kind === 'video' ? 'videos' : 'posts';
+        const { data: item } = await supabase.from(table).select('author_id').eq('id', id).maybeSingle();
+        if (!item) { await ctx.answerCbQuery('Already removed'); try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (e) {} return; }
+        const { data: u } = await supabase.from('users').select('is_admin, channels').eq('tg_id', fromId).maybeSingle();
+        const ownsChannel = u && Array.isArray(u.channels) && u.channels.some(c => String(c.id) === String(item.author_id));
+        if (!(ownsChannel || (u && u.is_admin))) return ctx.answerCbQuery('Not allowed', { show_alert: true });
         if (kind === 'video') {
             const { data: v } = await supabase.from('videos').select('*').eq('id', id).maybeSingle();
             if (v && v.owned_storage && v.storage_chat_id && v.storage_message_id) {
