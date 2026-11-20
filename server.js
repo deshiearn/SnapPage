@@ -680,7 +680,7 @@ app.post('/api/getPosts', async (req, res) => {
 
 // ================= Follow system + profiles =================
 async function getFollowingIds(tgId) {
-    const { data } = await supabase.from('follows').select('followee_id').eq('follower_id', tgId).limit(1000);
+    const { data } = await supabase.from('snap_follows').select('followee_id').eq('follower_id', tgId).limit(1000);
     return (data || []).map(r => String(r.followee_id));
 }
 
@@ -705,20 +705,20 @@ app.post('/api/toggleFollow', async (req, res) => {
         if (!info) return res.status(404).json({ error: "Profile not found" });
         if (info.owners.includes(me)) return res.status(400).json({ error: "You can't follow yourself" });
 
-        const { data: existing } = await supabase.from('follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle();
+        const { data: existing } = await supabase.from('snap_follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle();
         let following;
         if (existing) {
-            const { error } = await supabase.from('follows').delete().eq('follower_id', me).eq('followee_id', target);
+            const { error } = await supabase.from('snap_follows').delete().eq('follower_id', me).eq('followee_id', target);
             if (error) throw error;
             following = false;
         } else {
-            const { error } = await supabase.from('follows').insert([{ follower_id: me, followee_id: target, followee_type: info.type }]);
+            const { error } = await supabase.from('snap_follows').insert([{ follower_id: me, followee_id: target, followee_type: info.type }]);
             if (error) throw error;
             following = true;
             const who = tgUser.first_name || 'Someone';
             info.owners.forEach(o => sendTelegramNotification(o, `👤 ${who} started following ${info.type === 'channel' ? info.name : 'you'}!`, `profile_${me}`));
         }
-        const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('followee_id', target);
+        const { count } = await supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('followee_id', target);
         res.json({ success: true, following, followers: count || 0 });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -735,10 +735,10 @@ app.post('/api/getProfile', async (req, res) => {
         const info = await resolveFollowee(target);
         if (!info) return res.status(404).json({ error: "Profile not found" });
         const [followers, following, posts, mine] = await Promise.all([
-            supabase.from('follows').select('*', { count: 'exact', head: true }).eq('followee_id', target),
-            info.type === 'user' ? supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', target) : Promise.resolve({ count: 0 }),
+            supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('followee_id', target),
+            info.type === 'user' ? supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('follower_id', target) : Promise.resolve({ count: 0 }),
             supabase.from('posts').select('*', { count: 'exact', head: true }).eq('author_id', target),
-            supabase.from('follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle()
+            supabase.from('snap_follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle()
         ]);
         res.json({
             id: target,
