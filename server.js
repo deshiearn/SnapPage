@@ -7,6 +7,10 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
+
+// Gzip/brotli-style compression for HTML, CSS, JS and JSON (falls back silently if the package isn't installed)
+try { app.use(require('compression')()); } catch (e) { console.warn('compression not installed — responses will be uncompressed'); }
+
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -1893,7 +1897,30 @@ app.post('/api/admin/wipeDatabase', requireAdminUser, requireAdminPassword, asyn
     }
 });
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// ---- Front-end delivery: HTML is tiny and never cached; CSS/JS/fonts are cached "forever"
+// because every file URL carries ?v=<deploy id>, so a new deploy automatically busts the cache.
+const fs = require('fs');
+const ASSET_VERSION = (process.env.RENDER_GIT_COMMIT || String(Date.now())).slice(0, 8);
+let indexHtmlCache = null;
+function getIndexHtml() {
+    if (!indexHtmlCache) {
+        indexHtmlCache = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace(/__V__/g, ASSET_VERSION);
+    }
+    return indexHtmlCache;
+}
+app.use('/assets', express.static(path.join(__dirname, 'assets'), {
+    maxAge: '365d',
+    immutable: true,
+    index: false,
+    setHeaders: (res, filePath) => {
+        // Fonts are referenced without ?v= from CSS, so give them a shorter lifetime
+        if (filePath.endsWith('.woff') || filePath.endsWith('.woff2')) res.setHeader('Cache-Control', 'public, max-age=2592000');
+    }
+}));
+app.get('/', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    res.type('html').send(getIndexHtml());
+});
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'indexadmin.html')));
 app.use(bot.webhookCallback('/webhook'));
 app.listen(process.env.PORT || 3000, async () => {

@@ -1,0 +1,50 @@
+/* Slim Font Awesome: only the icons this app uses, self-hosted & subsetted */
+@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff) format("woff")}
+@font-face{font-family:"FAR";font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/fa-regular.woff) format("woff")}
+.fa,.fas,.fa-solid,.far,.fa-regular{display:inline-block;font-style:normal;font-variant:normal;line-height:1;text-rendering:auto;-webkit-font-smoothing:antialiased}
+.fa,.fas,.fa-solid{font-family:"FA";font-weight:900}
+.far,.fa-regular{font-family:"FAR";font-weight:400}
+.fa-spin{animation:fa-spin 1s linear infinite}
+@keyframes fa-spin{to{transform:rotate(360deg)}}
+.fa-backward::before{content:"\f04a"}
+.fa-bolt::before{content:"\f0e7"}
+.fa-check-circle::before{content:"\f058"}
+.fa-chevron-right::before{content:"\f054"}
+.fa-comment::before{content:"\f075"}
+.fa-copy::before{content:"\f0c5"}
+.fa-crown::before{content:"\f521"}
+.fa-download::before{content:"\f019"}
+.fa-ellipsis-v::before{content:"\f142"}
+.fa-film::before{content:"\f008"}
+.fa-flag::before{content:"\f024"}
+.fa-forward::before{content:"\f04e"}
+.fa-gift::before{content:"\f06b"}
+.fa-headset::before{content:"\f590"}
+.fa-heart::before{content:"\f004"}
+.fa-home::before{content:"\f015"}
+.fa-image::before{content:"\f03e"}
+.fa-link::before{content:"\f0c1"}
+.fa-lock::before{content:"\f023"}
+.fa-paper-plane::before{content:"\f1d8"}
+.fa-pause::before{content:"\f04c"}
+.fa-pen::before{content:"\f304"}
+.fa-play::before{content:"\f04b"}
+.fa-play-circle::before{content:"\f144"}
+.fa-plus::before{content:"\2b"}
+.fa-robot::before{content:"\f544"}
+.fa-rotate-right::before{content:"\f2f9"}
+.fa-search::before{content:"\f002"}
+.fa-share::before{content:"\f064"}
+.fa-spinner::before{content:"\f110"}
+.fa-thumbtack::before{content:"\f08d"}
+.fa-times::before{content:"\f00d"}
+.fa-times-circle::before{content:"\f057"}
+.fa-tools::before{content:"\f7d9"}
+.fa-trash::before{content:"\f1f8"}
+.fa-trash-alt::before{content:"\f2ed"}
+.fa-user-shield::before{content:"\f505"}
+.fa-users::before{content:"\f0c0"}
+.fa-video::before{content:"\f03d"}
+.fa-video-slash::before{content:"\f4e2"}
+.fa-volume-mute::before{content:"\f6a9"}
+.fa-volume-up::before{content:"\f028"}
