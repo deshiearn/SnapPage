@@ -200,6 +200,7 @@ async function initApp() {
     // 3. Load Feed — must finish before we try to pin a shared post on top of it
     try {
         loadTrendingTags();
+        loadStories();
         await loadPosts(1, true);
         await loadSupportLink();
 

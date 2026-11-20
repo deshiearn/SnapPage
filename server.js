@@ -2135,6 +2135,95 @@ function getIndexHtml() {
     }
     return indexHtmlCache;
 }
+// ================= Stories (24-hour image status) =================
+// Images live in the Telegram storage channel (like post images); only a small row per story is kept here.
+// Rows are cached for 20s and expired ones are purged every ~30 min, so the free database barely notices them.
+const STORY_TTL_MS = 24 * 3600 * 1000;
+const MAX_ACTIVE_STORIES_PER_USER = 5;
+let storyCache = { exp: 0, rows: [] };
+let lastStoryPurge = 0;
+
+async function getActiveStories() {
+    if (storyCache.exp > Date.now()) return storyCache.rows;
+    const since = new Date(Date.now() - STORY_TTL_MS).toISOString();
+    const { data, error } = await supabase.from('stories').select('id, author_id, author_name, image_url, caption, created_at')
+        .gte('created_at', since).order('created_at', { ascending: true }).limit(400);
+    if (error) throw error;
+    storyCache = { exp: Date.now() + 20 * 1000, rows: data || [] };
+    if (Date.now() - lastStoryPurge > 30 * 60 * 1000) {
+        lastStoryPurge = Date.now();
+        supabase.from('stories').delete().lt('created_at', since).then(() => {}, () => {});
+    }
+    return storyCache.rows;
+}
+
+app.post('/api/getStories', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        const me = tgUser.id.toString();
+        const rows = await getActiveStories();
+        const groups = new Map();
+        rows.forEach(r => {
+            const g = groups.get(r.author_id) || { author_id: r.author_id, author_name: r.author_name, stories: [], latest: 0 };
+            g.stories.push({ id: r.id, image_url: r.image_url, caption: r.caption, created_at: r.created_at });
+            g.latest = Math.max(g.latest, new Date(r.created_at).getTime());
+            groups.set(r.author_id, g);
+        });
+        const list = [...groups.values()];
+        const following = new Set(await getFollowingIds(me));
+        const rank = g => g.author_id === me ? 0 : (following.has(g.author_id) ? 1 : 2);
+        list.sort((a, b) => rank(a) - rank(b) || b.latest - a.latest);
+        const top = list.slice(0, 40);
+        const enriched = await enrichAuthors(top.map(g => ({ type: 'user', author_id: g.author_id, author_name: g.author_name })));
+        res.json(top.map((g, i) => ({
+            author_id: g.author_id, author_name: g.author_name,
+            author_photo: enriched[i].author_photo, author_verified: enriched[i].author_verified,
+            isMe: g.author_id === me, stories: g.stories
+        })));
+    } catch (e) {
+        console.error('getStories failed (run sql/10_stories.sql?):', e.message || e);
+        res.json([]);
+    }
+});
+
+app.post('/api/createStory', async (req, res) => {
+    const { initData, image } = req.body;
+    const caption = String(req.body.caption || '').slice(0, 200);
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    if (!image || typeof image !== 'string' || image.length > 8 * 1024 * 1024) return res.status(400).json({ error: "Image missing or too large" });
+    try {
+        const user = await getOrCreateUser(tgUser);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        const me = tgUser.id.toString();
+        const since = new Date(Date.now() - STORY_TTL_MS).toISOString();
+        const { count, error: cErr } = await supabase.from('stories').select('*', { count: 'exact', head: true }).eq('author_id', me).gte('created_at', since);
+        if (cErr) return res.status(500).json({ error: "Stories need a database update: run sql/10_stories.sql in Supabase, then try again." });
+        if ((count || 0) >= MAX_ACTIVE_STORIES_PER_USER) return res.status(429).json({ error: `You can have up to ${MAX_ACTIVE_STORIES_PER_USER} stories at a time. Delete one or wait 24 hours.` });
+
+        const imageUrl = await uploadImageToTelegram(image);
+        if (!imageUrl) return res.status(500).json({ error: "Image upload failed. Ask the admin to check the storage channel setup." });
+
+        const { error } = await supabase.from('stories').insert([{ author_id: me, author_name: user.name, image_url: imageUrl, caption, created_at: new Date().toISOString() }]);
+        if (error) throw error;
+        storyCache.exp = 0;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
+
+app.post('/api/deleteStory', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        await supabase.from('stories').delete().match({ id: req.body.id, author_id: tgUser.id.toString() });
+        storyCache.exp = 0;
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message || e }); }
+});
+
 // ================= Weekly channel report (sent to channel owners via the bot) =================
 async function sendWeeklyChannelReports() {
     const since = new Date(Date.now() - 7 * 86400000).toISOString();
