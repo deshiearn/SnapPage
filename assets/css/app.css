@@ -147,3 +147,14 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 .dark-mode .trend-chip { background: rgba(10,132,255,.18); color: #64b5ff; }
+
+/* Reactions */
+.react-btn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.react-emoji { display: inline-block; line-height: 1; font-size: 16px; }
+#reactionPicker { position: fixed; z-index: 120; display: flex; gap: 2px; padding: 6px 8px; border-radius: 9999px; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+#reactionPicker.hidden { display: none; }
+.react-opt { font-size: 26px; line-height: 1; padding: 4px 6px; border-radius: 9999px; transition: transform .15s ease; animation: reactIn .28s cubic-bezier(.22,1.5,.36,1) backwards; }
+.react-opt:active { transform: scale(1.5) translateY(-6px); }
+@keyframes reactIn { from { opacity: 0; transform: translateY(14px) scale(.4); } to { opacity: 1; transform: none; } }
+.dark-mode #reactionPicker { background: #2c2c2e; }
+.dark-mode #replyBar { background: rgba(10,132,255,.18); color: #64b5ff; }

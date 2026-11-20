@@ -90,7 +90,8 @@ function buildPostCardHtml(post) {
 
     const captionHtml = animateEmojis(formatCaption(post.text, post.author_level || 1, post.entities));
     const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
-    const likeCount = post.likes_count || 0;
+    const myReaction = currentUser && post.reactions ? (post.reactions[currentUser.tg_id] || '') : '';
+    const likeCount = (post.likes_count || 0) + Object.keys(post.reactions || {}).length;
     const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
     const pinnedBadge = post.is_pinned ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold ml-1"><i class="fas fa-thumbtack"></i> Pinned</span>' : '';
 
@@ -116,8 +117,8 @@ function buildPostCardHtml(post) {
             <div class="mb-3 see-more-spacer"></div>
             ${imgHtml}
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
-                <button onclick="likePost(this, '${post.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
-                    <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
+                <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
+                    <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
                 </button>
                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> Comment</button>
                 <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> Share</button>

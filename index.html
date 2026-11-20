@@ -159,6 +159,9 @@
         </div>
     </div>
 
+    <!-- REACTION PICKER (long-press the Like button) -->
+    <div id="reactionPicker" class="hidden"></div>
+
     <!-- PROFILE BOTTOM SHEET -->
     <div id="profileModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="profileSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[88vh] flex flex-col shadow-2xl">
@@ -194,6 +197,10 @@
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
+            <div id="replyBar" class="hidden flex items-center justify-between text-xs bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 mb-2">
+                <span>Replying to <b id="replyBarName"></b></span>
+                <button onclick="cancelReply()" class="text-blue-400"><i class="fas fa-times"></i></button>
+            </div>
             <div id="commentInputRow" class="flex gap-2">
                 <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900 animate-none" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
@@ -283,6 +290,7 @@
     <script src="/assets/js/actions.js?v=__V__" defer></script>
     <script src="/assets/js/extras.js?v=__V__" defer></script>
     <script src="/assets/js/profile.js?v=__V__" defer></script>
+    <script src="/assets/js/reactions.js?v=__V__" defer></script>
     <script src="/assets/js/boot.js?v=__V__" defer></script>
 </body>
 </html>
