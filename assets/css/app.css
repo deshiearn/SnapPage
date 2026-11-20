@@ -158,3 +158,12 @@ body {
 @keyframes reactIn { from { opacity: 0; transform: translateY(14px) scale(.4); } to { opacity: 1; transform: none; } }
 .dark-mode #reactionPicker { background: #2c2c2e; }
 .dark-mode #replyBar { background: rgba(10,132,255,.18); color: #64b5ff; }
+
+/* Reaction chips under a post (like Telegram) */
+.react-row:empty { display: none; }
+.react-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 9999px; font-size: 13px; background: #f3f4f6; color: #374151; border: 1px solid transparent; transition: transform .15s ease, background .2s ease; }
+.react-chip b { font-size: 12px; font-weight: 700; }
+.react-chip:active { transform: scale(.92); }
+.react-chip.mine { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+.dark-mode .react-chip { background: #3a3a3c; color: #e5e5ea; }
+.dark-mode .react-chip.mine { background: rgba(10,132,255,.25); color: #64b5ff; border-color: rgba(10,132,255,.5); }

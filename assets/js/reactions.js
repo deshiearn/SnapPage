@@ -21,17 +21,52 @@ function showReactionPicker(btn) {
     try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
 }
 
-window.pickReaction = async (emoji) => {
-    const btn = pickerTarget;
-    hideReactionPicker();
-    if (!btn) return;
-    const kind = btn.dataset.react, id = btn.dataset.id;
-    const hearted = (btn.querySelector('i') || {}).className && btn.querySelector('i').className.includes('fas fa-heart') && !btn.querySelector('i').classList.contains('hidden');
-    if (emoji === '❤️') {
-        // classic like: only needs a tap if the heart isn't already on
-        if (!hearted) { kind === 'video' ? likeVideo(btn, id) : likePost(btn, id); }
-        return;
+// ---- Reaction summary row (like Telegram: ❤️ 3  😂 2  🔥 1 — your own reaction is highlighted) ----
+function reactionTotals(hearts, reactions) {
+    const counts = {};
+    if (hearts > 0) counts['❤️'] = hearts;
+    Object.values(reactions || {}).forEach(e => { counts[e] = (counts[e] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function buildReactionRowHtml(kind, id, hearts, reactions, hasHearted) {
+    const mine = currentUser && reactions ? reactions[currentUser.tg_id] : '';
+    const chips = reactionTotals(hearts, reactions);
+    if (kind === 'video') {
+        // compact stack for the Shorts side column
+        return chips.slice(0, 3).map(([e]) => e).join('');
     }
+    return chips.map(([e, n]) => {
+        const isMine = e === '❤️' ? hasHearted : e === mine;
+        return `<button class="react-chip ${isMine ? 'mine' : ''}" onclick="chipReact('${kind}','${id}','${e}')"><span>${e}</span><b>${n}</b></button>`;
+    }).join('');
+}
+
+// Called after every like / react response so all copies of the card (feed, profile, search) stay in sync
+function syncReactionUI(kind, id, data) {
+    if (!data) return;
+    document.querySelectorAll(`[data-react-row="${kind}:${id}"]`).forEach(row => {
+        row.innerHTML = buildReactionRowHtml(kind, id, data.hearts || 0, data.reactions || {}, !!data.hasLiked);
+    });
+    document.querySelectorAll(`[data-react="${kind}"][data-id="${id}"]`).forEach(btn => {
+        const countEl = btn.querySelector('.like-count'); if (countEl) countEl.innerText = data.likesCount;
+        const emo = btn.querySelector('.react-emoji'), icon = btn.querySelector('i');
+        const mine = currentUser && data.reactions ? data.reactions[currentUser.tg_id] : '';
+        const big = kind === 'video' ? ' text-2xl' : '';
+        if (mine) {
+            emo.textContent = mine; emo.classList.remove('hidden'); icon.classList.add('hidden');
+        } else {
+            emo.classList.add('hidden'); icon.classList.remove('hidden');
+            icon.className = (data.hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart') + big;
+        }
+        if (kind === 'post') {
+            btn.classList.toggle('text-red-500', !!(mine || data.hasLiked));
+            btn.classList.toggle('font-bold', !!(mine || data.hasLiked));
+        }
+    });
+}
+
+async function sendReaction(kind, id, emoji) {
     try {
         const res = await fetch('/api/react', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -39,19 +74,33 @@ window.pickReaction = async (emoji) => {
         });
         const data = await res.json();
         if (!data || !data.success) { tg.showAlert((data && data.error) || 'Could not react'); return; }
-        const countEl = btn.querySelector('.like-count'); if (countEl) countEl.innerText = data.likesCount;
-        const emo = btn.querySelector('.react-emoji'), icon = btn.querySelector('i');
-        if (data.myReaction) {
-            emo.textContent = data.myReaction; emo.classList.remove('hidden'); icon.classList.add('hidden');
-            emo.classList.remove('icon-pop'); void emo.offsetWidth; emo.classList.add('icon-pop');
-            btn.classList.add('text-red-500', 'font-bold');
-        } else {
-            emo.classList.add('hidden'); icon.classList.remove('hidden');
-            icon.className = (kind === 'video' ? 'far fa-heart text-2xl' : 'far fa-heart');
-            btn.classList.remove('text-red-500', 'font-bold');
-        }
+        syncReactionUI(kind, id, data);
         try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
     } catch (e) { tg.showAlert('Could not react. Check your connection.'); }
+}
+
+// Tapping a chip toggles that reaction for you
+window.chipReact = (kind, id, emoji) => {
+    if (emoji === '❤️') {
+        const btn = document.querySelector(`[data-react="${kind}"][data-id="${id}"]`);
+        if (btn) (kind === 'video' ? likeVideo(btn, id) : likePost(btn, id));
+        return;
+    }
+    sendReaction(kind, id, emoji);
+};
+
+window.pickReaction = async (emoji) => {
+    const btn = pickerTarget;
+    hideReactionPicker();
+    if (!btn) return;
+    const kind = btn.dataset.react, id = btn.dataset.id;
+    if (emoji === '❤️') {
+        const icon = btn.querySelector('i');
+        const hearted = icon && icon.className.includes('fas fa-heart') && !icon.classList.contains('hidden');
+        if (!hearted) { kind === 'video' ? likeVideo(btn, id) : likePost(btn, id); }
+        return;
+    }
+    sendReaction(kind, id, emoji);
 };
 
 document.addEventListener('pointerdown', (e) => {

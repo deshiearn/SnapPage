@@ -25,6 +25,7 @@ window.likePost = async (btn, postId) => {
             btn.classList.toggle('font-bold', data.hasLiked);
             const emo = btn.querySelector('.react-emoji'); if (emo) emo.classList.add('hidden');
             const icon = btn.querySelector('i');
+            syncReactionUI('post', postId, data);
             if (icon) { icon.classList.remove('icon-pop'); void icon.offsetWidth; icon.classList.add('icon-pop'); }
             if (data.hasLiked) {
                 icon.className = 'fas fa-heart text-red-500';

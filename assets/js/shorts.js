@@ -85,6 +85,7 @@ function renderShortItem(v) {
             <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn flex flex-col items-center gap-1">
                 <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
                 <span class="text-xs like-count">${shortLikeCount}</span>
+                <span class="text-sm leading-none" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="flex flex-col items-center gap-1">
                 <i class="fas fa-comment text-2xl"></i>
@@ -240,6 +241,7 @@ window.likeVideo = async (btn, videoId) => {
         if (data && data.success) {
             btn.querySelector('.like-count').innerText = data.likesCount;
             const emo = btn.querySelector('.react-emoji'); if (emo) emo.classList.add('hidden');
+            syncReactionUI('video', videoId, data);
             const icon = btn.querySelector('i');
             icon.className = (data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl') + ' icon-pop';
         }

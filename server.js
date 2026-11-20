@@ -1086,7 +1086,7 @@ app.post('/api/likePost', async (req, res) => {
             const { error: updateErr } = await supabase.from('posts').update(upd).eq('id', postId);
             if (updateErr) throw updateErr;
 
-            res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked });
+            res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked, hearts: likesCount, reactions });
         } else {
             res.status(404).json({ error: "Post not found" });
         }
@@ -1105,6 +1105,28 @@ async function insertReportRow(row) {
     }
     return error;
 }
+
+// ================= View counts =================
+// The client batches the ids of posts/videos that were on screen for a moment and sends them every few seconds.
+// bump_views() (sql/09) increments them in ONE query, so this stays cheap on the free database.
+const viewRate = new Map();
+app.post('/api/trackViews', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    const uid = tgUser.id.toString();
+    const now = Date.now();
+    const recent = (viewRate.get(uid) || []).filter(t => now - t < 60000);
+    if (recent.length >= 20) return res.json({ success: true, skipped: true });
+    recent.push(now); viewRate.set(uid, recent);
+    if (viewRate.size > 20000) viewRate.delete(viewRate.keys().next().value);
+    const clean = (arr) => [...new Set((Array.isArray(arr) ? arr : []).map(String))].filter(x => /^[A-Za-z0-9-]{1,40}$/.test(x)).slice(0, 30);
+    try {
+        const posts = clean(req.body.posts), videos = clean(req.body.videos);
+        if (posts.length) await supabase.rpc('bump_views', { tbl: 'posts', ids: posts });
+        if (videos.length) await supabase.rpc('bump_views', { tbl: 'videos', ids: videos });
+        res.json({ success: true });
+    } catch (e) { res.json({ success: false }); }
+});
 
 // ================= Reactions (long-press the Like button) =================
 // ❤️ is the classic like (likes_users). Every other emoji is stored in the "reactions" JSON column as
@@ -1142,7 +1164,7 @@ app.post('/api/react', async (req, res) => {
         }
         const { error: updErr } = await supabase.from(table).update({ reactions, likes_users: likesUsers, likes_count: likesCount }).eq('id', id);
         if (updErr) throw updErr;
-        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, myReaction, hasLiked: false });
+        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, myReaction, hasLiked: likesUsers.includes(uid), hearts: likesCount, reactions });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -1659,7 +1681,7 @@ app.post('/api/likeVideo', async (req, res) => {
         let reactions = video.reactions || {};
         if (hasLiked && reactions[userId]) { reactions = { ...reactions }; delete reactions[userId]; upd.reactions = reactions; }
         await supabase.from('videos').update(upd).eq('id', videoId);
-        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked });
+        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked, hearts: likesCount, reactions });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -2113,6 +2135,63 @@ function getIndexHtml() {
     }
     return indexHtmlCache;
 }
+// ================= Weekly channel report (sent to channel owners via the bot) =================
+async function sendWeeklyChannelReports() {
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    const channelMap = await getChannelMap();
+    const byOwner = new Map();
+    channelMap.forEach(({ ch, owner }, channelId) => {
+        const list = byOwner.get(String(owner.tg_id)) || [];
+        list.push({ id: channelId, name: ch.name || 'Channel' });
+        byOwner.set(String(owner.tg_id), list);
+    });
+    let sent = 0;
+    for (const [ownerId, channels] of byOwner) {
+        const blocks = [];
+        for (const ch of channels) {
+            const { data: posts } = await supabase.from('posts').select('id, views, likes_count, reactions').eq('author_id', ch.id).gte('created_at', since).limit(500);
+            const list = posts || [];
+            const views = list.reduce((a, p) => a + (p.views || 0), 0);
+            const reacts = list.reduce((a, p) => a + (p.likes_count || 0) + Object.keys(p.reactions || {}).length, 0);
+            let comments = 0;
+            if (list.length) {
+                const { count } = await supabase.from('comments').select('*', { count: 'exact', head: true }).in('post_id', list.map(p => String(p.id))).gte('created_at', since);
+                comments = count || 0;
+            }
+            const { count: followers } = await supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('followee_id', ch.id).gte('created_at', since);
+            if (!list.length && !followers) continue;   // nothing to report for a quiet channel
+            blocks.push(`📣 ${ch.name}\n📝 ${list.length} new posts · 👁 ${views} views\n❤️ ${reacts} reactions · 💬 ${comments} comments\n👤 +${followers || 0} followers`);
+        }
+        if (blocks.length) {
+            await sendTelegramNotification(ownerId, `📊 Your weekly channel report\n\n${blocks.join('\n\n')}`, '');
+            sent++;
+        }
+    }
+    return sent;
+}
+
+// Checked hourly; runs once on Sunday ~10:00 Bangladesh time (04:00 UTC). The week id stored in app_settings
+// prevents a double send after a restart.
+async function weeklyReportTick() {
+    try {
+        const now = new Date();
+        if (now.getUTCDay() !== 0 || now.getUTCHours() !== 4) return;
+        const weekId = now.toISOString().slice(0, 10);
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'weekly_report_last').maybeSingle();
+        if (data && data.value === weekId) return;
+        await supabase.from('app_settings').upsert([{ key: 'weekly_report_last', value: weekId }]);
+        const n = await sendWeeklyChannelReports();
+        console.log(`Weekly reports sent to ${n} channel owner(s)`);
+    } catch (e) { console.error('weekly report failed:', e.message || e); }
+}
+setInterval(weeklyReportTick, 60 * 60 * 1000);
+
+// Admin: send the weekly reports right now (handy for testing)
+app.post('/api/admin/sendWeeklyReports', requireAdminUser, requireAdminPassword, async (req, res) => {
+    try { res.json({ success: true, sent: await sendWeeklyChannelReports() }); }
+    catch (e) { res.status(500).json({ error: e.message || e }); }
+});
+
 // Lightweight health check (also what the self-ping below hits)
 app.get('/healthz', (req, res) => res.type('text').send('ok'));
 
