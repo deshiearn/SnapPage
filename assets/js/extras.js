@@ -199,3 +199,30 @@ window.openVideoInShorts = async (videoId) => {
         }
     } catch (e) { console.error(e); }
 };
+
+// ================= Hashtags + trending =================
+window.searchHashtag = (tag) => {
+    // Close any open sheet (profile, comments...) so the results are visible
+    while (openModalsStack.length) {
+        const last = openModalsStack[openModalsStack.length - 1];
+        if (SHEET_MAP[last]) closeSheet(last, SHEET_MAP[last]); else closeModal(last);
+        if (openModalsStack[openModalsStack.length - 1] === last) openModalsStack.pop();
+    }
+    switchTab('home');
+    const input = document.getElementById('homeSearchInput');
+    input.value = '#' + tag;
+    performHomeSearch('#' + tag);
+    try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
+};
+
+async function loadTrendingTags() {
+    try {
+        const res = await fetch('/api/trendingTags');
+        const tags = await res.json();
+        const box = document.getElementById('trendingTags');
+        if (!box || !tags || !tags.length) return;
+        box.innerHTML = '<span class="text-[11px] font-bold text-gray-400 flex-shrink-0 self-center">Trending</span>' +
+            tags.map(t => `<button onclick="searchHashtag('${t.tag.slice(1)}')" class="trend-chip">${escapeHtml(t.tag)}</button>`).join('');
+        box.classList.remove('hidden');
+    } catch (e) {}
+}

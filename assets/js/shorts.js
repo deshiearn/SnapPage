@@ -228,6 +228,7 @@ window.shareVideoDirectly = (id) => {
 
 window.likeVideo = async (btn, videoId) => {
     btn.disabled = true;
+    try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {}
     try {
         const res = await fetch('/api/likeVideo', {
             method: 'POST', headers: {'Content-Type': 'application/json'},

@@ -62,7 +62,26 @@ function entitiesToHtml(text, entities, level) {
     return html;
 }
 
+// Turn #hashtags (any language) into tappable links that search the feed. Skips text already inside <a>.
+function linkifyHashtags(html) {
+    let depth = 0;
+    return html.split(/(<[^>]*>)/).map(part => {
+        if (part.startsWith('<')) {
+            if (/^<a[\s>]/i.test(part)) depth++;
+            else if (/^<\/a>/i.test(part)) depth = Math.max(0, depth - 1);
+            return part;
+        }
+        if (depth > 0) return part;
+        return part.replace(/(^|[\s(])#([\p{L}\p{M}\p{N}_]{2,30})/gu, (m, pre, tag) =>
+            `${pre}<a href="#" onclick="event.preventDefault();searchHashtag('${tag}')" class="text-blue-500 font-semibold">#${tag}</a>`);
+    }).join('');
+}
+
 function formatCaption(text, level, entities) {
+    return linkifyHashtags(formatCaptionBase(text, level, entities));
+}
+
+function formatCaptionBase(text, level, entities) {
     if (!text) return '';
     const richHtml = entitiesToHtml(text, entities, level);
     if (richHtml !== null) return richHtml;

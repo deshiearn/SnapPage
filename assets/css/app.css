@@ -141,3 +141,9 @@ body {
 .dark-mode .feed-chip.active { background: #0a84ff; color: #fff; border-color: #0a84ff; }
 .dark-mode .follow-btn.following { background: #48484a; color: #f2f2f7; }
 .dark-mode .profile-stat span { color: #a1a1a6; }
+
+.trend-chip { flex-shrink: 0; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: #eff6ff; color: #2563eb; transition: transform .15s ease; }
+.trend-chip:active { transform: scale(.94); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.dark-mode .trend-chip { background: rgba(10,132,255,.18); color: #64b5ff; }
