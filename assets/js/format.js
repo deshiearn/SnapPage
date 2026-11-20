@@ -114,6 +114,7 @@ document.getElementById('imageUpload').addEventListener('change', function(e) {
 });
 
 function renderPreviews() {
+    if (typeof syncPostMB === 'function') syncPostMB();
     const c = document.getElementById('imgPreviewContainer');
     c.innerHTML = '';
     imagesArray.forEach((src, idx) => {
@@ -126,11 +127,19 @@ function renderPreviews() {
 window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
 // Create / Edit Post Submission
-document.getElementById('submitPostBtn').addEventListener('click', async () => {
+const postBtn = document.getElementById('submitPostBtn');
+const postReady = () => !!(document.getElementById('postText').value.trim() || imagesArray.length);
+function syncPostMB() { if (window.MB) MB.update('postModal', { active: postReady(), text: editModePostId ? 'Save' : 'Post' }); }
+window.MB_SCREENS.postModal = () => MB.show('postModal', { text: editModePostId ? 'Save' : 'Post', active: postReady(), onClick: () => submitPost(), inPage: postBtn });
+document.getElementById('postText').addEventListener('input', syncPostMB);
+
+postBtn.addEventListener('click', () => submitPost());
+async function submitPost() {
     const text = document.getElementById('postText').value;
     if(!text && imagesArray.length === 0) return;
-    const btn = document.getElementById('submitPostBtn');
+    const btn = postBtn;
     btn.innerText = "Processing..."; btn.disabled = true;
+    if (window.MB) MB.update('postModal', { busy: true, active: true });
 
     try {
         if (editModePostId) {
@@ -174,6 +183,7 @@ document.getElementById('submitPostBtn').addEventListener('click', async () => {
         tg.showAlert(`Failed to publish: ${e.message || e}`);
     }
     
+    if (window.MB) MB.update('postModal', { busy: false });
     closeModal('postModal');
     document.getElementById('postText').value = '';
     imagesArray = []; 
@@ -181,4 +191,4 @@ document.getElementById('submitPostBtn').addEventListener('click', async () => {
     btn.innerText = "Post"; btn.disabled = false;
     editModePostId = null;
     loadPosts(1, true);
-});
+}

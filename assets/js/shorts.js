@@ -76,7 +76,7 @@ function renderShortItem(v) {
             </div>
         </div>
 
-        <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 60px);" onclick="openProfile('${v.author_id}')">
+        <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);" onclick="openProfile('${v.author_id}')">
             <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
             <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
         </div>

@@ -70,7 +70,7 @@
     <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
         <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
 
-        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(env(safe-area-inset-top, 24px) + 60px);">
+        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);">
             <button onclick="toggleShortsSound()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
                 <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
             </button>
@@ -164,7 +164,7 @@
     <input type="file" id="storyFileInput" accept="image/*" class="hidden">
 
     <div id="storyCompose" class="hidden fixed inset-0 bg-black z-[130] flex flex-col">
-        <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(env(safe-area-inset-top, 0px) + 56px);">
+        <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 56px);">
             <button onclick="closeModal('storyCompose')" class="text-sm font-bold opacity-80">Cancel</button>
             <span class="font-bold">New story</span>
             <button id="storyShareBtn" onclick="shareStory()" class="text-sm font-bold bg-blue-600 px-4 py-1.5 rounded-full">Share</button>
@@ -176,7 +176,7 @@
     <div id="storyViewer" class="hidden fixed inset-0 bg-black z-[140] select-none">
         <img id="storyImg" class="absolute inset-0 w-full h-full object-contain">
         <div id="storyZone" class="absolute inset-0"></div>
-        <div class="absolute top-0 left-0 right-0 px-3 pointer-events-none" style="padding-top: calc(env(safe-area-inset-top, 0px) + 52px); background: linear-gradient(rgba(0,0,0,.55), transparent);">
+        <div class="absolute top-0 left-0 right-0 px-3 pointer-events-none" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 52px); background: linear-gradient(rgba(0,0,0,.55), transparent);">
             <div id="storyBars" class="flex gap-1 mb-3"></div>
             <div class="flex items-center gap-2 text-white pb-3">
                 <img id="storyAvatar" class="w-8 h-8 rounded-full object-cover border border-white/60">
@@ -314,6 +314,7 @@
         <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
+    <script src="/assets/js/theme.js?v=__V__" defer></script>
     <script src="/assets/js/core.js?v=__V__" defer></script>
     <script src="/assets/js/ui.js?v=__V__" defer></script>
     <script src="/assets/js/format.js?v=__V__" defer></script>

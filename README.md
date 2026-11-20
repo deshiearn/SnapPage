@@ -73,6 +73,12 @@ New **Web Service** from this repo — Build: `npm install`, Start: `npm start`.
 
 `RENDER_EXTERNAL_URL` is provided by Render automatically (used for the webhook and the keep-alive ping).
 
+## Telegram look & feel
+
+- **Theme colours** – `assets/js/theme.js` reads `Telegram.WebApp.themeParams` and exposes them as CSS variables (`--app-bg`, `--app-surface`, `--app-text`, `--app-hint`, `--app-link`, `--app-accent`, ...). It re-applies on `themeChanged`, so switching Telegram's theme updates the app live. If a client sends no params, built-in light/dark defaults are used. Header, background and bottom-bar colours are also set (`setHeaderColor`, `setBackgroundColor`, `setBottomBarColor`, version-guarded).
+- **MainButton** – the native bottom button is used for *Post / Save* (composer), *Share Story* and *Invite Friends* (referral sheet; opens Telegram's share sheet). It shows a progress spinner while uploading and is disabled for an empty post. Outside Telegram (or on very old clients) the in-page buttons stay visible instead. Register a new screen with `MB_SCREENS['<modalId>'] = () => MB.show(...)`.
+- **Safe areas** – `--top-inset` follows `safeAreaInset` + `contentSafeAreaInset` in fullscreen (Bot API 8.0+), falling back to CSS `env()`.
+
 ## Working within the free tiers
 The app is designed so that normal growth does not hit a limit:
 
