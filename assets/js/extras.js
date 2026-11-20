@@ -66,6 +66,13 @@ window.openReferSheet = async () => {
     }
 };
 
+// Native "Invite Friends" button → Telegram's share sheet
+window.MB_SCREENS.referModalBg = () => MB.show('referModalBg', { text: 'Invite Friends', onClick: () => {
+    const link = document.getElementById('referInputLink').value;
+    if (!link) return;
+    tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent('Join me on SnapPages!'));
+} });
+
 window.copyReferLinkDirect = () => {
     const input = document.getElementById('referInputLink');
     input.select();

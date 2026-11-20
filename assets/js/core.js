@@ -24,16 +24,8 @@ try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
 setTimeout(() => { const l = document.getElementById('appLoadingScreen'); if (l) l.classList.add('hidden'); }, 10000);
 
 // Automatic Dark / Light mode detection
-function applyAutoTheme() {
-    if (tg.colorScheme === 'dark') {
-        document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
-        document.body.classList.remove('bg-gray-100', 'text-gray-900');
-    } else {
-        document.body.classList.remove('bg-gray-900', 'text-white', 'dark-mode');
-        document.body.classList.add('bg-gray-100', 'text-gray-900');
-    }
-}
-tg.onEvent('themeChanged', applyAutoTheme);
+// Theme is handled by theme.js (applyTheme + themeChanged listener)
+function applyAutoTheme() { applyTheme(); }
 applyAutoTheme();
 
 function getTelegramUser() {

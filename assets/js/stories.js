@@ -73,10 +73,13 @@ document.getElementById('storyFileInput').addEventListener('change', (e) => {
 });
 let storyDraft = null;
 
+window.MB_SCREENS.storyCompose = () => MB.show('storyCompose', { text: 'Share Story', onClick: () => shareStory(), inPage: document.getElementById('storyShareBtn') });
+
 window.shareStory = async () => {
     if (!storyDraft) return;
     const btn = document.getElementById('storyShareBtn');
     btn.disabled = true; btn.innerText = 'Sharing...';
+    if (window.MB) MB.update('storyCompose', { busy: true });
     try {
         const res = await fetch('/api/createStory', { method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ initData: tg.initData, image: storyDraft, caption: document.getElementById('storyCaption').value.trim() }) });
@@ -90,6 +93,7 @@ window.shareStory = async () => {
             tg.showAlert((data && data.error) || 'Could not share your story');
         }
     } catch (e) { tg.showAlert('Could not share your story. Check your connection.'); }
+    if (window.MB) MB.update('storyCompose', { busy: false });
     btn.disabled = false; btn.innerText = 'Share';
 };
 

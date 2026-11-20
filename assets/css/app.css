@@ -53,49 +53,49 @@ main:not(.hidden), #tab-shorts:not(.hidden) { animation: tabIn .35s ease-out; }
 
 /* Safe top area for Telegram Header overlapping prevention */
 body {
-    padding-top: env(safe-area-inset-top, 24px);
+    padding-top: var(--top-inset, env(safe-area-inset-top, 24px));
 }
 
 /* Dark Mode — dark grey theme with full contrast coverage */
-.dark-mode { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
-.dark-mode header { background-color: rgba(28,28,30,0.92) !important; border-bottom: 1px solid #38383a; }
-.dark-mode .bg-white { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
-.dark-mode #appLoadingScreen, .dark-mode #maintenanceOverlay { background-color: #1c1c1e !important; }
-.dark-mode .text-gray-900, .dark-mode .text-gray-800, .dark-mode .text-gray-700, .dark-mode .text-gray-600 { color: #f2f2f7 !important; }
-.dark-mode .text-gray-500, .dark-mode .text-gray-400 { color: #a1a1a6 !important; }
-.dark-mode .border, .dark-mode .border-b, .dark-mode .border-t { border-color: #3a3a3c !important; }
-.dark-mode .bg-gray-50 { background-color: #3a3a3c !important; color: #f2f2f7 !important; }
-.dark-mode .bg-gray-100, .dark-mode .bg-gray-200 { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
-.dark-mode .hover\:bg-gray-50:hover { background-color: #3a3a3c !important; }
-.dark-mode .bottom-nav { background: rgba(44,44,46,0.92) !important; border-color: #48484a !important; }
-.dark-mode .bottom-sheet { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
-.dark-mode input, .dark-mode textarea, .dark-mode select { background-color: #3a3a3c !important; color: #fff !important; border-color: #48484a !important; }
-.dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #8e8e93 !important; }
-.dark-mode .bg-blue-50 { background-color: rgba(10,132,255,0.15) !important; } .dark-mode .bg-blue-100 { background-color: rgba(10,132,255,0.22) !important; }
+.dark-mode { background-color: var(--app-bg) !important; color: var(--app-text) !important; }
+.dark-mode header { background-color: var(--app-bg-glass) !important; border-bottom: 1px solid var(--app-sep); }
+.dark-mode .bg-white { background-color: var(--app-surface) !important; color: var(--app-text) !important; }
+.dark-mode #appLoadingScreen, .dark-mode #maintenanceOverlay { background-color: var(--app-bg) !important; }
+.dark-mode .text-gray-900, .dark-mode .text-gray-800, .dark-mode .text-gray-700, .dark-mode .text-gray-600 { color: var(--app-text) !important; }
+.dark-mode .text-gray-500, .dark-mode .text-gray-400 { color: var(--app-hint) !important; }
+.dark-mode .border, .dark-mode .border-b, .dark-mode .border-t { border-color: var(--app-surface2) !important; }
+.dark-mode .bg-gray-50 { background-color: var(--app-surface2) !important; color: var(--app-text) !important; }
+.dark-mode .bg-gray-100, .dark-mode .bg-gray-200 { background-color: var(--app-bg) !important; color: var(--app-text) !important; }
+.dark-mode .hover\:bg-gray-50:hover { background-color: var(--app-surface2) !important; }
+.dark-mode .bottom-nav { background: var(--app-surface-glass) !important; border-color: var(--app-sep2) !important; }
+.dark-mode .bottom-sheet { background-color: var(--app-surface) !important; color: var(--app-text) !important; }
+.dark-mode input, .dark-mode textarea, .dark-mode select { background-color: var(--app-surface2) !important; color: #fff !important; border-color: var(--app-sep2) !important; }
+.dark-mode input::placeholder, .dark-mode textarea::placeholder { color: var(--app-hint) !important; }
+.dark-mode .bg-blue-50 { background-color: var(--app-accent-tint) !important; } .dark-mode .bg-blue-100 { background-color: var(--app-accent-tint2) !important; }
 .dark-mode .bg-purple-50 { background-color: rgba(191,90,242,0.15) !important; } .dark-mode .bg-purple-100 { background-color: rgba(191,90,242,0.22) !important; }
 .dark-mode .bg-pink-50 { background-color: rgba(255,55,95,0.15) !important; } .dark-mode .bg-pink-100 { background-color: rgba(255,55,95,0.22) !important; }
 .dark-mode .bg-green-50, .dark-mode .bg-green-100 { background-color: rgba(48,209,88,0.18) !important; }
 .dark-mode .bg-yellow-100 { background-color: rgba(255,214,10,0.2) !important; }
 .dark-mode .bg-red-50, .dark-mode .bg-red-100 { background-color: rgba(255,69,58,0.18) !important; }
-.dark-mode .text-blue-600, .dark-mode .text-blue-800 { color: #64b5ff !important; }
+.dark-mode .text-blue-600, .dark-mode .text-blue-800 { color: var(--app-link) !important; }
 .dark-mode .text-purple-600, .dark-mode .text-purple-800 { color: #d49bff !important; }
 .dark-mode .text-pink-600 { color: #ff8aa8 !important; }
 .dark-mode .text-green-600, .dark-mode .text-green-800 { color: #5ee08a !important; }
 .dark-mode .text-yellow-800 { color: #ffd60a !important; }
-.dark-mode .text-red-600, .dark-mode .text-red-500 { color: #ff6b61 !important; }
-.dark-mode .border-blue-100, .dark-mode .border-purple-100, .dark-mode .border-pink-100 { border-color: #48484a !important; }
-.dark-mode .img-skeleton { background: linear-gradient(90deg,#2c2c2e,#3a3a3c,#2c2c2e) !important; background-size: 200% 100% !important; }
+.dark-mode .text-red-600, .dark-mode .text-red-500 { color: var(--app-danger) !important; }
+.dark-mode .border-blue-100, .dark-mode .border-purple-100, .dark-mode .border-pink-100 { border-color: var(--app-sep2) !important; }
+.dark-mode .img-skeleton { background: linear-gradient(90deg,var(--app-surface),var(--app-surface2),var(--app-surface)) !important; background-size: 200% 100% !important; }
 .dark-mode .bg-gradient-to-br { color: #fff !important; }
 
 .dark-mode .sheet-handle { background: #636366; }
-.dark-mode .opt-item { background: #3a3a3c !important; }
-.dark-mode .opt-item small { color: #a1a1a6; }
-.dark-mode .opt-blue .opt-icon { background: rgba(10,132,255,.22); color: #64b5ff; } .dark-mode .opt-blue { color: #64b5ff; }
-.dark-mode .opt-red .opt-icon { background: rgba(255,69,58,.22); color: #ff6b61; } .dark-mode .opt-red { color: #ff6b61; }
+.dark-mode .opt-item { background: var(--app-surface2) !important; }
+.dark-mode .opt-item small { color: var(--app-hint); }
+.dark-mode .opt-blue .opt-icon { background: var(--app-accent-tint2); color: var(--app-link); } .dark-mode .opt-blue { color: var(--app-link); }
+.dark-mode .opt-red .opt-icon { background: rgba(255,69,58,.22); color: var(--app-danger); } .dark-mode .opt-red { color: var(--app-danger); }
 .dark-mode .opt-green .opt-icon { background: rgba(48,209,88,.22); color: #5ee08a; } .dark-mode .opt-green { color: #5ee08a; }
 .dark-mode .opt-orange .opt-icon { background: rgba(255,159,10,.22); color: #ffb340; } .dark-mode .opt-orange { color: #ffb340; }
 .dark-mode .opt-purple .opt-icon { background: rgba(191,90,242,.22); color: #d49bff; } .dark-mode .opt-purple { color: #d49bff; }
-.dark-mode .sheet-cancel { background: #48484a !important; color: #f2f2f7; }
+.dark-mode .sheet-cancel { background: var(--app-sep2) !important; color: var(--app-text); }
 .dark-mode .menu-row { background: transparent; }
 
 /* Animations */
@@ -137,16 +137,16 @@ body {
 .profile-stat { text-align: center; }
 .profile-stat b { display: block; font-size: 18px; }
 .profile-stat span { font-size: 11px; color: #6b7280; }
-.dark-mode .feed-chip { background: #2c2c2e; color: #a1a1a6; border-color: #3a3a3c; }
-.dark-mode .feed-chip.active { background: #0a84ff; color: #fff; border-color: #0a84ff; }
-.dark-mode .follow-btn.following { background: #48484a; color: #f2f2f7; }
-.dark-mode .profile-stat span { color: #a1a1a6; }
+.dark-mode .feed-chip { background: var(--app-surface); color: var(--app-hint); border-color: var(--app-surface2); }
+.dark-mode .feed-chip.active { background: var(--app-accent); color: #fff; border-color: var(--app-accent); }
+.dark-mode .follow-btn.following { background: var(--app-sep2); color: var(--app-text); }
+.dark-mode .profile-stat span { color: var(--app-hint); }
 
 .trend-chip { flex-shrink: 0; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: #eff6ff; color: #2563eb; transition: transform .15s ease; }
 .trend-chip:active { transform: scale(.94); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-.dark-mode .trend-chip { background: rgba(10,132,255,.18); color: #64b5ff; }
+.dark-mode .trend-chip { background: var(--app-accent-tint); color: var(--app-link); }
 
 /* Reactions */
 .react-btn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
@@ -156,8 +156,8 @@ body {
 .react-opt { font-size: 26px; line-height: 1; padding: 4px 6px; border-radius: 9999px; transition: transform .15s ease; animation: reactIn .28s cubic-bezier(.22,1.5,.36,1) backwards; }
 .react-opt:active { transform: scale(1.5) translateY(-6px); }
 @keyframes reactIn { from { opacity: 0; transform: translateY(14px) scale(.4); } to { opacity: 1; transform: none; } }
-.dark-mode #reactionPicker { background: #2c2c2e; }
-.dark-mode #replyBar { background: rgba(10,132,255,.18); color: #64b5ff; }
+.dark-mode #reactionPicker { background: var(--app-surface); }
+.dark-mode #replyBar { background: var(--app-accent-tint); color: var(--app-link); }
 
 /* Reaction chips under a post (like Telegram) */
 .react-row:empty { display: none; }
@@ -165,8 +165,8 @@ body {
 .react-chip b { font-size: 12px; font-weight: 700; }
 .react-chip:active { transform: scale(.92); }
 .react-chip.mine { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
-.dark-mode .react-chip { background: #3a3a3c; color: #e5e5ea; }
-.dark-mode .react-chip.mine { background: rgba(10,132,255,.25); color: #64b5ff; border-color: rgba(10,132,255,.5); }
+.dark-mode .react-chip { background: var(--app-surface2); color: #e5e5ea; }
+.dark-mode .react-chip.mine { background: var(--app-accent-tint2); color: var(--app-link); border-color: rgba(10,132,255,.5); }
 
 /* Stories */
 .story-item { position: relative; flex-shrink: 0; width: 66px; text-align: center; cursor: pointer; }
@@ -181,8 +181,25 @@ body {
 .story-fill { height: 100%; width: 0; background: #fff; }
 .story-fill.done { width: 100%; }
 @keyframes storyFill { from { width: 0; } to { width: 100%; } }
-.dark-mode .story-item span { color: #a1a1a6; }
-.dark-mode .story-avatar { border-color: #1c1c1e; background: #1c1c1e; }
-.dark-mode .story-ring.seen { background: #48484a; }
+.dark-mode .story-item span { color: var(--app-hint); }
+.dark-mode .story-avatar { border-color: var(--app-bg); background: var(--app-bg); }
+.dark-mode .story-ring.seen { background: var(--app-sep2); }
 .dark-mode .story-ring.none { border-color: #636366; }
-.dark-mode .story-plus { border-color: #1c1c1e; }
+.dark-mode .story-plus { border-color: var(--app-bg); }
+
+/* ---- Telegram-themed light mode (colours come from tg.themeParams via theme.js) ---- */
+body.themed:not(.dark-mode) { background-color: var(--app-bg); color: var(--app-text); }
+body.themed:not(.dark-mode) header { background-color: var(--app-surface-glass) !important; }
+body.themed:not(.dark-mode) .bg-white { background-color: var(--app-surface) !important; }
+body.themed:not(.dark-mode) .bg-gray-50 { background-color: var(--app-surface2) !important; }
+body.themed:not(.dark-mode) .bg-gray-100, body.themed:not(.dark-mode) .bg-gray-200 { background-color: var(--app-bg) !important; }
+body.themed:not(.dark-mode) .bottom-nav { background: var(--app-surface-glass) !important; }
+body.themed:not(.dark-mode) .bottom-sheet { background-color: var(--app-surface) !important; }
+body.themed:not(.dark-mode) .text-gray-900, body.themed:not(.dark-mode) .text-gray-800, body.themed:not(.dark-mode) .text-gray-700 { color: var(--app-text) !important; }
+body.themed:not(.dark-mode) .text-gray-600, body.themed:not(.dark-mode) .text-gray-500, body.themed:not(.dark-mode) .text-gray-400 { color: var(--app-hint) !important; }
+body.themed:not(.dark-mode) .border, body.themed:not(.dark-mode) .border-b, body.themed:not(.dark-mode) .border-t { border-color: var(--app-sep) !important; }
+body.themed:not(.dark-mode) .text-blue-600, body.themed:not(.dark-mode) .text-blue-500 { color: var(--app-link) !important; }
+body.themed:not(.dark-mode) .bg-blue-50, body.themed:not(.dark-mode) .bg-blue-100 { background-color: var(--app-accent-tint) !important; }
+/* Primary buttons follow Telegram's button colour in both modes */
+body.themed .bg-blue-600 { background-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }
+body.themed .feed-chip.active { background: var(--app-accent) !important; border-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }

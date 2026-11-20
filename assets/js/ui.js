@@ -65,6 +65,12 @@ window.exitShorts = () => {
     switchTab('home');
 };
 
+// Native MainButton per screen: each entry is built by the file that owns the feature
+// (format.js / stories.js / extras.js) and registered here by modal id.
+window.MB_SCREENS = window.MB_SCREENS || {};
+function mbOpen(id) { const f = window.MB_SCREENS[id]; if (f) f(); }
+function mbClose(id) { if (window.MB && window.MB_SCREENS[id]) MB.hide(id); }
+
 // UI Open / Close modals
 window.openModal = (id) => {
     if (id === 'channelModal') {
@@ -80,7 +86,7 @@ window.openModal = (id) => {
         // Track modal stack to invoke native BackButton on Telegram header
         openModalsStack.push(id);
         tg.BackButton.show();
-        
+        mbOpen(id);
     }
 
     if(id === 'postModal') {
@@ -112,7 +118,8 @@ window.closeModal = (id) => {
     if (el) {
         el.classList.add('hidden');
         openModalsStack = openModalsStack.filter(m => m !== id);
-        
+        mbClose(id);
+
         // If all modals are closed, hide Telegram's Native BackButton
         if (openModalsStack.length === 0) {
             tg.BackButton.hide();
@@ -136,12 +143,14 @@ function openSheet(bg, sheet) {
     setTimeout(() => document.getElementById(sheet).classList.add('open'), 10);
     openModalsStack.push(bg);
     tg.BackButton.show();
+    mbOpen(bg);
 }
 
 window.closeSheet = (bg, sheet) => {
     document.getElementById(sheet).classList.remove('open');
     setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
     openModalsStack = openModalsStack.filter(m => m !== bg);
+    mbClose(bg);
     if (openModalsStack.length === 0) tg.BackButton.hide();
 }
 window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
