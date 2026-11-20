@@ -1402,8 +1402,8 @@ app.post('/api/createVideo', async (req, res) => {
             likes_count: 0,
             likes_users: [],
             created_at: new Date().toISOString()
-        });
-        if (error) { console.error('Report insert failed:', error.message); throw error; }
+        }]);
+        if (error) throw error;
 
         await enforceVideoCap();
         res.json({ success: true });
@@ -1492,8 +1492,8 @@ app.post('/api/reportVideo', async (req, res) => {
             reporter_id: tgUser.id.toString(),
             reason: reason || 'Not specified',
             created_at: new Date().toISOString()
-        }]);
-        if (error) throw error;
+        });
+        if (error) { console.error('Report insert failed:', error.message); throw error; }
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
