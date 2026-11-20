@@ -9,10 +9,12 @@ Built to run entirely on **free tiers**: Render (hosting) + Supabase (database) 
 ## Features
 - **Feed** with *For You* and *Following* tabs, infinite scroll, pinned posts, search
 - **Profiles** (users and channels) with follower counts, a Follow button and their posts
+- **Stories** – 24-hour image status on top of the feed (tap to view, hold to pause, up to 5 at a time)
 - **Shorts** – TikTok-style vertical video feed (videos are stored in Telegram, not in the database)
 - **Channel auto-post** – add a channel, and every new post/video in it appears in the feed; the channel owner gets a Telegram notification with *Remove Post* / *Open App* buttons
 - **Comments** with replies, @mentions (notified via the bot), likes, albums/multi-image posts, caption formatting (bold, links, `@bot` mentions)
-- **Reactions** – long-press the Like button: ❤️ 😂 😮 😢 🔥 👍
+- **Reactions** – long-press the Like button: ❤️ 😂 😮 😢 🔥 👍; the reaction totals show under each post like Telegram, tap a chip to toggle yours
+- **View counts** on posts, and a **weekly channel report** sent to channel owners by the bot every Sunday (~10:00 Bangladesh time)
 - **Hashtags** (tap to search, Bengali supported) and **trending tags**; **daily streak** 🔥
 - **Referral levels** – 2 referrals → Level 2 (image posts, links, 3 channels), 3 referrals → Level 3 (rich text links, 5 channels)
 - **Telegram notifications** for likes, comments and new followers (rate-limited)
@@ -52,6 +54,8 @@ Create a project, then in **SQL Editor** paste and run the files in `sql/` in th
 | 6 | `06_social_migration.sql` | follow system + performance indexes |
 | 7 | `07_streak_migration.sql` | daily streak |
 | 8 | `08_reactions_and_replies.sql` | comment replies + emoji reactions |
+| 9 | `09_views_and_stats.sql` | view counts |
+| 10 | `10_stories.sql` | stories (24-hour status) |
 
 Then make yourself admin: `update users set is_admin = true where tg_id = 'YOUR_TELEGRAM_ID';`
 

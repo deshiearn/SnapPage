@@ -50,6 +50,7 @@
             <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" placeholder="Search posts & videos...">
             <button id="homeSearchClearBtn" onclick="clearHomeSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-times-circle"></i></button>
         </div>
+        <div id="storiesBar" class="flex gap-3 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="trendingTags" class="hidden flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="feedTabs" class="flex gap-2 mb-3">
             <button id="feedTabAll" onclick="setFeedMode('all')" class="feed-chip active">For You</button>
@@ -157,6 +158,37 @@
 
             <button id="submitVideoBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Upload</button>
         </div>
+    </div>
+
+    <!-- STORIES: hidden file picker, compose screen, full-screen viewer -->
+    <input type="file" id="storyFileInput" accept="image/*" class="hidden">
+
+    <div id="storyCompose" class="hidden fixed inset-0 bg-black z-[130] flex flex-col">
+        <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(env(safe-area-inset-top, 0px) + 56px);">
+            <button onclick="closeModal('storyCompose')" class="text-sm font-bold opacity-80">Cancel</button>
+            <span class="font-bold">New story</span>
+            <button id="storyShareBtn" onclick="shareStory()" class="text-sm font-bold bg-blue-600 px-4 py-1.5 rounded-full">Share</button>
+        </div>
+        <div class="flex-1 flex items-center justify-center overflow-hidden px-3"><img id="storyPreview" class="max-h-full max-w-full object-contain rounded-xl"></div>
+        <div class="p-4"><input id="storyCaption" maxlength="200" placeholder="Add a caption..." class="w-full bg-white/15 text-white placeholder-white/60 rounded-full px-4 py-3 outline-none"></div>
+    </div>
+
+    <div id="storyViewer" class="hidden fixed inset-0 bg-black z-[140] select-none">
+        <img id="storyImg" class="absolute inset-0 w-full h-full object-contain">
+        <div id="storyZone" class="absolute inset-0"></div>
+        <div class="absolute top-0 left-0 right-0 px-3 pointer-events-none" style="padding-top: calc(env(safe-area-inset-top, 0px) + 52px); background: linear-gradient(rgba(0,0,0,.55), transparent);">
+            <div id="storyBars" class="flex gap-1 mb-3"></div>
+            <div class="flex items-center gap-2 text-white pb-3">
+                <img id="storyAvatar" class="w-8 h-8 rounded-full object-cover border border-white/60">
+                <span id="storyName" class="font-bold text-sm"></span>
+                <span id="storyTime" class="text-xs opacity-70"></span>
+                <div class="ml-auto flex items-center gap-4 pointer-events-auto">
+                    <button id="storyDeleteBtn" onclick="deleteCurrentStory()" class="hidden"><i class="fas fa-trash-alt"></i></button>
+                    <button onclick="closeStoryViewer()"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+        </div>
+        <p id="storyCaptionView" class="hidden absolute bottom-10 left-0 right-0 text-center text-white text-base px-6 py-3 pointer-events-none" style="background: linear-gradient(transparent, rgba(0,0,0,.6));"></p>
     </div>
 
     <!-- REACTION PICKER (long-press the Like button) -->
@@ -291,6 +323,8 @@
     <script src="/assets/js/extras.js?v=__V__" defer></script>
     <script src="/assets/js/profile.js?v=__V__" defer></script>
     <script src="/assets/js/reactions.js?v=__V__" defer></script>
+    <script src="/assets/js/views.js?v=__V__" defer></script>
+    <script src="/assets/js/stories.js?v=__V__" defer></script>
     <script src="/assets/js/boot.js?v=__V__" defer></script>
 </body>
 </html>

@@ -23,6 +23,7 @@ window.switchTab = (tab) => {
 
     if (tab === 'home') {
         loadPosts(1, true); // Clean re-fetch on Home nav click
+        if (typeof loadStories === 'function') loadStories();
     }
 };
 
@@ -151,6 +152,8 @@ tg.BackButton.onClick(() => {
         const lastModal = openModalsStack[openModalsStack.length - 1];
         if (lastModal === '__shorts__') {
             exitShorts();
+        } else if (lastModal === 'storyViewer') {
+            closeStoryViewer();
         } else if (SHEET_MAP[lastModal]) {
             closeSheet(lastModal, SHEET_MAP[lastModal]);
         } else {

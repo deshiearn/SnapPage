@@ -101,13 +101,13 @@ function buildPostCardHtml(post) {
         : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
 
     return `
-        <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
+        <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in" ${(currentUser && String(post.author_id) === String(currentUser.tg_id)) ? '' : `data-view-post="${post.id}"`}>
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfile('${post.author_id}')">
                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                     <div>
                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}${verifiedIcon}</h3>
-                        ${labelBadge}${pinnedBadge}
+                        ${labelBadge}${pinnedBadge}<span class="text-[10px] text-gray-400 ml-1.5"><i class="fas fa-eye"></i> ${post.views || 0}</span>
                     </div>
                 </div>
                 <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
@@ -116,6 +116,7 @@ function buildPostCardHtml(post) {
             <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-blue-500 mb-3">See more</button>
             <div class="mb-3 see-more-spacer"></div>
             ${imgHtml}
+            <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked)}</div>
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                 <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
                     <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
