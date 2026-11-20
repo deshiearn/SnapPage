@@ -41,6 +41,8 @@ async function loadShorts(reset = false) {
 }
 
 function renderShortItem(v) {
+    const myReaction = currentUser && v.reactions ? (v.reactions[currentUser.tg_id] || '') : '';
+    const shortLikeCount = (v.likes_count || 0) + Object.keys(v.reactions || {}).length;
     const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
     const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
     const captionHtml = animateEmojis(formatCaption(v.caption, v.author_level || 1, v.entities));
@@ -80,9 +82,9 @@ function renderShortItem(v) {
         </div>
 
         <div class="absolute right-3 bottom-28 flex flex-col items-center gap-5 text-white">
-            <button onclick="likeVideo(this, '${v.id}')" class="flex flex-col items-center gap-1">
-                <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
-                <span class="text-xs like-count">${v.likes_count || 0}</span>
+            <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn flex flex-col items-center gap-1">
+                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
+                <span class="text-xs like-count">${shortLikeCount}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="flex flex-col items-center gap-1">
                 <i class="fas fa-comment text-2xl"></i>
@@ -237,6 +239,7 @@ window.likeVideo = async (btn, videoId) => {
         const data = await res.json();
         if (data && data.success) {
             btn.querySelector('.like-count').innerText = data.likesCount;
+            const emo = btn.querySelector('.react-emoji'); if (emo) emo.classList.add('hidden');
             const icon = btn.querySelector('i');
             icon.className = (data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl') + ' icon-pop';
         }

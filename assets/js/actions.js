@@ -23,6 +23,7 @@ window.likePost = async (btn, postId) => {
 
             btn.classList.toggle('text-red-500', data.hasLiked);
             btn.classList.toggle('font-bold', data.hasLiked);
+            const emo = btn.querySelector('.react-emoji'); if (emo) emo.classList.add('hidden');
             const icon = btn.querySelector('i');
             if (icon) { icon.classList.remove('icon-pop'); void icon.offsetWidth; icon.classList.add('icon-pop'); }
             if (data.hasLiked) {
@@ -143,10 +144,30 @@ window.openComments = async (postId, contentType = 'post') => {
 }
 window.closeComment = () => closeSheet('commentModalBg', 'commentSheet');
 
+let replyTarget = null;      // { id (top-level comment id), name }
+let commentIndex = {};       // id -> comment, so Reply can show the author's name
+
+function commentHtml(c, isReply) {
+    const isMine = currentUser && String(c.author_id) === String(currentUser.tg_id);
+    const hasLiked = c.likes_users && currentUser && c.likes_users.includes(currentUser.tg_id);
+    const safe = escapeHtml(c.text || '').replace(/(^|\s)@([A-Za-z0-9_]{4,32})/g, '$1<span class="text-blue-500 font-semibold">@$2</span>');
+    const likeCount = c.likes_count || 0;
+    return `<div class="${isReply ? 'ml-6 border-l-2 border-blue-200 pl-3 ' : ''}bg-gray-50 p-3 rounded-lg text-sm relative">
+        <span class="font-bold text-gray-900">${escapeHtml(c.author_name || 'User')}</span>
+        <p class="mt-1 text-gray-800 whitespace-pre-wrap">${safe}</p>
+        <div class="mt-2 flex gap-4 text-xs text-gray-500">
+            <button onclick="likeComment(this, '${c.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1"><i class="${hasLiked ? 'fas' : 'far'} fa-heart"></i> <span class="comment-like-count">${likeCount}</span></button>
+            <button onclick="startReply('${c.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-reply"></i> Reply</button>
+            ${isMine ? `<button onclick="removeCommentDirect('${c.id}')" class="text-red-400 hover:text-red-600 flex items-center gap-1"><i class="fas fa-trash-alt"></i> Delete</button>` : ''}
+        </div>
+    </div>`;
+}
+
 async function fetchComments() {
     const list = document.getElementById('commentList');
     list.innerHTML = '<p class="text-center text-gray-400 text-sm">Loading comments...</p>';
-    
+    cancelReply();
+
     try {
         const res = await fetch('/api/getComments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId: currentPostIdForComment, contentType: currentCommentContentType }) });
         const comments = await res.json();
@@ -156,26 +177,34 @@ async function fetchComments() {
             return;
         }
 
-        list.innerHTML = '';
+        commentIndex = {};
+        comments.forEach(c => { commentIndex[c.id] = c; });
+        const replies = {};
+        const top = [];
         comments.forEach(c => {
-            const isMine = currentUser && String(c.author_id) === String(currentUser.tg_id);
-            const hasLiked = c.likes_users && currentUser && c.likes_users.includes(currentUser.tg_id);
-            const safeCommentText = (c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const likeCount = c.likes_count || 0;
-
-            list.innerHTML += `<div class="bg-gray-50 p-3 rounded-lg text-sm relative">
-                <span class="font-bold text-gray-900">${c.author_name}</span>
-                <p class="mt-1 text-gray-800">${safeCommentText}</p>
-                <div class="mt-2 flex gap-4 text-xs text-gray-500">
-                    <button onclick="likeComment(this, '${c.id}')" class="${hasLiked ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1"><i class="${hasLiked ? 'fas' : 'far'} fa-heart"></i> <span class="comment-like-count">${likeCount}</span> Like</button>
-                    ${isMine ? `<button onclick="removeCommentDirect('${c.id}')" class="text-red-400 hover:text-red-600 flex items-center gap-1"><i class="fas fa-trash-alt"></i> Delete</button>` : ''}
-                </div>
-            </div>`;
+            if (c.parent_id && commentIndex[c.parent_id]) (replies[c.parent_id] = replies[c.parent_id] || []).push(c);
+            else top.push(c);
         });
+        list.innerHTML = top.map(c => commentHtml(c, false) + (replies[c.id] || []).map(r => commentHtml(r, true)).join('')).join('');
     } catch(e) {
         list.innerHTML = '<p class="text-center text-red-400 text-sm">Error loading comments.</p>';
     }
 }
+
+// Replying to a reply attaches to the same top-level comment (one level of threading, like Instagram)
+window.startReply = (commentId) => {
+    const c = commentIndex[commentId];
+    if (!c) return;
+    replyTarget = { id: c.parent_id && commentIndex[c.parent_id] ? c.parent_id : c.id, name: c.author_name || 'User' };
+    document.getElementById('replyBarName').innerText = replyTarget.name;
+    document.getElementById('replyBar').classList.remove('hidden');
+    document.getElementById('commentInput').focus();
+};
+window.cancelReply = () => {
+    replyTarget = null;
+    const bar = document.getElementById('replyBar');
+    if (bar) bar.classList.add('hidden');
+};
 
 // Keep the comment input row visible above the on-screen keyboard: as the keyboard
 // opens, the visual viewport shrinks — push the input row up by that difference.
@@ -194,10 +223,11 @@ document.getElementById('commentInput').addEventListener('focus', () => {
 document.getElementById('sendCommentBtn').onclick = async () => {
     const text = document.getElementById('commentInput').value.trim();
     if(!text) return;
-    const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text, contentType: currentCommentContentType }) });
+    const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text, contentType: currentCommentContentType, parentId: replyTarget ? replyTarget.id : undefined }) });
     const data = await res.json();
     if (data && data.success) {
         document.getElementById('commentInput').value = '';
+        cancelReply();
         fetchComments();
     } else {
         tg.showAlert(`Failed to comment: ${data.error || 'Server error'}`);

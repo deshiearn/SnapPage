@@ -1052,7 +1052,7 @@ app.post('/api/likePost', async (req, res) => {
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { data: post, error: fetchErr } = await supabase.from('posts').select('likes_count, likes_users, author_id, text, type').eq('id', postId).maybeSingle();
+        const { data: post, error: fetchErr } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
         if (fetchErr) throw fetchErr;
 
         if (post) {
@@ -1079,13 +1079,14 @@ app.post('/api/likePost', async (req, res) => {
                 );
             }
 
-            const { error: updateErr } = await supabase.from('posts').update({
-                likes_count: likesCount,
-                likes_users: likesUsers
-            }).eq('id', postId);
+            // Hearting replaces any other reaction this user had on the post
+            const upd = { likes_count: likesCount, likes_users: likesUsers };
+            let reactions = post.reactions || {};
+            if (hasLiked && reactions[userId]) { reactions = { ...reactions }; delete reactions[userId]; upd.reactions = reactions; }
+            const { error: updateErr } = await supabase.from('posts').update(upd).eq('id', postId);
             if (updateErr) throw updateErr;
 
-            res.json({ success: true, likesCount, hasLiked });
+            res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked });
         } else {
             res.status(404).json({ error: "Post not found" });
         }
@@ -1104,6 +1105,48 @@ async function insertReportRow(row) {
     }
     return error;
 }
+
+// ================= Reactions (long-press the Like button) =================
+// ❤️ is the classic like (likes_users). Every other emoji is stored in the "reactions" JSON column as
+// { userId: emoji } — one reaction per person, and picking one replaces a previous like/reaction.
+const REACTION_EMOJIS = ['😂', '😮', '😢', '🔥', '👍'];
+app.post('/api/react', async (req, res) => {
+    const { initData, contentType = 'post', id, emoji } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    if (!REACTION_EMOJIS.includes(emoji)) return res.status(400).json({ error: "Unknown reaction" });
+    try {
+        const table = contentType === 'video' ? 'videos' : 'posts';
+        const { data: row, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+        if (error || !row) return res.status(404).json({ error: "Not found" });
+        if (!('reactions' in row)) return res.status(500).json({ error: "Reactions need a database update: run sql/08_reactions_and_replies.sql in Supabase, then try again." });
+
+        const uid = tgUser.id.toString();
+        const reactions = { ...(row.reactions || {}) };
+        let likesUsers = row.likes_users || [];
+        let likesCount = row.likes_count || 0;
+        let myReaction = null;
+
+        if (reactions[uid] === emoji) {
+            delete reactions[uid];
+        } else {
+            const isNew = !reactions[uid];
+            reactions[uid] = emoji;
+            myReaction = emoji;
+            if (likesUsers.includes(uid)) { likesUsers = likesUsers.filter(x => x !== uid); likesCount = Math.max(0, likesCount - 1); }
+            if (isNew && String(row.author_id) !== uid) {
+                const kind = contentType === 'video' ? 'video' : 'post';
+                const preview = (contentType === 'video' ? row.caption : row.text) || (kind === 'video' ? 'Video' : 'Photo');
+                notifyPostOwners(row.author_id, row.type, `${emoji} ${tgUser.first_name} reacted to your ${kind}:\n"${String(preview).substring(0, 30)}..."`, `${kind}_${id}`);
+            }
+        }
+        const { error: updErr } = await supabase.from(table).update({ reactions, likes_users: likesUsers, likes_count: likesCount }).eq('id', id);
+        if (updErr) throw updErr;
+        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, myReaction, hasLiked: false });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
 
 // Report a post (feeds the Admin Panel's Post & User Manage tab)
 app.post('/api/reportPost', async (req, res) => {
@@ -1297,9 +1340,11 @@ app.post('/api/getComments', async (req, res) => {
 });
 
 app.post('/api/addComment', async (req, res) => {
-    const { initData, postId, text, contentType = 'post' } = req.body;
+    const { initData, postId, contentType = 'post', parentId } = req.body;
+    const text = String(req.body.text || '').slice(0, 1000);
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    if (!text.trim()) return res.status(400).json({ error: "Empty comment" });
 
     try {
         const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
@@ -1311,8 +1356,12 @@ app.post('/api/addComment', async (req, res) => {
             author_id: tgUser.id.toString(),
             author_name: authorName,
             text,
-            content_type: contentType
+            content_type: contentType,
+            ...(parentId ? { parent_id: String(parentId) } : {})
         }]);
+        if (error && parentId && /parent_id/i.test(error.message || '')) {
+            return res.status(500).json({ error: "Replies need a database update: run sql/08_reactions_and_replies.sql in Supabase, then try again." });
+        }
         if (error) {
             console.error("addComment (with content_type) failed, retrying without it:", error.message || error);
             // Fall back for DBs that haven't run shorts_migration.sql yet (no content_type column)
@@ -1339,6 +1388,29 @@ app.post('/api/addComment', async (req, res) => {
             );
         }
 
+        // Reply + @mention notifications (each person at most once, never the commenter themselves)
+        try {
+            const me = tgUser.id.toString();
+            const notified = new Set([me]);
+            const who = tgUser.first_name || 'Someone';
+            const snippet = text.length > 60 ? text.substring(0, 60) + '…' : text;
+            if (parentId) {
+                const { data: parent } = await supabase.from('comments').select('author_id').eq('id', parentId).maybeSingle();
+                if (parent && !notified.has(String(parent.author_id))) {
+                    notified.add(String(parent.author_id));
+                    sendTelegramNotification(parent.author_id, `↩️ ${who} replied to your comment:\n"${snippet}"`, `${contentType}_${postId}`);
+                }
+            }
+            const handles = [...new Set((text.match(/@([A-Za-z0-9_]{4,32})/g) || []).map(h => h.slice(1).toLowerCase()))].slice(0, 3);
+            for (const h of handles) {
+                const { data: m } = await supabase.from('users').select('tg_id').ilike('username', h).maybeSingle();
+                if (m && !notified.has(String(m.tg_id))) {
+                    notified.add(String(m.tg_id));
+                    sendTelegramNotification(m.tg_id, `📣 ${who} mentioned you in a comment:\n"${snippet}"`, `${contentType}_${postId}`);
+                }
+            }
+        } catch (e) { console.error('comment notifications failed:', e.message || e); }
+
         res.json({ success: true });
     } catch (e) {
         const msg = e.message || String(e);
@@ -1352,7 +1424,9 @@ app.post('/api/addComment', async (req, res) => {
 app.post('/api/deleteComment', async (req, res) => {
     const { initData, commentId } = req.body;
     const tgUser = validateTGData(initData);
-    await supabase.from('comments').delete().match({ id: commentId, author_id: tgUser.id.toString() });
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    const { error } = await supabase.from('comments').delete().match({ id: commentId, author_id: tgUser.id.toString() });
+    if (!error) await supabase.from('comments').delete().eq('parent_id', String(commentId));   // remove its replies too (ignored if column missing)
     res.json({ success: true });
 });
 
@@ -1562,7 +1636,7 @@ app.post('/api/likeVideo', async (req, res) => {
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
 
     try {
-        const { data: video, error: fetchErr } = await supabase.from('videos').select('likes_count, likes_users, author_id, caption, type').eq('id', videoId).maybeSingle();
+        const { data: video, error: fetchErr } = await supabase.from('videos').select('*').eq('id', videoId).maybeSingle();
         if (fetchErr || !video) return res.status(404).json({ error: "Video not found" });
 
         let likesUsers = video.likes_users || [];
@@ -1581,8 +1655,11 @@ app.post('/api/likeVideo', async (req, res) => {
             await notifyPostOwners(video.author_id, video.type, `❤️ ${tgUser.first_name} liked your video:\n"${preview}..."`, `video_${videoId}`);
         }
 
-        await supabase.from('videos').update({ likes_count: likesCount, likes_users: likesUsers }).eq('id', videoId);
-        res.json({ success: true, likesCount, hasLiked });
+        const upd = { likes_count: likesCount, likes_users: likesUsers };
+        let reactions = video.reactions || {};
+        if (hasLiked && reactions[userId]) { reactions = { ...reactions }; delete reactions[userId]; upd.reactions = reactions; }
+        await supabase.from('videos').update(upd).eq('id', videoId);
+        res.json({ success: true, likesCount: likesCount + Object.keys(reactions).length, hasLiked });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
     }
