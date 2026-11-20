@@ -128,7 +128,8 @@ window.submitReport = async (postId, reason, contentType = 'post') => {
         });
         const data = await res.json();
         if (data && data.success) tg.showAlert("Thanks — this has been reported to our team.");
-    } catch(e) { console.error("Report failed:", e); }
+        else tg.showAlert("Could not send the report: " + ((data && data.error && (data.error.message || data.error)) || 'please try again'));
+    } catch(e) { console.error("Report failed:", e); tg.showAlert("Could not send the report. Please check your connection and try again."); }
 }
 
 // ================= Comments Logic =================

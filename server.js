@@ -952,6 +952,17 @@ app.post('/api/likePost', async (req, res) => {
     }
 });
 
+// Insert a report row. Tolerates older "reports" tables (missing content_type column) and always
+// stores ids as text, so posts (uuid) and videos (number) both work.
+async function insertReportRow(row) {
+    let { error } = await supabase.from('reports').insert([row]);
+    if (error && /content_type/i.test(error.message || '')) {
+        const { content_type, ...legacy } = row;
+        ({ error } = await supabase.from('reports').insert([legacy]));
+    }
+    return error;
+}
+
 // Report a post (feeds the Admin Panel's Post & User Manage tab)
 app.post('/api/reportPost', async (req, res) => {
     const { initData, postId, reason } = req.body;
@@ -962,16 +973,16 @@ app.post('/api/reportPost', async (req, res) => {
         const { data: post } = await supabase.from('posts').select('id, author_id, type').eq('id', postId).maybeSingle();
         if (!post) return res.status(404).json({ error: "Post not found" });
 
-        const { error } = await supabase.from('reports').insert([{
-            post_id: postId,
-            post_author_id: post.author_id,
+        const error = await insertReportRow({
+            post_id: String(postId),
+            post_author_id: String(post.author_id),
             post_type: post.type,
             content_type: 'post',
             reporter_id: tgUser.id.toString(),
             reason: reason || 'Not specified',
             created_at: new Date().toISOString()
-        }]);
-        if (error) throw error;
+        });
+        if (error) { console.error('Report insert failed:', error.message); throw error; }
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -1391,8 +1402,8 @@ app.post('/api/createVideo', async (req, res) => {
             likes_count: 0,
             likes_users: [],
             created_at: new Date().toISOString()
-        }]);
-        if (error) throw error;
+        });
+        if (error) { console.error('Report insert failed:', error.message); throw error; }
 
         await enforceVideoCap();
         res.json({ success: true });
@@ -1473,9 +1484,9 @@ app.post('/api/reportVideo', async (req, res) => {
         const { data: video } = await supabase.from('videos').select('id, author_id, type').eq('id', videoId).maybeSingle();
         if (!video) return res.status(404).json({ error: "Video not found" });
 
-        const { error } = await supabase.from('reports').insert([{
-            post_id: videoId,
-            post_author_id: video.author_id,
+        const error = await insertReportRow({
+            post_id: String(videoId),
+            post_author_id: String(video.author_id),
             post_type: video.type,
             content_type: 'video',
             reporter_id: tgUser.id.toString(),
@@ -1579,7 +1590,7 @@ app.post('/api/admin/reports', requireAdminUser, requireAdminPassword, async (re
         const videoEntries = Object.values(grouped).filter(g => g.content_type === 'video');
 
         if (postEntries.length > 0) {
-            const { data: posts } = await supabase.from('posts').select('id, text, image_urls').in('id', postEntries.map(g => g.post_id));
+            const { data: posts } = await supabase.from('posts').select('*').in('id', postEntries.map(g => g.post_id));
             (posts || []).forEach(p => {
                 const g = grouped[`post:${p.id}`];
                 if (g) {
