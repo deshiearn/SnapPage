@@ -12,6 +12,7 @@ Built to run entirely on **free tiers**: Render (hosting) + Supabase (database) 
 - **Shorts** – TikTok-style vertical video feed (videos are stored in Telegram, not in the database)
 - **Channel auto-post** – add a channel, and every new post/video in it appears in the feed; the channel owner gets a Telegram notification with *Remove Post* / *Open App* buttons
 - **Comments** with likes, albums/multi-image posts, caption formatting (bold, links, `@bot` mentions)
+- **Hashtags** (tap to search, Bengali supported) and **trending tags**; **daily streak** 🔥
 - **Referral levels** – 2 referrals → Level 2 (image posts, links, 3 channels), 3 referrals → Level 3 (rich text links, 5 channels)
 - **Telegram notifications** for likes, comments and new followers (rate-limited)
 - **Admin Panel** at `/admin` – dashboard, reports, broadcast, blue badge, pin post, maintenance mode, ban/delete users
@@ -48,6 +49,7 @@ Create a project, then in **SQL Editor** paste and run the files in `sql/` in th
 | 4 | `04_fix_comments_post_id_type.sql`, `04b_comment_likes_and_entities_migration.sql` | comments for posts + videos, likes, caption formatting |
 | 5 | `05_fix_reports_table.sql` | makes reports work for posts and videos |
 | 6 | `06_social_migration.sql` | follow system + performance indexes |
+| 7 | `07_streak_migration.sql` | daily streak |
 
 Then make yourself admin: `update users set is_admin = true where tg_id = 'YOUR_TELEGRAM_ID';`
 

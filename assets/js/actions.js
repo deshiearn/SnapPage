@@ -8,6 +8,7 @@ window.sharePostDirectly = (id) => {
 // Like count dynamic incrementer API handler
 window.likePost = async (btn, postId) => {
     btn.disabled = true;
+    try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {}
     try {
         const res = await fetch('/api/likePost', {
             method: 'POST',

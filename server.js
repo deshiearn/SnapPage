@@ -613,6 +613,18 @@ app.post('/api/auth', async (req, res) => {
             return res.status(500).json({ error: "User record could not be loaded" });
         }
 
+        // Daily streak: +1 for each consecutive day the user opens the app (needs sql/07; silently skipped if columns are missing)
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            if (user.last_active_date !== today && 'last_active_date' in user) {
+                const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                const streak = user.last_active_date === yesterday ? (user.streak_count || 0) + 1 : 1;
+                const best = Math.max(user.best_streak || 0, streak);
+                const { error: stErr } = await supabase.from('users').update({ streak_count: streak, best_streak: best, last_active_date: today }).eq('tg_id', tgId);
+                if (!stErr) { user.streak_count = streak; user.best_streak = best; user.last_active_date = today; }
+            }
+        } catch (e) { /* streak is optional */ }
+
         const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
         user.ref_count = refCount || 0;
         // Verified (blue badge) users are unlocked to the top level regardless of referrals
@@ -1229,8 +1241,27 @@ app.post('/api/removeChannel', async (req, res) => {
 });
 
 // Secure Search Posts API (Bypassing direct client-side RLS Blockage)
+// Trending hashtags: scans the latest posts once every 10 minutes (one cheap query), cached in memory
+let trendingCache = { exp: 0, tags: [] };
+app.get('/api/trendingTags', async (req, res) => {
+    try {
+        if (trendingCache.exp < Date.now()) {
+            const { data } = await supabase.from('posts').select('text').order('created_at', { ascending: false }).limit(300);
+            const counts = {};
+            (data || []).forEach(p => {
+                const seen = new Set((String(p.text || '').match(/#[\p{L}\p{M}\p{N}_]{2,30}/gu) || []).map(t => t.toLowerCase()));
+                seen.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+            });
+            const tags = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([tag, count]) => ({ tag, count }));
+            trendingCache = { exp: Date.now() + 10 * 60 * 1000, tags };
+        }
+        res.set('Cache-Control', 'public, max-age=300').json(trendingCache.tags);
+    } catch (e) { res.json([]); }
+});
+
 app.post('/api/searchPosts', async (req, res) => {
-    const { query } = req.body;
+    const query = String(req.body.query || '').slice(0, 60).replace(/[%,]/g, ' ').trim();
+    if (!query) return res.json([]);
     try {
         const { data: posts, error: postsErr } = await supabase.from('posts').select('*').ilike('text', `%${query}%`).order('created_at', { ascending: false }).limit(15);
         if (postsErr) throw postsErr;
