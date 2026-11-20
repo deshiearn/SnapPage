@@ -21,7 +21,7 @@ async function loadPosts(page = 1, clearFeed = true) {
         const res = await fetch('/api/getPosts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, page, limit: 10 })
+            body: JSON.stringify({ initData: tg.initData, page, limit: 10, feed: feedMode })
         });
         const posts = await res.json();
 
@@ -31,7 +31,9 @@ async function loadPosts(page = 1, clearFeed = true) {
         if (!posts || posts.length === 0) {
             hasMorePosts = false;
             if (clearFeed) {
-                feed.innerHTML = '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
+                feed.innerHTML = feedMode === 'following'
+                    ? '<div class="text-center text-gray-400 py-12 px-6"><i class="fas fa-user-plus text-4xl mb-3 opacity-60"></i><p class="font-bold">Your Following feed is empty</p><p class="text-xs mt-1">Tap a name or photo on any post and press Follow to see their posts here.</p></div>'
+                    : '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
             }
             isLoadingFeed = false;
             return;
@@ -100,7 +102,7 @@ function buildPostCardHtml(post) {
     return `
         <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in">
             <div class="flex justify-between items-center mb-3">
-                <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileLink('${post.type}', '${post.author_id}', '${post.author_username || ''}')">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfile('${post.author_id}')">
                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                     <div>
                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}${verifiedIcon}</h3>
@@ -132,3 +134,13 @@ window.addEventListener('scroll', () => {
         }
     }
 });
+
+// ================= Feed tabs (For You / Following) =================
+window.setFeedMode = (mode) => {
+    if (feedMode === mode) return;
+    feedMode = mode;
+    document.getElementById('feedTabAll').classList.toggle('active', mode === 'all');
+    document.getElementById('feedTabFollowing').classList.toggle('active', mode === 'following');
+    try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
+    loadPosts(1, true);
+};

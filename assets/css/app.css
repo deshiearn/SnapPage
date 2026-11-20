@@ -126,3 +126,24 @@ body {
 .caption-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; transition: max-height 0.25s ease; }
 .caption-expanded { display: block; -webkit-line-clamp: unset; animation: captionExpand 0.25s ease; }
 @keyframes captionExpand { from { opacity: 0.5; } to { opacity: 1; } }
+
+/* Feed tabs + profile */
+.feed-chip { padding: 7px 16px; border-radius: 9999px; font-size: 13px; font-weight: 700; background: #fff; color: #6b7280; border: 1px solid #e5e7eb; transition: all .25s ease; }
+.feed-chip.active { background: #2563eb; color: #fff; border-color: #2563eb; box-shadow: 0 4px 12px rgba(37,99,235,.3); }
+.feed-chip:active { transform: scale(.95); }
+.follow-btn { padding: 9px 22px; border-radius: 9999px; font-weight: 700; font-size: 14px; background: #2563eb; color: #fff; transition: transform .15s ease, background .2s ease; }
+.follow-btn:active { transform: scale(.95); }
+.follow-btn.following { background: #e5e7eb; color: #374151; }
+.profile-stat { text-align: center; }
+.profile-stat b { display: block; font-size: 18px; }
+.profile-stat span { font-size: 11px; color: #6b7280; }
+.dark-mode .feed-chip { background: #2c2c2e; color: #a1a1a6; border-color: #3a3a3c; }
+.dark-mode .feed-chip.active { background: #0a84ff; color: #fff; border-color: #0a84ff; }
+.dark-mode .follow-btn.following { background: #48484a; color: #f2f2f7; }
+.dark-mode .profile-stat span { color: #a1a1a6; }
+
+.trend-chip { flex-shrink: 0; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: #eff6ff; color: #2563eb; transition: transform .15s ease; }
+.trend-chip:active { transform: scale(.94); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.dark-mode .trend-chip { background: rgba(10,132,255,.18); color: #64b5ff; }

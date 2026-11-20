@@ -126,7 +126,8 @@ const SHEET_MAP = {
     reportModalBg: 'reportSheet',
     commentModalBg: 'commentSheet',
     referModalBg: 'referSheet',
-    channelModalBg: 'channelSheet'
+    channelModalBg: 'channelSheet',
+    profileModalBg: 'profileSheet'
 };
 
 function openSheet(bg, sheet) {

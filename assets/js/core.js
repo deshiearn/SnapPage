@@ -10,6 +10,7 @@ let openModalsStack = [];
 
 // Pagination/Infinite scroll variables (10 posts at a time)
 let currentPage = 1;
+let feedMode = 'all';          // 'all' (For You) | 'following'
 let isLoadingFeed = false;
 let hasMorePosts = true;
 
@@ -94,6 +95,8 @@ async function handleSharedDeepLink() {
                 observeShorts();
                 feed.firstElementChild.scrollIntoView();
             }
+        } else if (startParam.startsWith('profile_')) {
+            openProfile(startParam.replace('profile_', ''));
         } else if (startParam.startsWith('post_')) {
             const postId = startParam.replace('post_', '');
             const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
@@ -178,6 +181,11 @@ async function initApp() {
         const nameEl = document.getElementById('settingsProfileName');
         nameEl.innerHTML = liveUser.name + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
         document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+        if (currentUser.streak_count > 0) {
+            const st = document.getElementById('settingsStreak');
+            st.innerText = `🔥 ${currentUser.streak_count}-day streak`;
+            st.classList.remove('hidden');
+        }
 
         if (currentUser.is_admin) {
             document.getElementById('adminBadge').classList.remove('hidden');
@@ -191,6 +199,7 @@ async function initApp() {
 
     // 3. Load Feed — must finish before we try to pin a shared post on top of it
     try {
+        loadTrendingTags();
         await loadPosts(1, true);
         await loadSupportLink();
 
