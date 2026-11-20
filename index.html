@@ -50,6 +50,10 @@
             <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" placeholder="Search posts & videos...">
             <button id="homeSearchClearBtn" onclick="clearHomeSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-times-circle"></i></button>
         </div>
+        <div id="feedTabs" class="flex gap-2 mb-3">
+            <button id="feedTabAll" onclick="setFeedMode('all')" class="feed-chip active">For You</button>
+            <button id="feedTabFollowing" onclick="setFeedMode('following')" class="feed-chip">Following</button>
+        </div>
         <div id="feed" class="space-y-4">
             <div class="text-center text-gray-400 py-10">
                 <i class="fas fa-spinner fa-spin text-3xl"></i>
@@ -150,6 +154,14 @@
             <p id="videoFileName" class="text-xs text-gray-400 mb-3 truncate"></p>
 
             <button id="submitVideoBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Upload</button>
+        </div>
+    </div>
+
+    <!-- PROFILE BOTTOM SHEET -->
+    <div id="profileModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="profileSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[88vh] flex flex-col shadow-2xl">
+            <div class="sheet-handle"></div>
+            <div class="overflow-y-auto flex-1 -mx-1 px-1" id="profileBody"></div>
         </div>
     </div>
 
@@ -268,6 +280,7 @@
     <script src="/assets/js/shorts.js?v=__V__" defer></script>
     <script src="/assets/js/actions.js?v=__V__" defer></script>
     <script src="/assets/js/extras.js?v=__V__" defer></script>
+    <script src="/assets/js/profile.js?v=__V__" defer></script>
     <script src="/assets/js/boot.js?v=__V__" defer></script>
 </body>
 </html>

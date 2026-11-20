@@ -7,7 +7,6 @@
 .fa-spin{animation:fa-spin 1s linear infinite}
 @keyframes fa-spin{to{transform:rotate(360deg)}}
 .fa-backward::before{content:"\f04a"}
-.fa-bolt::before{content:"\f0e7"}
 .fa-check-circle::before{content:"\f058"}
 .fa-chevron-right::before{content:"\f054"}
 .fa-comment::before{content:"\f075"}
@@ -42,7 +41,9 @@
 .fa-tools::before{content:"\f7d9"}
 .fa-trash::before{content:"\f1f8"}
 .fa-trash-alt::before{content:"\f2ed"}
+.fa-user-plus::before{content:"\f234"}
 .fa-user-shield::before{content:"\f505"}
+.fa-user-slash::before{content:"\f506"}
 .fa-users::before{content:"\f0c0"}
 .fa-video::before{content:"\f03d"}
 .fa-video-slash::before{content:"\f4e2"}

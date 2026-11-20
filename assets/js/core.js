@@ -10,6 +10,7 @@ let openModalsStack = [];
 
 // Pagination/Infinite scroll variables (10 posts at a time)
 let currentPage = 1;
+let feedMode = 'all';          // 'all' (For You) | 'following'
 let isLoadingFeed = false;
 let hasMorePosts = true;
 
@@ -94,6 +95,8 @@ async function handleSharedDeepLink() {
                 observeShorts();
                 feed.firstElementChild.scrollIntoView();
             }
+        } else if (startParam.startsWith('profile_')) {
+            openProfile(startParam.replace('profile_', ''));
         } else if (startParam.startsWith('post_')) {
             const postId = startParam.replace('post_', '');
             const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });

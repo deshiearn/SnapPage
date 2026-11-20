@@ -119,8 +119,21 @@ async function uploadImageToTelegram(base64Str) {
 }
 
 // ================= Bot Notification Helper (with Inline WebApp Button) =================
+// Anti-spam + Telegram flood protection: at most 15 notifications per user per hour
+const notifyLog = new Map();
+function notifyAllowed(tgId) {
+    const now = Date.now();
+    const recent = (notifyLog.get(String(tgId)) || []).filter(t => now - t < 3600 * 1000);
+    if (recent.length >= 15) { notifyLog.set(String(tgId), recent); return false; }
+    recent.push(now);
+    notifyLog.set(String(tgId), recent);
+    if (notifyLog.size > 20000) notifyLog.delete(notifyLog.keys().next().value);
+    return true;
+}
+
 async function sendTelegramNotification(targetTgId, text, startappParam = "") {
     if (!targetTgId) return;
+    if (!notifyAllowed(targetTgId)) return;
     try {
         const appUrl = startappParam
             ? `${process.env.MINI_APP_URL}?startapp=${startappParam}`
@@ -415,6 +428,7 @@ bot.on('channel_post', async (ctx) => {
                 String(c.id) === String(channelId) ? { ...c, username: freshUsername, name: freshTitle || c.name } : c
             );
             await supabase.from('users').update({ channels: updatedChannels }).eq('tg_id', registeredOwner.tg_id);
+        invalidateAuthorCaches();
         }
     }
 
@@ -613,31 +627,37 @@ app.post('/api/auth', async (req, res) => {
 
 // Secure endpoint to get all Posts with Pagination and author data mapping
 app.post('/api/getPosts', async (req, res) => {
-    const { page = 1, limit = 10 } = req.body;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const page = Math.max(1, parseInt(req.body.page) || 1);
+    const limit = Math.min(20, Math.max(1, parseInt(req.body.limit) || 10));   // hard cap keeps responses small
+    const { feed, authorId, initData } = req.body;
+    const offset = (page - 1) * limit;
 
     try {
-        let query = supabase.from('posts').select('*');
+        let followIds = null;
+        if (feed === 'following') {
+            const tgUser = validateTGData(initData);
+            if (!tgUser) return res.json([]);
+            followIds = await getFollowingIds(tgUser.id.toString());
+            if (!followIds.length) return res.json([]);
+        }
+        const base = () => {
+            let q = supabase.from('posts').select('*');
+            if (followIds) q = q.in('author_id', followIds);
+            if (authorId) q = q.eq('author_id', String(authorId));
+            return q;
+        };
 
-        if (parseInt(page) === 1) {
-            // On page 1, surface pinned posts first, then the rest by recency
+        // Pinned posts only lead the main "For You" feed
+        if (page === 1 && !followIds && !authorId) {
             const { data: pinned } = await supabase.from('posts').select('*').eq('is_pinned', true).order('created_at', { ascending: false });
-            const { data: rest, error } = await supabase.from('posts')
-                .select('*')
-                .eq('is_pinned', false)
-                .order('created_at', { ascending: false })
-                .range(0, limit - 1);
+            const { data: rest, error } = await base().eq('is_pinned', false).order('created_at', { ascending: false }).range(0, limit - 1);
             if (error) throw error;
-            const combined = [...(pinned || []), ...(rest || [])];
-            return res.json(await enrichPosts(combined));
+            return res.json(await enrichPosts([...(pinned || []), ...(rest || [])]));
         }
 
-        const { data: posts, error } = await supabase.from('posts')
-            .select('*')
-            .eq('is_pinned', false)
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-
+        let q = base().order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+        if (!followIds && !authorId) q = base().eq('is_pinned', false).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+        const { data: posts, error } = await q;
         if (error) throw error;
         res.json(await enrichPosts(posts || []));
     } catch (e) {
@@ -646,64 +666,174 @@ app.post('/api/getPosts', async (req, res) => {
     }
 });
 
-async function enrichPosts(posts) {
-    if (!posts) return [];
-    // Pre-fetch all users' channels once — per-post .contains() queries proved unreliable
-    // for this JSONB shape (the same issue we hit and fixed in the admin setBadge endpoint).
-    const { data: allUsersForChannels } = await supabase.from('users').select('tg_id, channels, is_verified');
-    const ownerLevelCache = {};
-    async function getOwnerLevel(owner) {
-        if (owner.is_verified) return 3;
-        if (ownerLevelCache[owner.tg_id] !== undefined) return ownerLevelCache[owner.tg_id];
-        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', owner.tg_id);
-        const level = getLevelData(refCount || 0).level;
-        ownerLevelCache[owner.tg_id] = level;
-        return level;
+// ================= Follow system + profiles =================
+async function getFollowingIds(tgId) {
+    const { data } = await supabase.from('follows').select('followee_id').eq('follower_id', tgId).limit(1000);
+    return (data || []).map(r => String(r.followee_id));
+}
+
+// Who owns a followee? (a user is their own owner; a channel's owners are the users who added it)
+async function resolveFollowee(targetId) {
+    const { data: u } = await supabase.from('users').select('tg_id, name, username, photo_url, is_verified').eq('tg_id', targetId).maybeSingle();
+    if (u) return { type: 'user', owners: [String(u.tg_id)], name: u.name, username: u.username, photo: u.photo_url, verified: !!u.is_verified, ownerVerified: !!u.is_verified, ownerId: String(u.tg_id) };
+    const hit = (await getChannelMap()).get(String(targetId));
+    if (hit) return { type: 'channel', owners: [String(hit.owner.tg_id)], name: hit.ch.title || hit.ch.name || 'Channel', username: hit.ch.username || '', photo: hit.ch.photo || '', verified: !!hit.ch.verified || hit.owner.is_verified, ownerVerified: hit.owner.is_verified, ownerId: String(hit.owner.tg_id) };
+    return null;
+}
+
+app.post('/api/toggleFollow', async (req, res) => {
+    const { initData, targetId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    const me = tgUser.id.toString();
+    const target = String(targetId || '');
+    if (!target) return res.status(400).json({ error: "Missing target" });
+    try {
+        const info = await resolveFollowee(target);
+        if (!info) return res.status(404).json({ error: "Profile not found" });
+        if (info.owners.includes(me)) return res.status(400).json({ error: "You can't follow yourself" });
+
+        const { data: existing } = await supabase.from('follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle();
+        let following;
+        if (existing) {
+            const { error } = await supabase.from('follows').delete().eq('follower_id', me).eq('followee_id', target);
+            if (error) throw error;
+            following = false;
+        } else {
+            const { error } = await supabase.from('follows').insert([{ follower_id: me, followee_id: target, followee_type: info.type }]);
+            if (error) throw error;
+            following = true;
+            const who = tgUser.first_name || 'Someone';
+            info.owners.forEach(o => sendTelegramNotification(o, `👤 ${who} started following ${info.type === 'channel' ? info.name : 'you'}!`, `profile_${me}`));
+        }
+        const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('followee_id', target);
+        res.json({ success: true, following, followers: count || 0 });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
     }
+});
 
-    return Promise.all(posts.map(async post => {
-        let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_name || 'U')}`;
-        let authorLevel = 1;
-        let authorUsername = '';
-        let authorVerified = false;
+app.post('/api/getProfile', async (req, res) => {
+    const { initData, authorId } = req.body;
+    const tgUser = validateTGData(initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    const me = tgUser.id.toString();
+    const target = String(authorId || '');
+    try {
+        const info = await resolveFollowee(target);
+        if (!info) return res.status(404).json({ error: "Profile not found" });
+        const [followers, following, posts, mine] = await Promise.all([
+            supabase.from('follows').select('*', { count: 'exact', head: true }).eq('followee_id', target),
+            info.type === 'user' ? supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', target) : Promise.resolve({ count: 0 }),
+            supabase.from('posts').select('*', { count: 'exact', head: true }).eq('author_id', target),
+            supabase.from('follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle()
+        ]);
+        res.json({
+            id: target,
+            type: info.type,
+            name: info.name,
+            username: info.username || '',
+            photo: info.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(info.name || 'U')}`,
+            verified: info.verified,
+            level: await getUserLevelCached(info.ownerId, info.ownerVerified),
+            followers: followers.count || 0,
+            following: following.count || 0,
+            posts: posts.count || 0,
+            isFollowing: !!(mine && mine.data),
+            isSelf: info.owners.includes(me)
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message || e });
+    }
+});
 
-        try {
-            if (post.type === 'user') {
-                const { data: u } = await supabase.from('users').select('photo_url, username, tg_id, is_verified').eq('tg_id', post.author_id).maybeSingle();
-                if (u) {
-                    if (u.photo_url) authPhoto = u.photo_url;
-                    if (u.username) authorUsername = u.username;
-                    authorVerified = !!u.is_verified;
-                }
+// ================= Free-tier friendly author lookup =================
+// Supabase free: 500MB DB, limited egress / connections.  Render free: 512MB RAM, sleeps when idle.
+// So the feed must NOT do per-post queries. Everything below is batched and cached in memory.
+const TTL = { channels: 30 * 1000, meta: 60 * 1000, level: 5 * 60 * 1000 };
+let channelMapCache = { exp: 0, map: new Map() };
+const userMetaCache = new Map();   // tg_id -> { exp, v }
+const userLevelCache = new Map();  // tg_id -> { exp, v }
 
-                const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', post.author_id);
-                authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
-            } else if (post.type === 'channel') {
-                for (const owner of (allUsersForChannels || [])) {
-                    if (!owner.channels || !owner.channels.length) continue;
-                    const ch = owner.channels.find(c => String(c.id) === String(post.author_id));
-                    if (ch) {
-                        if (ch.photo) authPhoto = ch.photo;
-                        if (ch.username) authorUsername = ch.username;
-                        // A channel inherits its owning user's badge AND their referral level
-                        // (a verified owner unlocks Level 3 link privileges for their channels too).
-                        authorVerified = !!ch.verified || !!owner.is_verified;
-                        authorLevel = await getOwnerLevel(owner);
-                        break;
-                    }
-                }
+function invalidateAuthorCaches() {
+    channelMapCache.exp = 0;
+    userMetaCache.clear();
+}
+
+// channelId -> { ch, owner:{tg_id,is_verified} }  — one query per 30s instead of one per request
+async function getChannelMap() {
+    if (channelMapCache.exp > Date.now()) return channelMapCache.map;
+    const { data } = await supabase.from('users').select('tg_id, channels, is_verified').not('channels', 'is', null);
+    const map = new Map();
+    (data || []).forEach(owner => {
+        (owner.channels || []).forEach(ch => map.set(String(ch.id), { ch, owner: { tg_id: owner.tg_id, is_verified: !!owner.is_verified } }));
+    });
+    channelMapCache = { exp: Date.now() + TTL.channels, map };
+    return map;
+}
+
+async function getUserMetaBatch(ids) {
+    const out = {};
+    const missing = [];
+    ids.forEach(id => {
+        const hit = userMetaCache.get(id);
+        if (hit && hit.exp > Date.now()) out[id] = hit.v; else missing.push(id);
+    });
+    if (missing.length) {
+        const { data } = await supabase.from('users').select('tg_id, photo_url, username, is_verified, name').in('tg_id', missing);
+        (data || []).forEach(u => {
+            out[u.tg_id] = u;
+            userMetaCache.set(u.tg_id, { exp: Date.now() + TTL.meta, v: u });
+        });
+    }
+    return out;
+}
+
+async function getUserLevelCached(tgId, isVerified) {
+    if (isVerified) return 3;
+    const hit = userLevelCache.get(tgId);
+    if (hit && hit.exp > Date.now()) return hit.v;
+    const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgId);
+    const level = getLevelData(count || 0).level;
+    userLevelCache.set(tgId, { exp: Date.now() + TTL.level, v: level });
+    if (userLevelCache.size > 5000) userLevelCache.delete(userLevelCache.keys().next().value);
+    return level;
+}
+
+// Adds author_photo / author_level / author_username / author_verified to posts or videos
+async function enrichAuthors(items) {
+    if (!items || !items.length) return [];
+    const channelMap = await getChannelMap();
+    const userIds = [...new Set(items.filter(i => i.type === 'user').map(i => String(i.author_id)))];
+    const metas = userIds.length ? await getUserMetaBatch(userIds) : {};
+    const levels = {};
+    await Promise.all(userIds.map(async id => { levels[id] = await getUserLevelCached(id, !!(metas[id] && metas[id].is_verified)); }));
+    const ownerLevels = {};
+
+    return Promise.all(items.map(async item => {
+        let photo = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.author_name || 'U')}`;
+        let level = 1, username = '', verified = false;
+        if (item.type === 'user') {
+            const u = metas[String(item.author_id)];
+            if (u) { if (u.photo_url) photo = u.photo_url; if (u.username) username = u.username; verified = !!u.is_verified; }
+            level = levels[String(item.author_id)] || 1;
+        } else if (item.type === 'channel') {
+            const hit = channelMap.get(String(item.author_id));
+            if (hit) {
+                if (hit.ch.photo) photo = hit.ch.photo;
+                if (hit.ch.username) username = hit.ch.username;
+                // A channel inherits its owner's badge AND referral level
+                verified = !!hit.ch.verified || hit.owner.is_verified;
+                const oid = String(hit.owner.tg_id);
+                if (ownerLevels[oid] === undefined) ownerLevels[oid] = await getUserLevelCached(oid, hit.owner.is_verified);
+                level = ownerLevels[oid];
             }
-        } catch(e) {}
-
-        return {
-            ...post,
-            author_photo: authPhoto,
-            author_level: authorLevel,
-            author_username: authorUsername,
-            author_verified: authorVerified
-        };
+        }
+        return { ...item, author_photo: photo, author_level: level, author_username: username, author_verified: verified };
     }));
 }
+
+async function enrichPosts(posts) { return enrichAuthors(posts); }
 
 // Secure endpoint to get User's Personal Posts (RLS Bypass)
 app.post('/api/getMyPosts', async (req, res) => {
@@ -1066,6 +1196,7 @@ app.post('/api/addChannel', async (req, res) => {
         const cleanUsername = chat.username || 'private';
         channels.push({ id: chat.id.toString(), name: chat.title, username: cleanUsername, photo: photoUrl, verified: false });
         await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id.toString());
+        invalidateAuthorCaches();
 
         // Send Bot notification for channel registration success
         sendTelegramNotification(
@@ -1090,6 +1221,7 @@ app.post('/api/removeChannel', async (req, res) => {
         if (error || !user) return res.status(404).json({ error: "User not found" });
         let channels = (user.channels || []).filter(c => c.id !== channelId);
         await supabase.from('users').update({ channels }).eq('tg_id', tgUser.id.toString());
+        invalidateAuthorCaches();
         res.json({ success: true, channels });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -1231,58 +1363,8 @@ app.post('/api/likeComment', async (req, res) => {
 // videos are auto-synced straight from the origin channel_post (see bot.on('channel_post')).
 
 async function enrichVideos(videos) {
-    if (!videos) return [];
-    const { data: allUsersForChannels } = await supabase.from('users').select('tg_id, channels, is_verified');
-    const ownerLevelCache = {};
-    async function getOwnerLevel(owner) {
-        if (owner.is_verified) return 3;
-        if (ownerLevelCache[owner.tg_id] !== undefined) return ownerLevelCache[owner.tg_id];
-        const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', owner.tg_id);
-        const level = getLevelData(refCount || 0).level;
-        ownerLevelCache[owner.tg_id] = level;
-        return level;
-    }
-
-    return Promise.all(videos.map(async v => {
-        let authPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(v.author_name || 'U')}`;
-        let authorLevel = 1;
-        let authorUsername = '';
-        let authorVerified = false;
-
-        try {
-            if (v.type === 'user') {
-                const { data: u } = await supabase.from('users').select('photo_url, username, is_verified').eq('tg_id', v.author_id).maybeSingle();
-                if (u) {
-                    if (u.photo_url) authPhoto = u.photo_url;
-                    if (u.username) authorUsername = u.username;
-                    authorVerified = !!u.is_verified;
-                }
-                const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', v.author_id);
-                authorLevel = authorVerified ? 3 : getLevelData(refCount || 0).level;
-            } else if (v.type === 'channel') {
-                for (const owner of (allUsersForChannels || [])) {
-                    if (!owner.channels || !owner.channels.length) continue;
-                    const ch = owner.channels.find(c => String(c.id) === String(v.author_id));
-                    if (ch) {
-                        if (ch.photo) authPhoto = ch.photo;
-                        if (ch.username) authorUsername = ch.username;
-                        authorVerified = !!ch.verified || !!owner.is_verified;
-                        authorLevel = await getOwnerLevel(owner);
-                        break;
-                    }
-                }
-            }
-        } catch (e) {}
-
-        return {
-            ...v,
-            author_photo: authPhoto,
-            author_level: authorLevel,
-            author_username: authorUsername,
-            author_verified: authorVerified,
-            stream_url: `/api/videoStream/${v.id}`
-        };
-    }));
+    const list = await enrichAuthors(videos);
+    return list.map(v => ({ ...v, stream_url: `/api/videoStream/${v.id}` }));
 }
 
 // Paginated Shorts feed
@@ -1709,6 +1791,7 @@ async function banChannelInternal(channelId) {
         if (!owner.channels || !owner.channels.some(c => String(c.id) === String(channelId))) continue;
         const updated = owner.channels.filter(c => String(c.id) !== String(channelId));
         await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+        invalidateAuthorCaches();
     }
 }
 
@@ -1815,6 +1898,7 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
                 });
                 if (changed) {
                     const { error: updateErr } = await supabase.from('users').update({ channels: updated }).eq('tg_id', owner.tg_id);
+        invalidateAuthorCaches();
                     if (updateErr) {
                         writeError = updateErr;
                         console.error(`setBadge: failed to save channel badge for owner ${owner.tg_id}:`, updateErr);
@@ -1844,6 +1928,8 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
                 return res.status(404).json({ error: "No matching user found with that chat ID or username." });
             }
         }
+        invalidateAuthorCaches();
+        userLevelCache.clear();
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -1919,6 +2005,9 @@ function getIndexHtml() {
     }
     return indexHtmlCache;
 }
+// Lightweight health check (also what the self-ping below hits)
+app.get('/healthz', (req, res) => res.type('text').send('ok'));
+
 app.use('/assets', express.static(path.join(__dirname, 'assets'), {
     maxAge: '365d',
     immutable: true,
@@ -1934,6 +2023,14 @@ app.get('/', (req, res) => {
 });
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'indexadmin.html')));
 app.use(bot.webhookCallback('/webhook'));
+
+// Render's free plan puts the service to sleep after ~15 min without traffic, and the first request
+// after that takes 30-60s (the "loading forever" feeling). Pinging ourselves every 10 minutes keeps it
+// awake. One always-on free service uses ~744 of the 750 free hours/month, so this fits the free plan.
+if (process.env.RENDER_EXTERNAL_URL && typeof fetch === 'function') {
+    setInterval(() => { fetch(`${process.env.RENDER_EXTERNAL_URL}/healthz`).catch(() => {}); }, 10 * 60 * 1000);
+}
+
 app.listen(process.env.PORT || 3000, async () => {
     console.log("Server Live!");
     await bot.telegram.setWebhook(`${process.env.RENDER_EXTERNAL_URL}/webhook`);
