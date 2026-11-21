@@ -505,16 +505,183 @@ bot.action(/^rm:(post|video):(.+)$/, async (ctx) => {
     }
 });
 
+
+// ================= Rich messages (tables, slideshows, lists ... Bot API 10.1+) =================
+// Telegram's newer "rich_message" posts are converted into a small, already-sanitised block tree
+// that the app renders natively. Text is turned into escaped HTML here, so the client stays dumb.
+const escH = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const safeUrl = (u) => /^(https?:\/\/|tg:\/\/|mailto:)/i.test(String(u || '')) ? escH(u) : '';
+function rtHtml(rt) {
+    if (rt == null) return '';
+    if (typeof rt === 'string') return escH(rt);
+    if (Array.isArray(rt)) return rt.map(rtHtml).join('');
+    const inner = () => rtHtml(rt.text);
+    switch (rt.type) {
+        case 'bold': return `<b>${inner()}</b>`;
+        case 'italic': return `<i>${inner()}</i>`;
+        case 'underline': return `<u>${inner()}</u>`;
+        case 'strikethrough': return `<s>${inner()}</s>`;
+        case 'spoiler': return `<span class="spoiler">${inner()}</span>`;
+        case 'subscript': return `<sub>${inner()}</sub>`;
+        case 'superscript': return `<sup>${inner()}</sup>`;
+        case 'marked': return `<mark>${inner()}</mark>`;
+        case 'code': return `<code>${inner()}</code>`;
+        case 'url': { const u = safeUrl(rt.url); return u ? `<a href="${u}" target="_blank" rel="noopener" class="text-blue-500">${inner()}</a>` : inner(); }
+        case 'email': return `<span class="text-blue-500">${inner()}</span>`;
+        case 'custom_emoji': return escH(rt.alternative_text || '');
+        case 'mathematical_expression': return `<code>${escH(rt.expression || '')}</code>`;
+        default: return inner() || escH(rt.username || rt.hashtag || rt.email_address || '');
+    }
+}
+const rtPlain = (rt) => String(rtHtml(rt)).replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+const photoUrlOf = (sizes) => (Array.isArray(sizes) && sizes.length) ? tgImageUrl(sizes[sizes.length - 1].file_id) : null;
+const capOf = (c) => c ? { x: rtHtml(c.text), c: c.credit ? rtHtml(c.credit) : '' } : null;
+
+function blockToApp(b, depth = 0) {
+    if (!b || depth > 6) return null;
+    switch (b.type) {
+        case 'paragraph': return { t: 'p', x: rtHtml(b.text) };
+        case 'heading': return { t: 'h', n: Math.min(6, Math.max(1, b.size || 2)), x: rtHtml(b.text) };
+        case 'table': return {
+            t: 'table', bordered: !!b.is_bordered, striped: !!b.is_striped, compact: !!b.is_compact, cap: b.caption ? rtHtml(b.caption) : '',
+            rows: (b.cells || []).map(row => (row || []).map(c => ({ x: rtHtml(c && c.text), h: !!(c && c.is_header), cs: c && c.colspan || 1, rs: c && c.rowspan || 1, al: c && c.align || 'left' })))
+        };
+        case 'slideshow': case 'collage': return { t: b.type === 'slideshow' ? 'slide' : 'collage', items: (b.blocks || []).map(x => blockToApp(x, depth + 1)).filter(Boolean), cap: capOf(b.caption) };
+        case 'photo': { const u = photoUrlOf(b.photo); return u ? { t: 'photo', u, cap: capOf(b.caption) } : null; }
+        case 'video': return b.video ? { t: 'video', cap: capOf(b.caption), dur: b.video.duration || 0 } : null;
+        case 'list': return { t: 'list', items: (b.items || []).map(i => ({ l: escH(i.label), chk: !!i.has_checkbox, done: !!i.is_checked, b: (i.blocks || []).map(x => blockToApp(x, depth + 1)).filter(Boolean) })) };
+        case 'pre': return { t: 'pre', x: rtHtml(b.text), lang: escH(b.language || '') };
+        case 'blockquote': case 'expandable_blockquote': case 'pullquote':
+            return { t: 'quote', b: b.blocks ? b.blocks.map(x => blockToApp(x, depth + 1)).filter(Boolean) : [{ t: 'p', x: rtHtml(b.text) }], c: b.credit ? rtHtml(b.credit) : '' };
+        case 'divider': return { t: 'hr' };
+        case 'footer': return { t: 'foot', x: rtHtml(b.text) };
+        default: return b.text ? { t: 'p', x: rtHtml(b.text) } : null;
+    }
+}
+function richToApp(rm) {
+    const blocks = (rm.blocks || []).map(b => blockToApp(b)).filter(Boolean);
+    const images = [];
+    const walk = (bs) => (bs || []).forEach(b => {
+        if (b.t === 'photo') images.push(b.u);
+        if (b.t === 'list') b.items.forEach(i => walk(i.b));
+        else if (b.items) walk(b.items);
+        if (b.b) walk(b.b);
+    });
+    walk(blocks);
+    const text = (rm.blocks || []).map(b => b.text ? rtPlain(b.text) : '').filter(Boolean).join('\n').slice(0, 600);
+    return { rich: { v: 1, rtl: !!rm.is_rtl, blocks }, text, images: [...new Set(images)] };
+}
+
+// Insert that tolerates a database where sql/13 hasn't been run yet (drops the new optional columns)
+async function insertTolerant(table, row, optionalCols) {
+    let r = await supabase.from(table).insert([row]).select().single();
+    if (r.error && optionalCols.some(c => String(r.error.message || '').includes(c))) {
+        const slim = { ...row }; optionalCols.forEach(c => delete slim[c]);
+        r = await supabase.from(table).insert([slim]).select().single();
+    }
+    return r.data;
+}
+
+// ================= Channel sync: info refresh, edits, deletions =================
+async function refreshChannelInfo(channelId) {
+    try {
+        const chat = await bot.telegram.getChat(channelId);
+        const map = await getChannelMap();
+        const hit = map.get(String(channelId));
+        if (!hit) return;
+        const { data: owner } = await supabase.from('users').select('tg_id, channels').eq('tg_id', hit.owner.tg_id).maybeSingle();
+        if (!owner || !Array.isArray(owner.channels)) return;
+        const photo = chat.photo ? tgImageUrl(chat.photo.small_file_id) : null;
+        let changed = false;
+        const channels = owner.channels.map(c => {
+            if (String(c.id) !== String(channelId)) return c;
+            const n = { ...c, name: chat.title || c.name, username: chat.username || 'private' };
+            if (photo) n.photo = photo;
+            if (n.name !== c.name || n.username !== c.username || n.photo !== c.photo) changed = true;
+            return n;
+        });
+        if (changed) {
+            await supabase.from('users').update({ channels }).eq('tg_id', owner.tg_id);
+            channelMapCache.exp = 0; invalidateAuthorCaches();
+        }
+    } catch (e) { /* bot removed / channel gone — ignore */ }
+}
+
+let lastChannelSync = 0, syncRunning = false, syncCursor = 0;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Refreshes channel names/photos and removes app copies of posts/videos deleted in the channel.
+// Bot API sends no "deleted" event, so we probe recent posts by copying them to the storage channel
+// and deleting the copy right away; "message not found" means the original is gone.
+async function syncChannels(force) {
+    if (syncRunning || (!force && Date.now() - lastChannelSync < 10 * 60 * 1000)) return;
+    syncRunning = true; lastChannelSync = Date.now();
+    try {
+        const map = await getChannelMap();
+        const ids = [...map.keys()].slice(0, 40);
+        for (const id of ids) { await refreshChannelInfo(id); await sleep(60); }
+
+        const storage = await getStorageChannel();
+        if (!storage) return;
+        const since = new Date(Date.now() - 30 * 86400000).toISOString();
+        const [pr, vr] = await Promise.all([
+            supabase.from('posts').select('id, author_id, src_msg_id').eq('type', 'channel').not('src_msg_id', 'is', null).gte('created_at', since).order('created_at', { ascending: false }).limit(200),
+            supabase.from('videos').select('id, author_id, storage_message_id').eq('type', 'channel').eq('owned_storage', false).not('storage_message_id', 'is', null).gte('created_at', since).order('created_at', { ascending: false }).limit(100)
+        ]);
+        const items = [
+            ...(pr.data || []).map(r => ({ tbl: 'posts', id: r.id, chat: r.author_id, msg: r.src_msg_id })),
+            ...(vr.data || []).map(r => ({ tbl: 'videos', id: r.id, chat: r.author_id, msg: r.storage_message_id }))
+        ].filter(i => map.has(String(i.chat)));
+        const batch = items.slice(syncCursor % Math.max(items.length, 1), (syncCursor % Math.max(items.length, 1)) + 25);   // rotate through, 25 probes per run
+        syncCursor += 25;
+        let removed = 0;
+        for (const it of batch) {
+            try {
+                const copy = await bot.telegram.copyMessage(storage, it.chat, Number(it.msg));
+                bot.telegram.deleteMessage(storage, copy.message_id).catch(() => {});
+            } catch (e) {
+                const d = String(e.description || e.message || '');
+                if (/message to copy not found|MESSAGE_ID_INVALID|message not found/i.test(d)) {
+                    await supabase.from(it.tbl).delete().eq('id', it.id);
+                    removed++;
+                }
+            }
+            await sleep(120);
+        }
+        if (removed) console.log(`Channel sync: removed ${removed} item(s) deleted from their channels.`);
+    } catch (e) { console.error('syncChannels failed:', e.message || e); }
+    finally { syncRunning = false; }
+}
+setInterval(() => syncChannels(true), 60 * 60 * 1000);
+
+bot.on('edited_channel_post', async (ctx) => {
+    const msg = ctx.update.edited_channel_post;
+    const channelId = msg.chat.id.toString();
+    try {
+        const map = await getChannelMap();
+        if (!map.has(channelId)) return;
+        if (msg.video) {
+            await supabase.from('videos').update({ caption: msg.caption || '', entities: msg.caption_entities || null }).eq('author_id', channelId).eq('storage_message_id', msg.message_id);
+            return;
+        }
+        const patch = { text: msg.text || msg.caption || '', entities: msg.entities || msg.caption_entities || null };
+        if (msg.photo) patch.image_urls = [tgImageUrl(msg.photo[msg.photo.length - 1].file_id)];
+        if (msg.rich_message) { const r = richToApp(msg.rich_message); patch.rich = r.rich; patch.text = r.text; patch.image_urls = r.images; }
+        let { error } = await supabase.from('posts').update(patch).eq('author_id', channelId).eq('src_msg_id', String(msg.message_id));
+        if (error && patch.rich) { delete patch.rich; await supabase.from('posts').update(patch).eq('author_id', channelId).eq('src_msg_id', String(msg.message_id)); }
+    } catch (e) { console.error('edited_channel_post failed:', e.message || e); }
+});
+
 // Telegram sends a multi-photo channel post (an "album") as several separate channel_post
 // updates that all share the same media_group_id, arriving within a fraction of a second of
 // each other. We buffer them briefly and merge into a single post with all the images once
 // no more arrive, rather than creating one post per photo.
 const mediaGroupBuffers = {};
-function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, caption, entities }) {
+function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, caption, entities, msgId }) {
     if (!mediaGroupBuffers[groupId]) {
-        mediaGroupBuffers[groupId] = { channelId, channelName, fileIds: [], caption: '', entities: null, timer: null };
+        mediaGroupBuffers[groupId] = { channelId, channelName, fileIds: [], caption: '', entities: null, timer: null, firstMsg: msgId };
     }
     const buf = mediaGroupBuffers[groupId];
+    if (msgId < buf.firstMsg) buf.firstMsg = msgId;
     buf.fileIds.push(fileId);
     // Telegram only attaches the caption to (usually) the first message in the album.
     if (caption) { buf.caption = caption; buf.entities = entities || null; }
@@ -523,18 +690,19 @@ function bufferMediaGroupPhoto(groupId, { channelId, channelName, fileId, captio
     buf.timer = setTimeout(async () => {
         delete mediaGroupBuffers[groupId];
         try {
-            const { data: ins } = await supabase.from('posts').insert([{
+            const ins = await insertTolerant('posts', {
                 author_id: buf.channelId,
                 author_name: buf.channelName,
                 type: 'channel',
                 text: buf.caption || '',
                 entities: buf.entities,
                 image_urls: buf.fileIds.map(id => tgImageUrl(id)),
+                src_msg_id: String(buf.firstMsg),
                 likes_count: 0,
                 likes_users: [],
                 is_pinned: false,
                 created_at: new Date().toISOString()
-            }]).select().single();
+            }, ['src_msg_id']);
             await enforcePostCap();
             if (ins) notifyAdminsChannelContent('post', ins.id, buf.channelName, buf.caption);
         } catch (e) {
@@ -549,6 +717,7 @@ bot.on('channel_post', async (ctx) => {
 
     // Ignore service updates (title/photo changed, pinned message, member changes, etc.) —
     // only actual text/photo/video content should ever become a post or Short.
+    if (msg.new_chat_photo || msg.new_chat_title || msg.delete_chat_photo) { refreshChannelInfo(channelId); return; }   // channel photo/name changed → update the app right away
     const isServiceUpdate = msg.new_chat_title || msg.new_chat_photo || msg.delete_chat_photo ||
         msg.pinned_message || msg.new_chat_members || msg.left_chat_member ||
         msg.migrate_to_chat_id || msg.migrate_from_chat_id || msg.group_chat_created ||
@@ -556,7 +725,7 @@ bot.on('channel_post', async (ctx) => {
     if (isServiceUpdate) return;
 
     // Only these content types are synced — no documents, polls, stickers, voice notes, etc.
-    const hasSupportedContent = (msg.text && !msg.photo && !msg.video) || msg.photo || msg.video;
+    const hasSupportedContent = (msg.text && !msg.photo && !msg.video) || msg.photo || msg.video || msg.rich_message;
     if (!hasSupportedContent) return;
 
     // Skip banned channels entirely
@@ -629,36 +798,43 @@ bot.on('channel_post', async (ctx) => {
                     channelName: msg.chat.title || 'Channel Post',
                     fileId,
                     caption: msg.caption,
-                    entities: msg.caption_entities
+                    entities: msg.caption_entities,
+                    msgId: msg.message_id
                 });
                 return;
             }
 
             let imageUrls = [];
-            if (msg.photo) {
+            let rich = null;
+            let textContent = msg.text || msg.caption || '';
+            let entities = msg.entities || msg.caption_entities || null;
+            if (msg.rich_message) {
+                // Newer Telegram post formats (tables, slideshows, lists…) → keep the block tree for rich rendering
+                const r = richToApp(msg.rich_message);
+                rich = r.rich; imageUrls = r.images; textContent = r.text; entities = null;
+            } else if (msg.photo) {
                 // Already hosted on Telegram — just reference the file_id, no re-upload needed.
-                const fileId = msg.photo[msg.photo.length - 1].file_id;
-                imageUrls.push(tgImageUrl(fileId));
+                imageUrls.push(tgImageUrl(msg.photo[msg.photo.length - 1].file_id));
             }
 
-            const textContent = msg.text || msg.caption || '';
-            const entities = msg.entities || msg.caption_entities || null;
-
-            const { data: insP } = await supabase.from('posts').insert([{
+            const insP = await insertTolerant('posts', {
                 author_id: channelId,
                 author_name: msg.chat.title || 'Channel Post',
                 type: 'channel',
                 text: textContent,
                 entities,
                 image_urls: imageUrls,
+                rich,
+                src_msg_id: String(msg.message_id),
                 likes_count: 0,
                 likes_users: [],
                 is_pinned: false,
                 created_at: new Date().toISOString()
-            }]).select().single();
+            }, ['rich', 'src_msg_id']);
 
             await enforcePostCap();
             if (insP) notifyAdminsChannelContent('post', insP.id, msg.chat.title, textContent);
+            syncChannels();   // a channel was active → also check for deletions / info changes (throttled)
         } catch (e) {
             console.error("Auto Sync Sync Error", e);
         }
@@ -734,6 +910,7 @@ app.post('/api/guestInit', (req, res) => {
 app.post('/api/auth', async (req, res) => {
     const tgUser = validateTGData(req.body.initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    syncChannels();   // opening the app triggers a (10-min throttled) channel check: new photos/names + deleted posts
 
     const tgId = tgUser.id.toString();
 
@@ -1069,6 +1246,7 @@ async function enrichAuthors(items) {
             const hit = channelMap.get(String(item.author_id));
             if (hit) {
                 if (hit.ch.photo) photo = hit.ch.photo;
+                if (hit.ch.name) liveName = hit.ch.name;
                 if (hit.ch.username) username = hit.ch.username;
                 // A channel inherits its owner's badge AND referral level
                 verified = !!hit.ch.verified || hit.owner.is_verified;

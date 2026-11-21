@@ -335,3 +335,29 @@ body.lite .sheet-modal > div { animation-duration: .2s; }
 @keyframes starPulse { 0%,100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.25) rotate(18deg); } }
 .founder-mini { color: #f59e0b; font-size: 10px; }
 body.lite .pf-founder .pf-banner, body.lite .pf-founder .pf-banner::before, body.lite .pf-founder .pf-avatar { animation: none; }
+
+/* =================== Telegram rich posts (tables, slideshows, lists, quotes) =================== */
+.rich { font-size: 14px; line-height: 1.55; color: inherit; overflow-wrap: anywhere; }
+.rich > * + * { margin-top: 10px; }
+.rich-h { font-weight: 800; line-height: 1.25; } .rich-h1 { font-size: 20px; } .rich-h2 { font-size: 18px; } .rich-h3 { font-size: 16px; } .rich-h4, .rich-h5, .rich-h6 { font-size: 14.5px; }
+.rich-fig { margin: 0; } .rich-img { width: 100%; height: auto; max-height: 70vh; object-fit: contain; border-radius: 14px; background: rgba(120,120,128,.1); }
+.rich-cap { font-size: 12px; color: #6b7280; margin-top: 5px; } .rich-credit { display: block; font-style: italic; opacity: .8; }
+.rich-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; border: 1px solid rgba(120,120,128,.25); touch-action: pan-x pan-y; }
+.rich-table { border-collapse: collapse; min-width: 100%; font-size: 13px; }
+.rich-table th, .rich-table td { padding: 8px 12px; vertical-align: top; white-space: normal; min-width: 70px; }
+.rich-table.compact th, .rich-table.compact td { padding: 4px 8px; }
+.rich-table th { font-weight: 800; background: rgba(120,120,128,.14); }
+.rich-table.bordered th, .rich-table.bordered td { border: 1px solid rgba(120,120,128,.28); }
+.rich-table:not(.bordered) tr + tr td, .rich-table:not(.bordered) tr + tr th { border-top: 1px solid rgba(120,120,128,.18); }
+.rich-table.striped tr:nth-child(even) td { background: rgba(120,120,128,.08); }
+.rich-collage { display: grid; gap: 4px; } .rich-collage.c2 { grid-template-columns: 1fr 1fr; } .rich-collage.c3 { grid-template-columns: 2fr 1fr; } .rich-collage.c3 img:first-child { grid-row: span 2; height: 100%; } .rich-collage.c4 { grid-template-columns: 1fr 1fr; }
+.rich-collage img { height: 100%; max-height: 220px; object-fit: cover; }
+.rich-list { padding-left: 4px; list-style: none; } .rich-list li { display: flex; gap: 6px; } .rich-list li > .rich-p, .rich-list li > div { flex: 1; } .rich-lbl { font-weight: 700; color: var(--app-accent, #2563eb); }
+.rich-pre { background: rgba(120,120,128,.14); border-radius: 12px; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; }
+.rich code { background: rgba(120,120,128,.16); padding: 1px 5px; border-radius: 6px; font-size: .92em; }
+.rich-pre code { background: none; padding: 0; }
+.rich-quote { border-left: 3px solid var(--app-accent, #2563eb); padding: 4px 0 4px 12px; background: var(--app-accent-tint, rgba(37,99,235,.08)); border-radius: 0 10px 10px 0; } .rich-quote cite { display: block; font-size: 12px; opacity: .7; }
+.rich-hr { border: 0; border-top: 1px solid rgba(120,120,128,.3); } .rich-foot { font-size: 12px; color: #6b7280; }
+.rich-video { padding: 14px; border-radius: 14px; background: rgba(120,120,128,.12); font-size: 13px; font-weight: 600; text-align: center; }
+.rich mark { background: #fde68a; color: #111; padding: 0 2px; border-radius: 3px; }
+.spoiler { background: currentColor; color: transparent; border-radius: 4px; cursor: pointer; transition: all .25s; } .spoiler.show { background: transparent; color: inherit; }

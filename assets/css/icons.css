@@ -12,6 +12,7 @@
 .fa-bell::before{content:"\f0f3"}
 .fa-camera::before{content:"\f030"}
 .fa-check-circle::before{content:"\f058"}
+.fa-check-square::before{content:"\f14a"}
 .fa-chevron-right::before{content:"\f054"}
 .fa-comment::before{content:"\f075"}
 .fa-copy::before{content:"\f0c5"}
@@ -44,6 +45,7 @@
 .fa-share::before{content:"\f064"}
 .fa-shield-alt::before{content:"\f3ed"}
 .fa-spinner::before{content:"\f110"}
+.fa-square::before{content:"\f0c8"}
 .fa-thumbtack::before{content:"\f08d"}
 .fa-times::before{content:"\f00d"}
 .fa-times-circle::before{content:"\f057"}
