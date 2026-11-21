@@ -203,3 +203,8 @@ body.themed:not(.dark-mode) .bg-blue-50, body.themed:not(.dark-mode) .bg-blue-10
 /* Primary buttons follow Telegram's button colour in both modes */
 body.themed .bg-blue-600 { background-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }
 body.themed .feed-chip.active { background: var(--app-accent) !important; border-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }
+
+/* Profile tabs + reel grid */
+.profile-tab { color: #9ca3af; border-bottom: 2px solid transparent; transition: color .2s, border-color .2s; }
+.profile-tab.active { color: var(--app-link, #2563eb); border-bottom-color: var(--app-link, #2563eb); }
+.reel-thumb:active { opacity: .8; }

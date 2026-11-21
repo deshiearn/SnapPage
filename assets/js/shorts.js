@@ -30,7 +30,9 @@ async function loadShorts(reset = false) {
         document.getElementById('shortsEmptyState').classList.add('hidden');
         if (videos.length < 5) hasMoreShorts = false;
 
-        videos.forEach(v => feed.insertAdjacentHTML('beforeend', renderShortItem(v)));
+        videos.forEach(v => {
+            if (!feed.querySelector(`[data-video-id="${v.id}"]`)) feed.insertAdjacentHTML('beforeend', renderShortItem(v));
+        });
         observeShorts();
     } catch (e) {
         console.error("Shorts load failed:", e);
@@ -224,8 +226,29 @@ document.getElementById('shortsFeed').addEventListener('scroll', function() {
     }
 });
 
+// Opens the main Reels page starting at one specific reel (used by profile grid + deep links)
+window.openShortById = async (videoId) => {
+    try {
+        const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+        const video = await res.json();
+        const feed = document.getElementById('shortsFeed');
+        if (video && video.id) {
+            feed.innerHTML = renderShortItem(video);
+            shortsPage = 1; hasMoreShorts = true;
+            document.getElementById('shortsEmptyState').classList.add('hidden');
+            if (!shortsActive) switchTab('shorts');
+            feed.scrollTop = 0;
+            observeShorts();
+            document.getElementById('shortsEntryLoading').classList.add('hidden');
+            loadShorts(false);          // the rest of the reels follow below, without duplicates
+        } else {
+            switchTab('shorts');
+        }
+    } catch (e) { switchTab('shorts'); }
+};
+
 window.shareVideoDirectly = (id) => {
-    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}`;
+    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}${refSuffix()}`;
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent('Check out this Short on SnapPages!')}`);
 };
 

@@ -79,6 +79,12 @@ New **Web Service** from this repo — Build: `npm install`, Start: `npm start`.
 - **MainButton** – the native bottom button is used for *Post / Save* (composer), *Share Story* and *Invite Friends* (referral sheet; opens Telegram's share sheet). It shows a progress spinner while uploading and is disabled for an empty post. Outside Telegram (or on very old clients) the in-page buttons stay visible instead. Register a new screen with `MB_SCREENS['<modalId>'] = () => MB.show(...)`.
 - **Safe areas** – `--top-inset` follows `safeAreaInset` + `contentSafeAreaInset` in fullscreen (Bot API 8.0+), falling back to CSS `env()`.
 
+## Profiles, share links & invites
+
+- Profile sheet has **Posts / Reels** tabs. Reels show as a small thumbnail grid; tapping one opens the main Reels page starting at that reel (rest of the feed follows).
+- **Copy Link / Share** on a profile gives `https://t.me/<bot>/app?startapp=profile_<id>_ref_<yourId>`. Opening it lands straight on that profile, and a brand-new user who joins through it is counted as *your* invite (referral levels). Post and Reel share links carry the same `_ref_` suffix.
+- Follow needs `sql/06_social_migration.sql` (creates `snap_follows`). If it is missing the app now says so instead of a vague error.
+
 ## Working within the free tiers
 The app is designed so that normal growth does not hit a limit:
 

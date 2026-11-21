@@ -1,6 +1,6 @@
 'use strict';
 window.sharePostDirectly = (id) => {
-    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=post_${id}`;
+    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=post_${id}${refSuffix()}`;
     const text = "Check out this amazing post on SnapPages!";
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent(text)}`);
 }
