@@ -29,7 +29,7 @@ function applyAutoTheme() { applyTheme(); }
 applyAutoTheme();
 
 // "_ref_<myId>" appended to share links so people who join through them count as my invites
-window.refSuffix = () => (typeof currentUser !== 'undefined' && currentUser && currentUser.tg_id) ? `_ref_${currentUser.tg_id}` : '';
+window.refSuffix = () => (typeof currentUser !== 'undefined' && currentUser && /^\d+$/.test(String(currentUser.tg_id))) ? `_ref_${currentUser.tg_id}` : '';
 
 function getTelegramUser() {
     const user = tg.initDataUnsafe?.user || {};
@@ -109,6 +109,19 @@ function renderSharedPostWrapper(post) {
 }
 
 // Support link can be changed from the Admin Panel; falls back to the default set in the HTML
+// Settings header + nav avatar from the saved profile (name / @username can be edited in-app)
+function refreshProfileHeader() {
+    if (!currentUser) return;
+    const uname = currentUser.app_username || currentUser.username;
+    const un = document.getElementById('settingsProfileUsername');
+    if (un) un.innerText = uname ? `@${uname}` : '';
+    const nm = document.getElementById('settingsProfileName');
+    if (nm) nm.innerHTML = escapeHtml(currentUser.name || 'User') + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
+    if (currentUser.photo_url) {
+        ['navProfilePic', 'settingsProfilePic'].forEach(id => { const e = document.getElementById(id); if (e) e.src = currentUser.photo_url; });
+    }
+}
+
 async function loadSupportLink() {
     try {
         const res = await fetch('/api/appStatus');
@@ -133,6 +146,8 @@ async function initApp() {
         }
     } catch (e) { /* if the status check fails, fail open so the app is still usable */ }
 
+    await ensureGuest();
+    showGuestBanner();
     const liveUser = getTelegramUser();
     
     // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY
@@ -153,21 +168,23 @@ async function initApp() {
         const authRes = await fetch('/api/auth', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData })
+            body: JSON.stringify({ initData: tgAuth() })
         });
         
         const authData = await authRes.json();
         
         if (authData && authData.success) {
             currentUser = authData.user;
+            if (window.IS_GUEST) liveUser.name = currentUser.name;
         } else {
             throw new Error("Auth API response failed");
         }
 
         // Refresh UI with calculated DB details
         const nameEl = document.getElementById('settingsProfileName');
-        nameEl.innerHTML = liveUser.name + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
+        nameEl.innerHTML = escapeHtml(currentUser.name || liveUser.name) + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
         document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+        refreshProfileHeader();
         if (currentUser.streak_count > 0) {
             const st = document.getElementById('settingsStreak');
             st.innerText = `🔥 ${currentUser.streak_count}-day streak`;
@@ -188,6 +205,7 @@ async function initApp() {
     try {
         loadTrendingTags();
         loadStories();
+        loadNotifCount();
         await loadPosts(1, true);
         await loadSupportLink();
 

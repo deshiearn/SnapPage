@@ -248,6 +248,7 @@ window.openShortById = async (videoId) => {
 };
 
 window.shareVideoDirectly = (id) => {
+    trackShare('video', id);
     const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}${refSuffix()}`;
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent('Check out this Short on SnapPages!')}`);
 };
@@ -258,7 +259,7 @@ window.likeVideo = async (btn, videoId) => {
     try {
         const res = await fetch('/api/likeVideo', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, videoId })
+            body: JSON.stringify({ initData: tgAuth(), videoId })
         });
         const data = await res.json();
         if (data && data.success) {
@@ -296,7 +297,7 @@ window.openShortOptions = (videoId, authorId, type) => {
 window.saveVideoToChat = async (videoId) => {
     closeSheet('optionsModalBg', 'optionsSheet');
     try {
-        const res = await fetch('/api/saveVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+        const res = await fetch('/api/saveVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), videoId }) });
         const data = await res.json();
         if (data && data.success) tg.showAlert("Saved! Check your chat with the bot.");
         else tg.showAlert(`Failed: ${data.error || 'Server error'}`);
@@ -307,7 +308,7 @@ window.deleteVideoDirect = (videoId) => {
     closeSheet('optionsModalBg', 'optionsSheet');
     tg.showConfirm("Delete this video?", async (ok) => {
         if (!ok) return;
-        const res = await fetch('/api/deleteVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+        const res = await fetch('/api/deleteVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), videoId }) });
         const data = await res.json();
         if (data && data.success) {
             const el = document.querySelector(`.short-item[data-video-id="${videoId}"]`);
@@ -339,7 +340,7 @@ document.getElementById('submitVideoBtn').addEventListener('click', async () => 
     try {
         const res = await fetch('/api/createVideo', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
+            body: JSON.stringify({ initData: tgAuth(), caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
         });
         const data = await res.json();
         if (data && data.success) {

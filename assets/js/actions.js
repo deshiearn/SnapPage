@@ -1,5 +1,6 @@
 'use strict';
 window.sharePostDirectly = (id) => {
+    trackShare('post', id);
     const forwardLink = `https://t.me/SnapPagesBot/app?startapp=post_${id}${refSuffix()}`;
     const text = "Check out this amazing post on SnapPages!";
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent(text)}`);
@@ -13,7 +14,7 @@ window.likePost = async (btn, postId) => {
         const res = await fetch('/api/likePost', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, postId })
+            body: JSON.stringify({ initData: tgAuth(), postId })
         });
         const data = await res.json();
         
@@ -101,7 +102,7 @@ window.triggerRemovePost = async (postId) => {
             const res = await fetch('/api/deletePost', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ initData: tg.initData, postId })
+                body: JSON.stringify({ initData: tgAuth(), postId })
             });
             const data = await res.json();
             if (data && data.success) {
@@ -127,7 +128,7 @@ window.submitReport = async (postId, reason, contentType = 'post') => {
         const res = await fetch(endpoint, {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ initData: tg.initData, [bodyKey]: postId, reason })
+            body: JSON.stringify({ initData: tgAuth(), [bodyKey]: postId, reason })
         });
         const data = await res.json();
         if (data && data.success) tg.showAlert("Thanks — this has been reported to our team.");
@@ -153,7 +154,7 @@ function commentHtml(c, isReply) {
     const hasLiked = c.likes_users && currentUser && c.likes_users.includes(currentUser.tg_id);
     const safe = escapeHtml(c.text || '').replace(/(^|\s)@([A-Za-z0-9_]{4,32})/g, '$1<span class="text-blue-500 font-semibold">@$2</span>');
     const likeCount = c.likes_count || 0;
-    return `<div class="${isReply ? 'ml-6 border-l-2 border-blue-200 pl-3 ' : ''}bg-gray-50 p-3 rounded-lg text-sm relative">
+    return `<div data-comment-id="${c.id}" class="${isReply ? 'ml-6 border-l-2 border-blue-200 pl-3 ' : ''}bg-gray-50 p-3 rounded-lg text-sm relative">
         <span class="font-bold text-gray-900">${escapeHtml(c.author_name || 'User')}</span>
         <p class="mt-1 text-gray-800 whitespace-pre-wrap">${safe}</p>
         <div class="mt-2 flex gap-4 text-xs text-gray-500">
@@ -187,6 +188,12 @@ async function fetchComments() {
             else top.push(c);
         });
         list.innerHTML = top.map(c => commentHtml(c, false) + (replies[c.id] || []).map(r => commentHtml(r, true)).join('')).join('');
+        // Coming from a notification: scroll to + flash the comment
+        if (window.focusCommentId) {
+            const el = list.querySelector(`[data-comment-id="${window.focusCommentId}"]`);
+            window.focusCommentId = null;
+            if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash-hl'); setTimeout(() => el.classList.remove('flash-hl'), 2200); }
+        }
     } catch(e) {
         list.innerHTML = '<p class="text-center text-red-400 text-sm">Error loading comments.</p>';
     }
@@ -224,7 +231,7 @@ document.getElementById('commentInput').addEventListener('focus', () => {
 document.getElementById('sendCommentBtn').onclick = async () => {
     const text = document.getElementById('commentInput').value.trim();
     if(!text) return;
-    const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, postId: currentPostIdForComment, text, contentType: currentCommentContentType, parentId: replyTarget ? replyTarget.id : undefined }) });
+    const res = await fetch('/api/addComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), postId: currentPostIdForComment, text, contentType: currentCommentContentType, parentId: replyTarget ? replyTarget.id : undefined }) });
     const data = await res.json();
     if (data && data.success) {
         document.getElementById('commentInput').value = '';
@@ -238,7 +245,7 @@ document.getElementById('sendCommentBtn').onclick = async () => {
 window.likeComment = async (btn, commentId) => {
     btn.disabled = true;
     try {
-        const res = await fetch('/api/likeComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, commentId }) });
+        const res = await fetch('/api/likeComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), commentId }) });
         const data = await res.json();
         if (data && data.success) {
             btn.querySelector('.comment-like-count').innerText = data.likesCount;
@@ -252,6 +259,6 @@ window.likeComment = async (btn, commentId) => {
 }
 
 window.removeCommentDirect = async (id) => {
-    await fetch('/api/deleteComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, commentId: id }) });
+    await fetch('/api/deleteComment', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), commentId: id }) });
     fetchComments();
 }

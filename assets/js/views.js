@@ -36,7 +36,7 @@ new MutationObserver(() => watchViewTargets()).observe(document.body, { childLis
 
 async function flushViews() {
     if (!pendingViews.posts.size && !pendingViews.videos.size) return;
-    const body = { initData: tg.initData, posts: [...pendingViews.posts], videos: [...pendingViews.videos] };
+    const body = { initData: tgAuth(), posts: [...pendingViews.posts], videos: [...pendingViews.videos] };
     pendingViews.posts.clear(); pendingViews.videos.clear();
     try { await fetch('/api/trackViews', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), keepalive: true }); } catch (e) {}
 }

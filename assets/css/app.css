@@ -208,3 +208,66 @@ body.themed .feed-chip.active { background: var(--app-accent) !important; border
 .profile-tab { color: #9ca3af; border-bottom: 2px solid transparent; transition: color .2s, border-color .2s; }
 .profile-tab.active { color: var(--app-link, #2563eb); border-bottom-color: var(--app-link, #2563eb); }
 .reel-thumb:active { opacity: .8; }
+
+/* Browser (non-Telegram) banner */
+.guest-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 60; height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; color: #fff; background: linear-gradient(90deg, #2563eb, #7c3aed); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.guest-banner-btn { flex-shrink: 0; background: #fff; color: #2563eb; font-weight: 800; font-size: 12px; padding: 6px 12px; border-radius: 9999px; }
+.guest-banner-btn:active { transform: scale(.95); }
+body.has-guest-bar { padding-top: 44px; }
+body.has-guest-bar #appHeader { top: 44px; }
+
+/* =================== Polish: professional look + smooth on every phone =================== */
+:root { --ease-out: cubic-bezier(.22,1,.36,1); --radius-card: 18px; }
+* { -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: auto; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", Roboto, "Noto Sans Bengali", "Hind Siliguri", sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overscroll-behavior-y: none; }
+button, a, [onclick] { touch-action: manipulation; }
+button { transition: transform .14s var(--ease-out), opacity .2s ease, background-color .2s ease; }
+button:active:not(:disabled) { transform: scale(.96); }
+button:disabled { opacity: .55; }
+
+/* Cards: layered shadow + hairline border; off-screen cards skip layout/paint (big win on weak phones) */
+.post-card { border-radius: var(--radius-card) !important; border-color: rgba(0,0,0,.06) !important; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 18px -8px rgba(16,24,40,.14) !important; content-visibility: auto; contain-intrinsic-size: auto 460px; }
+.dark-mode .post-card { border-color: rgba(255,255,255,.06) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 20px -10px rgba(0,0,0,.6) !important; }
+.post-card img { border-radius: 14px; }
+
+/* Header + nav: frosted, hairline */
+#appHeader { box-shadow: 0 1px 0 rgba(0,0,0,.06) !important; }
+.dark-mode #appHeader { box-shadow: 0 1px 0 rgba(255,255,255,.06) !important; }
+.bottom-nav { box-shadow: 0 10px 30px -8px rgba(16,24,40,.28) !important; border-color: rgba(0,0,0,.06) !important; }
+.nav-btn { position: relative; transition: transform .2s var(--ease-out), color .2s ease; }
+.nav-btn.active { transform: translateY(-2px) scale(1.08); }
+.nav-btn.active::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: currentColor; animation: dotIn .3s var(--ease-out); }
+@keyframes dotIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* Primary buttons: soft gradient + glow */
+body.themed .bg-blue-600 { background-image: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)); box-shadow: 0 4px 14px -4px var(--app-accent); }
+
+/* Bell + badge */
+.bell-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; color: inherit; background: rgba(120,120,128,.12); }
+.notif-badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--app-bg, #fff); animation: badgePop .35s cubic-bezier(.3,1.6,.5,1); }
+@keyframes badgePop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* Notification rows */
+.notif-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 10px; border-radius: 16px; cursor: pointer; transition: background .2s ease, opacity .22s ease, transform .22s ease, max-height .22s ease; max-height: 120px; animation: optIn .35s var(--ease-out) backwards; }
+.notif-row:active { background: rgba(120,120,128,.12); }
+.notif-row.unread { background: var(--app-accent-tint, rgba(37,99,235,.08)); }
+.notif-row.removing { opacity: 0; transform: translateX(40px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+.notif-type { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--app-surface, #fff); display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+.notif-x { width: 30px; height: 30px; border-radius: 50%; color: #9ca3af; font-size: 12px; flex-shrink: 0; }
+.notif-x:active { background: rgba(120,120,128,.2); }
+.flash-hl { animation: flashHl 2.2s ease; }
+@keyframes flashHl { 0%, 60% { box-shadow: 0 0 0 3px var(--app-accent, #2563eb); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Scroll containers behave natively */
+.bottom-sheet, #commentList, #notifList, #shortsFeed, .img-slider { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* Weak phones / data saver: no blur, lighter shadows, fewer animations (class added by theme.js) */
+body.lite .blur-bg, body.lite .bottom-nav, body.lite #appHeader { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.lite .blur-bg { background: rgba(0,0,0,.62); }
+body.lite .post-card { box-shadow: 0 1px 2px rgba(16,24,40,.08) !important; }
+body.lite .fade-in, body.lite .notif-row, body.lite .opt-item { animation: none !important; }
+body.lite .img-skeleton { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

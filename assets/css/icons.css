@@ -6,7 +6,9 @@
 .far,.fa-regular{font-family:"FAR";font-weight:400}
 .fa-spin{animation:fa-spin 1s linear infinite}
 @keyframes fa-spin{to{transform:rotate(360deg)}}
+.fa-at::before{content:"\40"}
 .fa-backward::before{content:"\f04a"}
+.fa-bell::before{content:"\f0f3"}
 .fa-check-circle::before{content:"\f058"}
 .fa-chevron-right::before{content:"\f054"}
 .fa-comment::before{content:"\f075"}
