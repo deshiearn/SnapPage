@@ -112,10 +112,18 @@
         paint();
     };
 
+    // Weak phone / data-saver → "lite" mode (no blur, fewer animations) so scrolling stays smooth
+    try {
+        const c = navigator.connection || {};
+        const weak = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 3) || c.saveData;
+        if (weak) document.documentElement.classList.add('lite-pending');
+    } catch (e) {}
+    const applyLite = () => { if (document.documentElement.classList.contains('lite-pending')) document.body.classList.add('lite'); };
+
     tg.onEvent('themeChanged', applyTheme);
     tg.onEvent('safeAreaChanged', applySafeArea);
     tg.onEvent('contentSafeAreaChanged', applySafeArea);
     tg.onEvent('fullscreenChanged', applySafeArea);
-    if (document.body) { applyTheme(); applySafeArea(); }
-    else document.addEventListener('DOMContentLoaded', () => { applyTheme(); applySafeArea(); });
+    if (document.body) { applyTheme(); applySafeArea(); applyLite(); }
+    else document.addEventListener('DOMContentLoaded', () => { applyTheme(); applySafeArea(); applyLite(); });
 })();

@@ -21,7 +21,7 @@ async function loadPosts(page = 1, clearFeed = true) {
         const res = await fetch('/api/getPosts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, page, limit: 10, feed: feedMode })
+            body: JSON.stringify({ initData: tgAuth(), page, limit: 10, feed: feedMode })
         });
         const posts = await res.json();
 
@@ -101,7 +101,7 @@ function buildPostCardHtml(post) {
         : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
 
     return `
-        <div class="bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in" ${(currentUser && String(post.author_id) === String(currentUser.tg_id)) ? '' : `data-view-post="${post.id}"`}>
+        <div class="post-card bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in" ${(currentUser && String(post.author_id) === String(currentUser.tg_id)) ? '' : `data-view-post="${post.id}"`}>
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfile('${post.author_id}')">
                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">

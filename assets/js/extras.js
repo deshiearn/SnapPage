@@ -13,7 +13,7 @@ window.openReferSheet = async () => {
         const res = await fetch('/api/getReferStats', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData })
+            body: JSON.stringify({ initData: tgAuth() })
         });
         
         const stats = await res.json();
@@ -99,7 +99,7 @@ document.getElementById('setupChannelBtn').onclick = async () => {
             method: 'POST', 
             headers: {'Content-Type':'application/json'}, 
             body: JSON.stringify({ 
-                initData: tg.initData, 
+                initData: tgAuth(), 
                 channelInput: input 
             }) 
         });
@@ -138,7 +138,7 @@ function renderChannels() {
 }
 
 window.removeChannel = async (id) => {
-    const res = await fetch('/api/removeChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, channelId: id }) });
+    const res = await fetch('/api/removeChannel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), channelId: id }) });
     const data = await res.json();
     currentUser.channels = data.channels; renderChannels();
 };

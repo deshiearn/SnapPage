@@ -15,7 +15,7 @@ function timeAgo(iso) {
 
 async function loadStories() {
     try {
-        const res = await fetch('/api/getStories', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData }) });
+        const res = await fetch('/api/getStories', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth() }) });
         storyGroups = await res.json();
         if (!Array.isArray(storyGroups)) storyGroups = [];
     } catch (e) { storyGroups = []; }
@@ -82,7 +82,7 @@ window.shareStory = async () => {
     if (window.MB) MB.update('storyCompose', { busy: true });
     try {
         const res = await fetch('/api/createStory', { method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, image: storyDraft, caption: document.getElementById('storyCaption').value.trim() }) });
+            body: JSON.stringify({ initData: tgAuth(), image: storyDraft, caption: document.getElementById('storyCaption').value.trim() }) });
         const data = await res.json();
         if (data && data.success) {
             storyDraft = null;
@@ -189,7 +189,7 @@ window.deleteCurrentStory = async () => {
     pauseStory();
     tg.showConfirm('Delete this story?', async (ok) => {
         if (!ok) { resumeStory(); return; }
-        try { await fetch('/api/deleteStory', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tg.initData, id: st.id }) }); } catch (e) {}
+        try { await fetch('/api/deleteStory', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), id: st.id }) }); } catch (e) {}
         closeStoryViewer();
         loadStories();
     });
