@@ -6,9 +6,11 @@
 .far,.fa-regular{font-family:"FAR";font-weight:400}
 .fa-spin{animation:fa-spin 1s linear infinite}
 @keyframes fa-spin{to{transform:rotate(360deg)}}
+.fa-adjust::before{content:"\f042"}
 .fa-at::before{content:"\40"}
 .fa-backward::before{content:"\f04a"}
 .fa-bell::before{content:"\f0f3"}
+.fa-camera::before{content:"\f030"}
 .fa-check-circle::before{content:"\f058"}
 .fa-chevron-right::before{content:"\f054"}
 .fa-comment::before{content:"\f075"}
@@ -17,10 +19,12 @@
 .fa-download::before{content:"\f019"}
 .fa-ellipsis-v::before{content:"\f142"}
 .fa-eye::before{content:"\f06e"}
+.fa-file-alt::before{content:"\f15c"}
 .fa-film::before{content:"\f008"}
 .fa-flag::before{content:"\f024"}
 .fa-forward::before{content:"\f04e"}
 .fa-gift::before{content:"\f06b"}
+.fa-globe::before{content:"\f0ac"}
 .fa-headset::before{content:"\f590"}
 .fa-heart::before{content:"\f004"}
 .fa-home::before{content:"\f015"}
@@ -38,6 +42,7 @@
 .fa-rotate-right::before{content:"\f2f9"}
 .fa-search::before{content:"\f002"}
 .fa-share::before{content:"\f064"}
+.fa-shield-alt::before{content:"\f3ed"}
 .fa-spinner::before{content:"\f110"}
 .fa-thumbtack::before{content:"\f08d"}
 .fa-times::before{content:"\f00d"}

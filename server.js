@@ -17,6 +17,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const FOUNDER_ID = process.env.FOUNDER_ID || '7767338426';   // gets the animated Founder profile
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 // Images no longer go through ImgBB at all (see uploadImageToTelegram below) — ImgBB was
 // blacklisting every request from this deployment regardless of which API key was used.
@@ -158,19 +159,42 @@ function extractRef(param, selfId) {
     return m && m[1] !== String(selfId) ? m[1] : null;
 }
 
+// Per-user "Notifications On/Off" switch (users.notify_enabled, sql/12). Cached 5 min; missing column = on.
+const notifyPrefCache = new Map();
+async function isNotifyOn(id) {
+    const hit = notifyPrefCache.get(String(id));
+    if (hit && Date.now() - hit.ts < 300000) return hit.on;
+    let on = true;
+    try {
+        const { data, error } = await supabase.from('users').select('notify_enabled').eq('tg_id', String(id)).maybeSingle();
+        if (!error && data && data.notify_enabled === false) on = false;
+    } catch (e) { /* keep on */ }
+    if (notifyPrefCache.size > 5000) notifyPrefCache.clear();
+    notifyPrefCache.set(String(id), { on, ts: Date.now() });
+    return on;
+}
+
 async function sendTelegramNotification(targetTgId, text, startappParam = "") {
     if (!targetTgId || !isRealTgId(targetTgId)) return;   // browser guests can't receive Telegram DMs
     if (!notifyAllowed(targetTgId)) return;
+    if (!(await isNotifyOn(targetTgId))) return;           // user switched notifications off in Settings
+    const base = process.env.MINI_APP_URL;
+    // Main button opens the in-app Notifications page; second button (when there is one) opens the item itself
+    const rows = [[Markup.button.webApp('🔔 Open Notifications', `${base}?startapp=notifications`)]];
+    if (startappParam && startappParam !== 'notifications' && startappParam !== 'settings') {
+        rows.push([Markup.button.webApp('👀 View', `${base}?startapp=${startappParam}`)]);
+    }
     try {
-        const appUrl = startappParam
-            ? `${process.env.MINI_APP_URL}?startapp=${startappParam}`
-            : process.env.MINI_APP_URL;
-
-        await bot.telegram.sendMessage(targetTgId, text, Markup.inlineKeyboard([
-            [Markup.button.webApp('Open App 🚀', appUrl)]
-        ]));
+        await bot.telegram.sendMessage(targetTgId, text, Markup.inlineKeyboard(rows));
     } catch (err) {
         console.error(`Failed to send TG notification to ${targetTgId}:`, err.message);
+        // Odd characters / emoji can make Telegram reject a message — retry once with plain safe text
+        if (/can't parse|entities|emoji|Bad Request: message text/i.test(err.message || '')) {
+            try {
+                const plain = String(text).replace(/[^\p{L}\p{N}\p{P}\p{Z}\n]/gu, '').slice(0, 900);
+                await bot.telegram.sendMessage(targetTgId, plain || 'You have a new notification', Markup.inlineKeyboard(rows));
+            } catch (e2) { console.error('plain retry failed:', e2.message); }
+        }
     }
 }
 
@@ -828,6 +852,16 @@ app.post('/api/getPosts', async (req, res) => {
 });
 
 // ================= Edit own profile (display name + @username) =================
+app.post('/api/setNotify', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    const on = !!req.body.enabled;
+    const { error } = await supabase.from('users').update({ notify_enabled: on }).eq('tg_id', tgUser.id.toString());
+    if (error) return res.status(500).json({ error: "Run sql/12_settings_ads_premium.sql in Supabase first" });
+    notifyPrefCache.set(tgUser.id.toString(), { on, ts: Date.now() });
+    res.json({ success: true, enabled: on });
+});
+
 app.post('/api/setProfile', async (req, res) => {
     const tgUser = validateTGData(req.body.initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
@@ -847,10 +881,17 @@ app.post('/api/setProfile', async (req, res) => {
             if (a.error) return res.status(500).json({ error: "Username feature isn't set up yet — run sql/11_notifications_and_username.sql in Supabase" });
             if ((a.data && a.data.length) || (b.data && b.data.length)) return res.status(409).json({ error: "That username is already taken" });
         }
-        const { error } = await supabase.from('users').update({ name, app_username: handle || null }).eq('tg_id', me);
+        const patch = { name, app_username: handle || null };
+        if (req.body.photoBase64) {
+            if (String(req.body.photoBase64).length > 4 * 1024 * 1024) return res.status(400).json({ error: "Photo is too large" });
+            const url = await uploadImageToTelegram(req.body.photoBase64);
+            if (!url) return res.status(500).json({ error: "Photo upload failed — storage channel isn't set (Admin panel → Storage Channel)" });
+            patch.photo_url = url;
+        }
+        const { error } = await supabase.from('users').update(patch).eq('tg_id', me);
         if (error) throw error;
         invalidateAuthorCaches();
-        res.json({ success: true, name, username: handle });
+        res.json({ success: true, name, username: handle, photo: patch.photo_url || null });
     } catch (e) {
         console.error('setProfile error:', e);
         res.status(500).json({ error: e.message || String(e) });
@@ -937,6 +978,7 @@ app.post('/api/getProfile', async (req, res) => {
             name: info.name,
             username: info.username || '',
             handle,
+            founder: String(info.id || target) === FOUNDER_ID,
             photo: info.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(info.name || 'U')}`,
             verified: info.verified,
             level: await getUserLevelCached(info.ownerId, info.ownerVerified),
@@ -1035,7 +1077,7 @@ async function enrichAuthors(items) {
                 level = ownerLevels[oid];
             }
         }
-        return { ...item, ...(liveName ? { author_name: liveName } : {}), author_photo: photo, author_level: level, author_username: username, author_verified: verified };
+        return { ...item, ...(liveName ? { author_name: liveName } : {}), author_photo: photo, author_level: level, author_username: username, author_verified: verified || String(item.author_id) === FOUNDER_ID, author_founder: item.type === 'user' && String(item.author_id) === FOUNDER_ID };
     }));
 }
 

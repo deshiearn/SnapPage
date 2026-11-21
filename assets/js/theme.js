@@ -26,9 +26,12 @@
     };
 
     window.applyTheme = function () {
-        const dark = tg.colorScheme === 'dark';
+        // Preference from Settings: system (follow Telegram) | light | dark
+        let pref = 'system';
+        try { pref = localStorage.getItem('snap_theme') || 'system'; } catch (e) {}
+        const dark = pref === 'system' ? tg.colorScheme === 'dark' : pref === 'dark';
         const fb = FALLBACK[dark ? 'dark' : 'light'];
-        const p = tg.themeParams || {};
+        const p = (pref === 'system' || (tg.colorScheme === 'dark') === dark) ? (tg.themeParams || {}) : {};   // opposite of Telegram → built-in palette
         const g = (k) => (hex2rgb(p[k]) ? p[k] : fb[k]);
 
         const page = g('secondary_bg_color');       // page background
@@ -63,6 +66,15 @@
         // Tell Telegram our colours so header / background / bottom bar blend in
         try { if (ver('6.1')) { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor(page); } } catch (e) {}
         try { if (ver('7.10')) tg.setBottomBarColor(surf); } catch (e) {}
+    };
+
+    window.setThemePref = (v) => {
+        try { localStorage.setItem('snap_theme', v); } catch (e) {}
+        applyTheme(); markThemeBtn();
+    };
+    window.markThemeBtn = () => {
+        let pref = 'system'; try { pref = localStorage.getItem('snap_theme') || 'system'; } catch (e) {}
+        document.querySelectorAll('[data-theme-btn]').forEach(b => b.classList.toggle('active', b.dataset.themeBtn === pref));
     };
 
     // ---------- safe-area (notch / Telegram header in fullscreen) ----------
@@ -124,6 +136,6 @@
     tg.onEvent('safeAreaChanged', applySafeArea);
     tg.onEvent('contentSafeAreaChanged', applySafeArea);
     tg.onEvent('fullscreenChanged', applySafeArea);
-    if (document.body) { applyTheme(); applySafeArea(); applyLite(); }
-    else document.addEventListener('DOMContentLoaded', () => { applyTheme(); applySafeArea(); applyLite(); });
+    if (document.body) { applyTheme(); applySafeArea(); applyLite(); markThemeBtn(); }
+    else document.addEventListener('DOMContentLoaded', () => { applyTheme(); applySafeArea(); applyLite(); markThemeBtn(); });
 })();

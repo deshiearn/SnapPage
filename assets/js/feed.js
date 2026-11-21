@@ -92,7 +92,7 @@ function buildPostCardHtml(post) {
     const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
     const myReaction = currentUser && post.reactions ? (post.reactions[currentUser.tg_id] || '') : '';
     const likeCount = (post.likes_count || 0) + Object.keys(post.reactions || {}).length;
-    const verifiedIcon = post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '';
+    const verifiedIcon = (post.author_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '') + (post.author_founder ? ' <i class="fas fa-crown founder-mini" title="Founder"></i>' : '');
     const pinnedBadge = post.is_pinned ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold ml-1"><i class="fas fa-thumbtack"></i> Pinned</span>' : '';
 
     // FIXED: Dynamic Level Badge with [Channel] or [User] labels
@@ -119,10 +119,10 @@ function buildPostCardHtml(post) {
             <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked)}</div>
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                 <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
-                    <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> Like (<span class="like-count">${likeCount}</span>)
+                    <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> ${t('like')} (<span class="like-count">${likeCount}</span>)
                 </button>
-                <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> Comment</button>
-                <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> Share</button>
+                <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> ${t('comment')}</button>
+                <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> ${t('share')}</button>
             </div>
         </div>`;
 }

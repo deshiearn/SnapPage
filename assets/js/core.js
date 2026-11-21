@@ -80,6 +80,7 @@ async function handleSharedDeepLink() {
 
         // Shared links may carry the sharer's id ("..._ref_123"); the server already counted it as an invite
         const sp = startParam.replace(/_ref_\d+$/, '');
+        if (sp === 'notifications') { openNotifs(); return; }
         if (sp.startsWith('video_')) {
             await openShortById(sp.replace('video_', ''));
         } else if (sp.startsWith('profile_')) {
@@ -185,6 +186,8 @@ async function initApp() {
         nameEl.innerHTML = escapeHtml(currentUser.name || liveUser.name) + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
         document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
         refreshProfileHeader();
+        const nt = document.getElementById('notifyToggle'); if (nt) nt.checked = currentUser.notify_enabled !== false;
+        if (typeof applyLang === 'function') applyLang();
         if (currentUser.streak_count > 0) {
             const st = document.getElementById('settingsStreak');
             st.innerText = `🔥 ${currentUser.streak_count}-day streak`;
