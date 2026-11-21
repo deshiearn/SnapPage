@@ -14,6 +14,7 @@
 .fa-check-circle::before{content:"\f058"}
 .fa-check-square::before{content:"\f14a"}
 .fa-chevron-right::before{content:"\f054"}
+.fa-cog::before{content:"\f013"}
 .fa-comment::before{content:"\f075"}
 .fa-copy::before{content:"\f0c5"}
 .fa-crown::before{content:"\f521"}
@@ -52,6 +53,7 @@
 .fa-tools::before{content:"\f7d9"}
 .fa-trash::before{content:"\f1f8"}
 .fa-trash-alt::before{content:"\f2ed"}
+.fa-user::before{content:"\f007"}
 .fa-user-plus::before{content:"\f234"}
 .fa-user-shield::before{content:"\f505"}
 .fa-user-slash::before{content:"\f506"}

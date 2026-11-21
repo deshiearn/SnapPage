@@ -361,3 +361,48 @@ body.lite .pf-founder .pf-banner, body.lite .pf-founder .pf-banner::before, body
 .rich-video { padding: 14px; border-radius: 14px; background: rgba(120,120,128,.12); font-size: 13px; font-weight: 600; text-align: center; }
 .rich mark { background: #fde68a; color: #111; padding: 0 2px; border-radius: 3px; }
 .spoiler { background: currentColor; color: transparent; border-radius: 4px; cursor: pointer; transition: all .25s; } .spoiler.show { background: transparent; color: inherit; }
+
+/* =================== Telegram-iOS style Me + Profile =================== */
+:root { --hero1: #6b9de8; --hero2: #4f7fd1; --pat: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><circle cx='14' cy='14' r='5' fill='white' fill-opacity='.14'/><path d='M46 40l4 8 8 1-6 6 2 8-8-4-8 4 2-8-6-6 8-1z' fill='white' fill-opacity='.12' transform='scale(.55) translate(40 10)'/></svg>"); }
+.tgme-hero, .pf-hero { position: relative; text-align: center; color: #fff; background: var(--pat), linear-gradient(180deg, var(--hero1), var(--hero2)); background-size: 64px 64px, auto; padding: 64px 16px 22px; overflow: hidden; }
+.tgme-hero { padding-top: calc(var(--top-inset, 24px) + 38px); border-radius: 0 0 26px 26px; }
+.tgme-hero::after, .pf-hero::after { content: ""; position: absolute; left: 50%; top: 42%; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.35), transparent 65%); pointer-events: none; }
+.tgme-hero > *, .pf-hero > * { position: relative; z-index: 1; }
+.tgme-avatar, .pf-avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto; background: #cbd5e1; border: none; box-shadow: 0 8px 24px -6px rgba(0,0,0,.35); }
+.pf-hero .pf-avatar { margin-top: 0; }
+.tgme-name, .pf-hero .pf-name { margin-top: 10px; font-weight: 800; font-size: 24px; line-height: 1.15; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #fff; }
+.tgme-sub, .pf-handle { margin-top: 4px; font-size: 14px; color: rgba(255,255,255,.82); display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.pf-handle { display: block; }
+.tgme-handle::before { content: "·"; margin-right: 6px; }
+.tgme-streak { padding: 0 8px; border-radius: 9999px; background: rgba(255,255,255,.22); font-size: 12px; line-height: 20px; }
+.tgme-circle, .tgme-pill { position: absolute; top: calc(var(--top-inset, 24px) + 10px); z-index: 2; height: 38px; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(255,255,255,.22); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.pf-hero .tgme-circle { top: 18px; }
+.tgme-circle { width: 38px; border-radius: 50%; font-size: 15px; }
+.tgme-pill { padding: 0 18px; border-radius: 9999px; font-weight: 700; font-size: 15px; }
+.tgme-body { padding: 18px 14px 0; display: flex; flex-direction: column; gap: 18px; }
+.tgme-group { background: #fff; border-radius: 22px; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.tgme-row { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 16px; text-align: left; position: relative; transition: background .15s ease; }
+.tgme-row:active { background: rgba(120,120,128,.12); transform: none; }
+.tgme-row + .tgme-row::before { content: ""; position: absolute; top: 0; left: 62px; right: 0; height: 1px; background: rgba(120,120,128,.18); }
+.tg-ic { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; flex-shrink: 0; }
+.tgme-label { flex: 1; font-size: 17px; font-weight: 500; }
+.tgme-chev { font-size: 12px; color: #c1c1c6; }
+.dark-mode .tgme-group { background: var(--app-surface); }
+.dark-mode .tgme-row + .tgme-row::before { background: var(--app-sep); }
+body.themed:not(.dark-mode) .tgme-group { background: var(--app-surface) !important; }
+
+/* profile sheet bits */
+#profileSheet .sheet-handle { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); z-index: 3; background: rgba(255,255,255,.55); }
+.pf-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin: 14px 0 12px; }
+.pf-sub { display: flex; gap: 8px; margin-top: 8px; }
+.pf-tg-btn { flex: 1.4; font-size: 12.5px; font-weight: 800; padding: 9px 6px; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #2aabee, #229ed9); }
+.pf-founder { background: var(--pat), linear-gradient(135deg, #1e1b4b, #4c1d95 40%, #be185d 75%, #f59e0b) !important; background-size: 46px 46px, 220% 220% !important; animation: founderBg 8s ease-in-out infinite; }
+.pf-founder .pf-avatar { width: 100px; height: 100px; padding: 4px; background: conic-gradient(from 0deg, #f59e0b, #ec4899, #8b5cf6, #3b82f6, #f59e0b); animation: ringSpin 4s linear infinite; }
+.pf-founder .pf-banner { display: none; }
+body.lite .pf-founder { animation: none; }
+.tgme-hero { margin-top: calc(-1 * var(--top-inset, 24px)); }
+body.has-guest-bar .tgme-hero { margin-top: 0; }
+.tgme-avatar-btn { display: block; width: 96px; margin: 0 auto; }
+.tgme-name, .pf-hero .pf-name { display: flex; }
+.pf-sub .pf-tg-btn { background: linear-gradient(135deg, #2aabee, #229ed9); color: #fff; }
+.tgme-handle:empty { display: none; }
