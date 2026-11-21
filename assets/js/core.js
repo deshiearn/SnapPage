@@ -28,6 +28,9 @@ setTimeout(() => { const l = document.getElementById('appLoadingScreen'); if (l)
 function applyAutoTheme() { applyTheme(); }
 applyAutoTheme();
 
+// "_ref_<myId>" appended to share links so people who join through them count as my invites
+window.refSuffix = () => (typeof currentUser !== 'undefined' && currentUser && currentUser.tg_id) ? `_ref_${currentUser.tg_id}` : '';
+
 function getTelegramUser() {
     const user = tg.initDataUnsafe?.user || {};
     return {
@@ -75,22 +78,14 @@ async function handleSharedDeepLink() {
         const startParam = (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || urlParams.get('startapp');
         if (!startParam) return;
 
-        if (startParam.startsWith('video_')) {
-            const videoId = startParam.replace('video_', '');
-            switchTab('shorts');
-            const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
-            const video = await res.json();
-            if (video && video.id) {
-                const feed = document.getElementById('shortsFeed');
-                feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
-                document.getElementById('shortsEmptyState').classList.add('hidden');
-                observeShorts();
-                feed.firstElementChild.scrollIntoView();
-            }
-        } else if (startParam.startsWith('profile_')) {
-            openProfile(startParam.replace('profile_', ''));
-        } else if (startParam.startsWith('post_')) {
-            const postId = startParam.replace('post_', '');
+        // Shared links may carry the sharer's id ("..._ref_123"); the server already counted it as an invite
+        const sp = startParam.replace(/_ref_\d+$/, '');
+        if (sp.startsWith('video_')) {
+            await openShortById(sp.replace('video_', ''));
+        } else if (sp.startsWith('profile_')) {
+            openProfile(sp.replace('profile_', ''));
+        } else if (sp.startsWith('post_')) {
+            const postId = sp.replace('post_', '');
             const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
             const post = await res.json();
             if (post && post.id) {

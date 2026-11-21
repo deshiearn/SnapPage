@@ -16,7 +16,7 @@ window.openProfile = async (authorId) => {
         if (!p || !p.id) throw new Error(p && p.error || 'Profile not found');
         currentProfile = p;
         renderProfile(p);
-        loadProfilePosts(p.id);
+        showProfileTab('posts');
     } catch (e) {
         body.innerHTML = `<div class="text-center text-gray-400 py-16 px-6"><i class="fas fa-user-slash text-4xl mb-3 opacity-60"></i><p class="font-bold">Profile not available</p></div>`;
     }
@@ -37,14 +37,83 @@ function renderProfile(p) {
             <p class="text-xs text-gray-400">${p.username ? '@' + escapeHtml(p.username) + ' · ' : ''}${kind}</p>
             <div class="flex gap-8 my-4">
                 <div class="profile-stat"><b>${p.posts}</b><span>Posts</span></div>
+                <div class="profile-stat"><b>${p.reels || 0}</b><span>Reels</span></div>
                 <div class="profile-stat"><b id="profileFollowers">${p.followers}</b><span>Followers</span></div>
                 ${p.type === 'user' ? `<div class="profile-stat"><b>${p.following}</b><span>Following</span></div>` : ''}
             </div>
             ${followBtn}
+            <div class="flex gap-2 mt-3">
+                <button onclick="copyProfileLink()" class="follow-btn following" style="padding:8px 16px;font-size:13px"><i class="fas fa-link"></i> Copy Link</button>
+                <button onclick="shareProfileLink()" class="follow-btn following" style="padding:8px 16px;font-size:13px"><i class="fas fa-share"></i> Share</button>
+            </div>
             ${tgBtn}
         </div>
-        <div id="profilePosts" class="pt-4 space-y-4"><div class="text-center text-gray-400 py-6"><i class="fas fa-spinner fa-spin"></i></div></div>`;
+        <div class="flex border-b">
+            <button id="ptab-posts" onclick="showProfileTab('posts')" class="profile-tab flex-1 py-2.5 text-sm font-bold"><i class="fas fa-image"></i> Posts</button>
+            <button id="ptab-reels" onclick="showProfileTab('reels')" class="profile-tab flex-1 py-2.5 text-sm font-bold"><i class="fas fa-film"></i> Reels</button>
+        </div>
+        <div id="profilePosts" class="pt-4 space-y-4"></div>`;
 }
+
+// Profile link: opens the app straight on this profile; "_ref_<me>" makes new users count as my invites
+function profileLink() {
+    return `https://t.me/SnapPagesBot/app?startapp=profile_${currentProfile.id}${refSuffix()}`;
+}
+window.copyProfileLink = () => {
+    if (!currentProfile) return;
+    const link = profileLink();
+    const done = () => { try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {} tg.showAlert('Profile link copied!'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, () => fallbackCopy(link, done));
+    else fallbackCopy(link, done);
+};
+function fallbackCopy(text, cb) {
+    const t = document.createElement('textarea'); t.value = text; t.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    t.remove(); cb();
+}
+window.shareProfileLink = () => {
+    if (!currentProfile) return;
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(profileLink())}&text=${encodeURIComponent((currentProfile.name || 'Profile') + ' on SnapPages')}`);
+};
+
+window.showProfileTab = (tab) => {
+    if (!currentProfile) return;
+    ['posts', 'reels'].forEach(t => {
+        const b = document.getElementById('ptab-' + t);
+        if (b) b.classList.toggle('active', t === tab);
+    });
+    const box = document.getElementById('profilePosts');
+    if (!box) return;
+    box.innerHTML = '<div class="text-center text-gray-400 py-6"><i class="fas fa-spinner fa-spin"></i></div>';
+    box.className = tab === 'reels' ? 'pt-3' : 'pt-4 space-y-4';
+    (tab === 'reels' ? loadProfileReels : loadProfilePosts)(currentProfile.id);
+};
+
+async function loadProfileReels(authorId) {
+    try {
+        const res = await fetch('/api/getShorts', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ page: 1, limit: 12, authorId })
+        });
+        const vids = await res.json();
+        const box = document.getElementById('profilePosts');
+        if (!box || !currentProfile || currentProfile.id !== authorId) return;
+        box.innerHTML = (vids && vids.length)
+            ? `<div class="grid grid-cols-3 gap-1">${vids.map(v => `
+                <button onclick="openReelFromProfile('${v.id}')" class="reel-thumb relative overflow-hidden bg-black" style="aspect-ratio:9/16">
+                    <video src="${v.stream_url}#t=0.1" preload="metadata" muted playsinline class="w-full h-full object-cover pointer-events-none"></video>
+                    <span class="absolute bottom-1 left-1 text-white text-[11px] font-bold drop-shadow"><i class="fas fa-play"></i> ${v.likes_count || 0}</span>
+                </button>`).join('')}</div>`
+            : '<div class="text-center text-gray-400 py-8 text-sm">No reels yet.</div>';
+    } catch (e) { /* keep spinner */ }
+}
+
+// Tapping a thumbnail leaves the profile and opens the main Reels page on that reel
+window.openReelFromProfile = (id) => {
+    closeSheet('profileModalBg', 'profileSheet');
+    openShortById(id);
+};
 
 async function loadProfilePosts(authorId) {
     try {

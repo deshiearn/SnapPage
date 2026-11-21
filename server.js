@@ -131,6 +131,12 @@ function notifyAllowed(tgId) {
     return true;
 }
 
+// Referrer id from a start param: "ref_123" (bot link) or "profile_55_ref_123" / "post_9_ref_123" (shared links)
+function extractRef(param, selfId) {
+    const m = /(?:^|_)ref_(\d+)/.exec(String(param || ''));
+    return m && m[1] !== String(selfId) ? m[1] : null;
+}
+
 async function sendTelegramNotification(targetTgId, text, startappParam = "") {
     if (!targetTgId) return;
     if (!notifyAllowed(targetTgId)) return;
@@ -257,8 +263,8 @@ bot.start(async (ctx) => {
     if (!user) {
         const photo_url = await getTgProfilePic(tgId);
         let referred_by = null;
-        if (payload.startsWith("ref_")) {
-            referred_by = payload.replace("ref_", "");
+        if (extractRef(payload, tgId)) {
+            referred_by = extractRef(payload, tgId);
 
             // Notify the inviter only on genuine brand new registration
             sendTelegramNotification(
@@ -577,8 +583,8 @@ app.post('/api/auth', async (req, res) => {
         if (!user) {
             const photo_url = await getTgProfilePic(tgId);
             let referred_by = null;
-            if (startParam.startsWith("ref_")) {
-                referred_by = startParam.replace("ref_", "");
+            if (extractRef(startParam, tgId)) {
+                referred_by = extractRef(startParam, tgId);
 
                 sendTelegramNotification(
                     referred_by,
@@ -684,6 +690,13 @@ async function getFollowingIds(tgId) {
     return (data || []).map(r => String(r.followee_id));
 }
 
+function followErr(e) {
+    const m = String((e && (e.message || e.code)) || e);
+    return /snap_follows|PGRST205|42P01/.test(m)
+        ? "Follow system isn't set up yet — run sql/06_social_migration.sql in Supabase"
+        : m;
+}
+
 // Who owns a followee? (a user is their own owner; a channel's owners are the users who added it)
 async function resolveFollowee(targetId) {
     const { data: u } = await supabase.from('users').select('tg_id, name, username, photo_url, is_verified').eq('tg_id', targetId).maybeSingle();
@@ -721,7 +734,7 @@ app.post('/api/toggleFollow', async (req, res) => {
         const { count } = await supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('followee_id', target);
         res.json({ success: true, following, followers: count || 0 });
     } catch (e) {
-        res.status(500).json({ error: e.message || e });
+        console.error('follow error:', e); res.status(500).json({ error: followErr(e) });
     }
 });
 
@@ -734,12 +747,14 @@ app.post('/api/getProfile', async (req, res) => {
     try {
         const info = await resolveFollowee(target);
         if (!info) return res.status(404).json({ error: "Profile not found" });
-        const [followers, following, posts, mine] = await Promise.all([
+        const [followers, following, posts, mine, reels] = await Promise.all([
             supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('followee_id', target),
             info.type === 'user' ? supabase.from('snap_follows').select('*', { count: 'exact', head: true }).eq('follower_id', target) : Promise.resolve({ count: 0 }),
             supabase.from('posts').select('*', { count: 'exact', head: true }).eq('author_id', target),
-            supabase.from('snap_follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle()
+            supabase.from('snap_follows').select('follower_id').eq('follower_id', me).eq('followee_id', target).maybeSingle(),
+            supabase.from('videos').select('*', { count: 'exact', head: true }).eq('author_id', target)
         ]);
+        if (followers.error && /snap_follows|PGRST205|42P01/.test(String(followers.error.message || followers.error.code))) console.error('snap_follows table missing — run sql/06_social_migration.sql');
         res.json({
             id: target,
             type: info.type,
@@ -751,11 +766,12 @@ app.post('/api/getProfile', async (req, res) => {
             followers: followers.count || 0,
             following: following.count || 0,
             posts: posts.count || 0,
+            reels: reels.count || 0,
             isFollowing: !!(mine && mine.data),
             isSelf: info.owners.includes(me)
         });
     } catch (e) {
-        res.status(500).json({ error: e.message || e });
+        console.error('follow error:', e); res.status(500).json({ error: followErr(e) });
     }
 });
 
@@ -1496,11 +1512,13 @@ async function enrichVideos(videos) {
 
 // Paginated Shorts feed
 app.post('/api/getShorts', async (req, res) => {
-    const { page = 1, limit = 5 } = req.body;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { page = 1, authorId } = req.body;
+    const limit = Math.min(parseInt(req.body.limit) || 5, 20);
+    const offset = (parseInt(page) - 1) * limit;
     try {
-        const { data: videos, error } = await supabase.from('videos')
-            .select('*')
+        let q = supabase.from('videos').select('*');
+        if (authorId) q = q.eq('author_id', String(authorId));
+        const { data: videos, error } = await q
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
         if (error) throw error;
