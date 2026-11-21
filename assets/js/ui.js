@@ -93,13 +93,11 @@ window.openModal = (id) => {
         // NOTE: this must NOT reset the title/editModePostId here — triggerEditPost()
         // sets those up *before* calling openModal(), and doing it here would silently
         // flip an edit back into "Create Post" mode. See openNewPostModal() for that reset.
-        const canPostImages = currentUser && (currentUser.is_verified || (currentUser.level || 1) >= 2);
+        // Everyone can post photos + text now (no level gate)
         const addPhotosBtn = document.getElementById('addPhotosBtn');
-        addPhotosBtn.disabled = !canPostImages;
-        addPhotosBtn.classList.toggle('opacity-40', !canPostImages);
-        addPhotosBtn.innerHTML = canPostImages
-            ? '<i class="fas fa-image"></i> Add Photos (Max 4)'
-            : '<i class="fas fa-lock"></i> Image posts unlock at Level 2';
+        addPhotosBtn.disabled = false;
+        addPhotosBtn.classList.remove('opacity-40');
+        addPhotosBtn.innerHTML = '<i class="fas fa-image"></i> Add Photos (Max 4)';
     }
 };
 
@@ -135,7 +133,8 @@ const SHEET_MAP = {
     commentModalBg: 'commentSheet',
     referModalBg: 'referSheet',
     channelModalBg: 'channelSheet',
-    profileModalBg: 'profileSheet'
+    profileModalBg: 'profileSheet',
+    notifModalBg: 'notifSheet'
 };
 
 function openSheet(bg, sheet) {

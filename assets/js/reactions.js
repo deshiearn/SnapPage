@@ -70,7 +70,7 @@ async function sendReaction(kind, id, emoji) {
     try {
         const res = await fetch('/api/react', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, contentType: kind, id, emoji })
+            body: JSON.stringify({ initData: tgAuth(), contentType: kind, id, emoji })
         });
         const data = await res.json();
         if (!data || !data.success) { tg.showAlert((data && data.error) || 'Could not react'); return; }

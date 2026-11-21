@@ -193,8 +193,8 @@ async function submitPost() {
     try {
         const url = editId ? '/api/editPost' : '/api/createPost';
         const payload = editId
-            ? { initData: tg.initData, postId: editId, text, imageUrls: images }
-            : { initData: tg.initData, text, imagesBase64: images };
+            ? { initData: tgAuth(), postId: editId, text, imageUrls: images }
+            : { initData: tgAuth(), text, imagesBase64: images };
         const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
         const data = await res.json();
         if (!(data && data.success)) throw new Error((data && data.error) || (editId ? 'Update failed' : 'Creation failed'));

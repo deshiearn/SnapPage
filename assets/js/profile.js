@@ -10,7 +10,7 @@ window.openProfile = async (authorId) => {
     try {
         const res = await fetch('/api/getProfile', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, authorId })
+            body: JSON.stringify({ initData: tgAuth(), authorId })
         });
         const p = await res.json();
         if (!p || !p.id) throw new Error(p && p.error || 'Profile not found');
@@ -28,13 +28,13 @@ function renderProfile(p) {
     const followBtn = p.isSelf
         ? '<span class="text-xs text-gray-400 font-semibold">This is you</span>'
         : `<button id="profileFollowBtn" onclick="toggleFollow()" class="follow-btn ${p.isFollowing ? 'following' : ''}">${p.isFollowing ? 'Following' : 'Follow'}</button>`;
-    const tgBtn = (p.username || p.type === 'user')
+    const tgBtn = ((p.username || p.type === 'user') && !String(p.id).startsWith('g'))
         ? `<button onclick="openProfileLink('${p.type}', '${p.id}', '${p.username || ''}')" class="text-xs font-bold text-blue-500 mt-2"><i class="fas fa-paper-plane"></i> Open in Telegram</button>` : '';
     document.getElementById('profileBody').innerHTML = `
         <div class="flex flex-col items-center text-center pt-1 pb-4 border-b">
             <img src="${p.photo}" class="w-20 h-20 rounded-full object-cover shadow-md mb-2" onerror="this.src='https://ui-avatars.com/api/?name=U'">
             <h2 class="font-extrabold text-lg">${escapeHtml(p.name || 'User')}${verified}</h2>
-            <p class="text-xs text-gray-400">${p.username ? '@' + escapeHtml(p.username) + ' · ' : ''}${kind}</p>
+            <p class="text-xs text-gray-400">${(p.handle || p.username) ? '@' + escapeHtml(p.handle || p.username) + ' · ' : ''}${kind}</p>
             <div class="flex gap-8 my-4">
                 <div class="profile-stat"><b>${p.posts}</b><span>Posts</span></div>
                 <div class="profile-stat"><b>${p.reels || 0}</b><span>Reels</span></div>
@@ -119,7 +119,7 @@ async function loadProfilePosts(authorId) {
     try {
         const res = await fetch('/api/getPosts', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, page: 1, limit: 10, authorId })
+            body: JSON.stringify({ initData: tgAuth(), page: 1, limit: 10, authorId })
         });
         const posts = await res.json();
         const box = document.getElementById('profilePosts');
@@ -137,7 +137,7 @@ window.toggleFollow = async () => {
     try {
         const res = await fetch('/api/toggleFollow', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, targetId: currentProfile.id })
+            body: JSON.stringify({ initData: tgAuth(), targetId: currentProfile.id })
         });
         const data = await res.json();
         if (data && data.success) {
@@ -155,4 +155,35 @@ window.toggleFollow = async () => {
         }
     } catch (e) { tg.showAlert('Could not update follow. Check your connection.'); }
     btn.disabled = false;
+};
+
+
+// ---------- Edit my name / @username ----------
+window.openEditProfile = () => {
+    if (!currentUser) return;
+    document.getElementById('epName').value = currentUser.name || '';
+    document.getElementById('epUser').value = currentUser.app_username || '';
+    document.getElementById('epError').classList.add('hidden');
+    openModal('editProfileModal');
+};
+window.MB_SCREENS.editProfileModal = () => MB.show('editProfileModal', { text: 'Save', onClick: () => saveProfileEdit(), inPage: document.getElementById('epSave') });
+
+window.saveProfileEdit = async () => {
+    const err = document.getElementById('epError');
+    err.classList.add('hidden');
+    if (window.MB) MB.update('editProfileModal', { busy: true });
+    try {
+        const res = await fetch('/api/setProfile', { method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ initData: tgAuth(), name: document.getElementById('epName').value, username: document.getElementById('epUser').value }) });
+        const d = await res.json();
+        if (!(d && d.success)) throw new Error((d && d.error) || 'Could not save');
+        currentUser.name = d.name; currentUser.app_username = d.username || null;
+        refreshProfileHeader();
+        closeModal('editProfileModal');
+        try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+    } catch (e) {
+        err.textContent = e.message || 'Could not save'; err.classList.remove('hidden');
+        try { tg.HapticFeedback.notificationOccurred('error'); } catch (x) {}
+    }
+    if (window.MB) MB.update('editProfileModal', { busy: false });
 };
