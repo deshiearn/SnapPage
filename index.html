@@ -55,14 +55,14 @@
     <main id="tab-home" class="p-4 max-w-lg mx-auto space-y-4 fade-in">
         <div class="relative">
             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-            <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" placeholder="Search posts & videos...">
+            <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" data-i18n-ph="search_ph" placeholder="Search posts, videos & people...">
             <button id="homeSearchClearBtn" onclick="clearHomeSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-times-circle"></i></button>
         </div>
         <div id="storiesBar" class="flex gap-3 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="trendingTags" class="hidden flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="feedTabs" class="flex gap-2 mb-3">
-            <button id="feedTabAll" onclick="setFeedMode('all')" class="feed-chip active">For You</button>
-            <button id="feedTabFollowing" onclick="setFeedMode('following')" class="feed-chip">Following</button>
+            <button id="feedTabAll" onclick="setFeedMode('all')" class="feed-chip active" data-i18n="for_you">For You</button>
+            <button id="feedTabFollowing" onclick="setFeedMode('following')" class="feed-chip" data-i18n="following">Following</button>
         </div>
         <div id="feed" class="space-y-4">
             <div class="text-center text-gray-400 py-10">
@@ -104,24 +104,63 @@
     <!-- Search Tab -->
     <!-- Settings Tab -->
     <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <!-- Live User Profile Card -->
-        <div class="bg-white rounded-xl p-4 shadow-sm border flex items-center space-x-4 animate-none">
-            <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-16 h-16 rounded-full border-2 border-blue-500 object-cover">
-            <div>
-                <h3 id="settingsProfileName" class="font-bold text-base text-gray-900 flex items-center gap-1">Telegram User</h3>
-                <p id="settingsProfileUsername" class="text-xs text-gray-500">@username</p>
-                <span id="settingsProfileLevel" class="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level 1</span>
-                <button onclick="openEditProfile()" class="mt-1 ml-1 text-[11px] font-bold text-blue-500"><i class="fas fa-pen"></i> Edit</button>
-                <span id="settingsStreak" class="hidden inline-block mt-1 ml-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 font-bold"></span>
+        <!-- Profile card -->
+        <div class="settings-hero">
+            <button onclick="openEditProfile()" class="settings-avatar-btn" aria-label="Edit profile">
+                <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="settings-avatar">
+                <span class="settings-avatar-cam"><i class="fas fa-camera"></i></span>
+            </button>
+            <h3 id="settingsProfileName" class="font-extrabold text-lg flex items-center justify-center gap-1 mt-2">Telegram User</h3>
+            <p id="settingsProfileUsername" class="text-xs opacity-80"></p>
+            <div class="flex items-center justify-center gap-2 mt-2">
+                <span id="settingsProfileLevel" class="settings-chip">Level 1</span>
+                <span id="settingsStreak" class="hidden settings-chip"></span>
+                <button onclick="openEditProfile()" class="settings-chip"><i class="fas fa-pen"></i> <span data-i18n="edit">Edit</span></button>
             </div>
         </div>
 
+        <!-- Appearance + language + notifications -->
+        <p class="settings-label" data-i18n="preferences">Preferences</p>
+        <div class="settings-card">
+            <div class="settings-row-col">
+                <span class="settings-title"><i class="fas fa-adjust"></i> <span data-i18n="theme">Theme</span></span>
+                <div class="seg" id="themeSeg">
+                    <button data-theme-btn="system" onclick="setThemePref('system')" data-i18n="system">System</button>
+                    <button data-theme-btn="light" onclick="setThemePref('light')" data-i18n="light">Light</button>
+                    <button data-theme-btn="dark" onclick="setThemePref('dark')" data-i18n="dark">Dark</button>
+                </div>
+            </div>
+            <div class="settings-row-col">
+                <span class="settings-title"><i class="fas fa-globe"></i> <span data-i18n="language">Language</span></span>
+                <div class="seg">
+                    <button data-lang-btn="bn" onclick="setLang('bn')">বাংলা</button>
+                    <button data-lang-btn="en" onclick="setLang('en')">English</button>
+                </div>
+            </div>
+            <div class="settings-row">
+                <div class="flex-1 min-w-0">
+                    <span class="settings-title"><i class="fas fa-bell"></i> <span data-i18n="notifications">Notifications</span></span>
+                    <p class="text-[11px] text-gray-400 mt-0.5" data-i18n="notif_desc">Telegram bot messages for likes, comments & more</p>
+                </div>
+                <label class="toggle-switch"><input type="checkbox" id="notifyToggle" onchange="setNotifyPref(this.checked)" checked><span class="toggle-slider"></span></label>
+            </div>
+        </div>
+
+        <p class="settings-label">SnapPages</p>
         <div class="bg-white rounded-xl shadow-sm overflow-hidden border">
             <button onclick="openModal('channelModal')" class="menu-row  w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-purple"><span class="opt-icon"><i class="fas fa-robot"></i></span><span class="font-semibold text-gray-800 flex-1">Set Auto Post Channels</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
             <button onclick="openReferSheet()" class="menu-row  w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-green"><span class="opt-icon"><i class="fas fa-gift"></i></span><span class="font-semibold text-gray-800 flex-1">Refer &amp; Earn</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
             <button id="adminPanelBtn" onclick="goToAdminPanel()" class="menu-row hidden w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-red"><span class="opt-icon"><i class="fas fa-user-shield"></i></span><span class="font-semibold text-gray-800 flex-1">Admin Panel</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
-            <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="menu-row border-b-0 w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-blue"><span class="opt-icon"><i class="fas fa-headset"></i></span><span class="font-semibold text-gray-800 flex-1">Support</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></a>
+            <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="menu-row border-b-0 w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-blue"><span class="opt-icon"><i class="fas fa-headset"></i></span><span class="font-semibold text-gray-800 flex-1" data-i18n="support">Support</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></a>
         </div>
+    
+
+        <p class="settings-label" data-i18n="legal">About & Legal</p>
+        <div class="settings-card">
+            <button onclick="openLegal('privacy')" class="settings-row w-full text-left"><span class="settings-title flex-1"><i class="fas fa-shield-alt"></i> <span data-i18n="privacy">Privacy Policy</span></span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
+            <button onclick="openLegal('terms')" class="settings-row w-full text-left"><span class="settings-title flex-1"><i class="fas fa-file-alt"></i> <span data-i18n="terms">Terms of Use</span></span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
+        </div>
+        <p class="text-center text-[11px] text-gray-400 pb-24">SnapPages · made for Telegram</p>
     </main>
 
     <!-- SMALL BOTTOM NAV -->
@@ -143,10 +182,10 @@
         <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div class="sheet-handle"></div>
             <div class="flex justify-between items-center mb-4">
-                <h3 id="postModalTitle" class="font-bold">Create Post</h3>
+                <h3 id="postModalTitle" class="font-bold" data-i18n="create_post">Create Post</h3>
                 <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
             </div>
-            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" placeholder="What's on your mind?"></textarea>
+            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
             
             <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
             <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
@@ -157,6 +196,15 @@
         </div>
     </div>
 
+    <!-- PRIVACY / TERMS -->
+    <div id="legalModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="legalSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl">
+            <div class="sheet-handle"></div>
+            <div class="flex justify-between items-center mb-3 border-b pb-2"><h3 id="legalTitle" class="font-bold"></h3><button onclick="closeSheet('legalModalBg','legalSheet')"><i class="fas fa-times text-xl"></i></button></div>
+            <div id="legalBody" class="flex-1 overflow-y-auto text-sm text-gray-700 space-y-3 leading-relaxed"></div>
+        </div>
+    </div>
+
     <!-- EDIT PROFILE (name + username) -->
     <div id="editProfileModal" class="hidden fixed inset-0 blur-bg z-50 flex items-end justify-center sheet-modal">
         <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl">
@@ -164,6 +212,14 @@
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-bold">Edit Profile</h3>
                 <button onclick="closeModal('editProfileModal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex flex-col items-center mb-4">
+                <button onclick="document.getElementById('epPhotoInput').click()" class="settings-avatar-btn" aria-label="Change photo">
+                    <img id="epPhotoPreview" src="" class="settings-avatar" style="width:84px;height:84px">
+                    <span class="settings-avatar-cam"><i class="fas fa-camera"></i></span>
+                </button>
+                <span class="text-[11px] text-gray-400 mt-1" data-i18n="change_photo">Change photo</span>
+                <input type="file" id="epPhotoInput" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pickProfilePhoto(this)">
             </div>
             <label class="text-[11px] font-bold text-gray-400 tracking-wide">NAME</label>
             <input id="epName" maxlength="40" class="w-full bg-gray-50 border rounded-xl px-3 py-2.5 mb-3 outline-none text-sm" placeholder="Your name">
@@ -258,7 +314,7 @@
     <div id="notifModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="notifSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl">
             <div class="flex justify-between items-center mb-3 border-b pb-2">
-                <h3 class="font-bold">Notifications</h3>
+                <h3 class="font-bold" data-i18n="notifications_title">Notifications</h3>
                 <div class="flex items-center gap-4">
                     <button onclick="clearAllNotifs()" class="text-xs font-bold text-red-500"><i class="fas fa-trash-alt"></i> Clear all</button>
                     <button onclick="closeSheet('notifModalBg', 'notifSheet')"><i class="fas fa-times text-xl"></i></button>
@@ -272,7 +328,7 @@
     <div id="commentModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet flex flex-col shadow-2xl" style="height:min(75vh, calc(var(--tg-viewport-stable-height, 100vh) - 24px))">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="font-bold">Comments</h3>
+                <h3 class="font-bold" data-i18n="comments_title">Comments</h3>
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
@@ -281,7 +337,7 @@
                 <button onclick="cancelReply()" class="text-blue-400"><i class="fas fa-times"></i></button>
             </div>
             <div id="commentInputRow" class="flex gap-2">
-                <input type="text" id="commentInput" enterkeyhint="send" autocomplete="off" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" style="font-size:16px" placeholder="Write a comment...">
+                <input type="text" id="commentInput" enterkeyhint="send" autocomplete="off" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" style="font-size:16px" data-i18n-ph="write_comment" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
@@ -363,6 +419,7 @@
 
     <script src="/assets/js/theme.js?v=__V__" defer></script>
     <script src="/assets/js/guest.js?v=__V__" defer></script>
+    <script src="/assets/js/i18n.js?v=__V__" defer></script>
     <script src="/assets/js/core.js?v=__V__" defer></script>
     <script src="/assets/js/ui.js?v=__V__" defer></script>
     <script src="/assets/js/format.js?v=__V__" defer></script>
