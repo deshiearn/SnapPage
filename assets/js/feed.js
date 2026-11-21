@@ -81,7 +81,7 @@ function buildPostCardHtml(post) {
         const valid = imageUrls.filter(Boolean);
         imgHtml = `<div class="mb-3"><div class="flex img-slider gap-1 rounded-lg overflow-x-auto" onscroll="handleImgSliderScroll(this)">`;
         valid.forEach(url => {
-            imgHtml += `<div class="img-snap w-full flex-shrink-0 img-skeleton rounded-lg overflow-hidden" style="min-height:180px"><img src="${url}" loading="lazy" onload="this.classList.add('loaded');this.parentElement.classList.remove('img-skeleton');this.parentElement.style.minHeight=0" onclick="openLightbox('${url}')" class="post-img w-full max-h-72 object-cover cursor-pointer"></div>`;
+            imgHtml += `<div class="img-snap w-full flex-shrink-0 img-skeleton rounded-lg overflow-hidden" style="min-height:180px"><img src="${url}" loading="lazy" onload="this.classList.add('loaded');this.parentElement.classList.remove('img-skeleton');this.parentElement.style.minHeight=0" onclick="openLightbox('${url}')" class="post-img w-full h-auto cursor-pointer" style="max-height:75vh;object-fit:contain"></div>`;
         });
         imgHtml += `</div>`;
         if (valid.length > 1) imgHtml += `<div class="flex justify-center gap-1.5 mt-2">${valid.map((_, i) => `<span class="img-dot ${i === 0 ? 'active' : ''}"></span>`).join('')}</div>`;

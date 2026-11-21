@@ -12,7 +12,7 @@
 /* Bottom Sheet Modals */
 .bottom-sheet { transform: translateY(100%); transition: transform .28s cubic-bezier(.4,0,1,1); will-change: transform; }
 .bottom-sheet.open { transform: translateY(0); transition: transform .42s cubic-bezier(.22,1.12,.36,1); }
-.blur-bg { backdrop-filter: blur(8px); background: rgba(0,0,0,0.5); }
+.blur-bg { background: rgba(0,0,0,0.55); }   /* no backdrop blur: it is very slow on mid/low phones */
 .blur-bg:not(.hidden) { animation: bgFade .25s ease-out; }
 @keyframes bgFade { from { opacity: 0; } to { opacity: 1; } }
 /* Centered modals pop in */
@@ -260,7 +260,7 @@ body.themed .bg-blue-600 { background-image: linear-gradient(180deg, rgba(255,25
 @keyframes flashHl { 0%, 60% { box-shadow: 0 0 0 3px var(--app-accent, #2563eb); } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* Scroll containers behave natively */
-.bottom-sheet, #commentList, #notifList, #shortsFeed, .img-slider { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.bottom-sheet, #commentList, #notifList, #shortsFeed { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 
 /* Weak phones / data saver: no blur, lighter shadows, fewer animations (class added by theme.js) */
 body.lite .blur-bg, body.lite .bottom-nav, body.lite #appHeader { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
@@ -271,3 +271,12 @@ body.lite .img-skeleton { animation: none; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Horizontal photo slider must never trap vertical scrolling */
+.img-slider { touch-action: pan-x pan-y; overscroll-behavior-x: contain; overscroll-behavior-y: auto; }
+.img-slider img { -webkit-user-drag: none; }
+/* Centered modals that now slide up like sheets */
+.sheet-modal > div { animation: sheetUp .38s cubic-bezier(.22,1.1,.36,1); }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+body.lite .sheet-modal > div { animation-duration: .2s; }
+#commentList { contain: content; }

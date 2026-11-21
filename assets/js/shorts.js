@@ -83,7 +83,7 @@ function renderShortItem(v) {
             <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
         </div>
 
-        <div class="absolute right-3 bottom-28 flex flex-col items-center gap-5 text-white">
+        <div class="absolute right-3 bottom-40 flex flex-col items-center gap-5 text-white">
             <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn flex flex-col items-center gap-1">
                 <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
                 <span class="text-xs like-count">${shortLikeCount}</span>
@@ -102,7 +102,7 @@ function renderShortItem(v) {
             </button>
         </div>
 
-        <div class="absolute left-3 right-20 bottom-8 text-white pointer-events-none">
+        <div class="absolute left-3 right-20 bottom-24 text-white pointer-events-none">
             <div class="pointer-events-auto inline-block">
                 <p class="text-sm caption-clamp" data-full="${escapeHtml(v.caption || '').replace(/"/g, '&quot;')}">${captionHtml}</p>
                 <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-gray-300 mt-1">See more</button>
@@ -287,6 +287,7 @@ window.openShortOptions = (videoId, authorId, type) => {
     }
 
     content.innerHTML = `
+        <button onclick="copyContentLink('video', '${videoId}')" class="opt-item opt-blue"><span class="opt-icon"><i class="fas fa-link"></i></span><span>Copy Link<small>Share it anywhere</small></span><i class="fas fa-chevron-right opt-chev"></i></button>
         <button onclick="saveVideoToChat('${videoId}')" class="opt-item opt-green"><span class="opt-icon"><i class="fas fa-download"></i></span><span>Save<small>Send to your chat</small></span><i class="fas fa-chevron-right opt-chev"></i></button>
         ${isMine
             ? `<button onclick="deleteVideoDirect('${videoId}')" class="opt-item opt-red"><span class="opt-icon"><i class="fas fa-trash-alt"></i></span><span>Delete Video<small>Cannot be undone</small></span><i class="fas fa-chevron-right opt-chev"></i></button>`
