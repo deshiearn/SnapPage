@@ -128,7 +128,7 @@
 
     <!-- CREATE / EDIT POST MODAL -->
     <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none max-h-[92vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h3 id="postModalTitle" class="font-bold">Create Post</h3>
                 <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
@@ -139,6 +139,7 @@
             <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
             
             <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
+            <div id="postLivePreviewWrap" class="hidden mb-3"><p class="text-[11px] font-bold text-gray-400 tracking-wide mb-1.5"><i class="fas fa-eye"></i> LIVE PREVIEW</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
             <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Post</button>
         </div>
     </div>

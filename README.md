@@ -85,6 +85,12 @@ New **Web Service** from this repo — Build: `npm install`, Start: `npm start`.
 - **Copy Link / Share** on a profile gives `https://t.me/<bot>/app?startapp=profile_<id>_ref_<yourId>`. Opening it lands straight on that profile, and a brand-new user who joins through it is counted as *your* invite (referral levels). Post and Reel share links carry the same `_ref_` suffix.
 - Follow needs `sql/06_social_migration.sql` (creates `snap_follows`). If it is missing the app now says so instead of a vague error.
 
+## Instant posting + live preview
+
+- While writing, a **Live Preview** shows the post exactly as it will look in the feed (text, hashtags, photos).
+- Pressing Post closes the composer immediately and shows the post at the top of the feed ("Posting…") while it uploads in the background. If the upload fails, the card is removed and the draft is restored so nothing is lost.
+- Photos are downscaled in the browser (max 1280px JPEG) before upload, which makes posting faster and saves Supabase/Telegram bandwidth.
+
 ## Working within the free tiers
 The app is designed so that normal growth does not hit a limit:
 
