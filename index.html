@@ -47,9 +47,6 @@
             <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
                 <i class="fas fa-user-shield"></i> Admin
             </div>
-            <button id="bellBtn" onclick="openNotifs()" class="bell-btn" aria-label="Notifications">
-                <i class="fas fa-bell"></i><span id="notifBadge" class="notif-badge hidden">0</span>
-            </button>
         </div>
     </header>
 
@@ -131,6 +128,9 @@
     <nav id="bottomNav" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
         <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
         <button onclick="switchTab('shorts')" class="nav-btn text-gray-400 transition" id="nav-shorts"><i class="fas fa-play-circle text-2xl"></i></button>
+        <button id="bellBtn" onclick="openNotifs()" class="nav-btn text-gray-400 transition relative" aria-label="Notifications">
+            <i class="fas fa-bell text-2xl"></i><span id="notifBadge" class="notif-badge hidden">0</span>
+        </button>
         <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
             <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
         </button>
