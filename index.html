@@ -41,7 +41,7 @@
     </div>
 
     <!-- Header (No SnapPages Text, dynamic safe spacing) -->
-    <header id="appHeader" class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
+    <header id="appHeader" class="hidden p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
         <span id="headerTitle"></span>
         <div class="flex items-center gap-2">
             <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
@@ -139,15 +139,16 @@
     <!-- ================= MODALS & BOTTOM SHEETS ================= -->
 
     <!-- CREATE / EDIT POST MODAL -->
-    <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none max-h-[92vh] overflow-y-auto">
+    <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-end justify-center sheet-modal">
+        <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="sheet-handle"></div>
             <div class="flex justify-between items-center mb-4">
                 <h3 id="postModalTitle" class="font-bold">Create Post</h3>
                 <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
             </div>
             <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" placeholder="What's on your mind?"></textarea>
             
-            <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
+            <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
             <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
             
             <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
@@ -157,8 +158,9 @@
     </div>
 
     <!-- EDIT PROFILE (name + username) -->
-    <div id="editProfileModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
+    <div id="editProfileModal" class="hidden fixed inset-0 blur-bg z-50 flex items-end justify-center sheet-modal">
+        <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl">
+            <div class="sheet-handle"></div>
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-bold">Edit Profile</h3>
                 <button onclick="closeModal('editProfileModal')"><i class="fas fa-times"></i></button>
@@ -174,15 +176,16 @@
     </div>
 
     <!-- VIDEO UPLOAD MODAL (Shorts) -->
-    <div id="videoUploadModal" class="hidden fixed inset-0 blur-bg z-[70] flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none">
+    <div id="videoUploadModal" class="hidden fixed inset-0 blur-bg z-[70] flex items-end justify-center sheet-modal">
+        <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl">
+            <div class="sheet-handle"></div>
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-bold">Upload Short</h3>
                 <button onclick="closeModal('videoUploadModal')"><i class="fas fa-times"></i></button>
             </div>
             <textarea id="videoCaptionText" class="w-full bg-gray-50 rounded-xl p-3 h-20 mb-3 outline-none" placeholder="Write a caption..."></textarea>
 
-            <input type="file" id="videoUploadInput" accept="video/*" class="hidden">
+            <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" class="hidden">
             <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="w-full text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-film"></i> Choose Video (Max 15MB)</button>
             <p id="videoFileName" class="text-xs text-gray-400 mb-3 truncate"></p>
 
@@ -191,7 +194,7 @@
     </div>
 
     <!-- STORIES: hidden file picker, compose screen, full-screen viewer -->
-    <input type="file" id="storyFileInput" accept="image/*" class="hidden">
+    <input type="file" id="storyFileInput" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" class="hidden">
 
     <div id="storyCompose" class="hidden fixed inset-0 bg-black z-[130] flex flex-col">
         <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 56px);">
@@ -267,7 +270,7 @@
 
     <!-- COMMENTS BOTTOM SHEET -->
     <div id="commentModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[75vh] flex flex-col shadow-2xl">
+        <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet flex flex-col shadow-2xl" style="height:min(75vh, calc(var(--tg-viewport-stable-height, 100vh) - 24px))">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 class="font-bold">Comments</h3>
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
@@ -278,7 +281,7 @@
                 <button onclick="cancelReply()" class="text-blue-400"><i class="fas fa-times"></i></button>
             </div>
             <div id="commentInputRow" class="flex gap-2">
-                <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900 animate-none" placeholder="Write a comment...">
+                <input type="text" id="commentInput" enterkeyhint="send" autocomplete="off" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" style="font-size:16px" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>

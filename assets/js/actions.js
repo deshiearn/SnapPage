@@ -57,17 +57,26 @@ window.openPostOptions = async (postId, authorId, postType) => {
         }
     }
 
+    const copyBtn = `<button onclick="copyContentLink('post', '${postId}')" class="opt-item opt-blue"><span class="opt-icon"><i class="fas fa-link"></i></span><span>Copy Link<small>Share it anywhere</small></span><i class="fas fa-chevron-right opt-chev"></i></button>`;
     if (isMine) {
-        content.innerHTML = `
+        content.innerHTML = copyBtn + `
             <button onclick="triggerEditPost('${postId}')" class="opt-item opt-blue"><span class="opt-icon"><i class="fas fa-pen"></i></span><span>Edit Post<small>Change caption or images</small></span><i class="fas fa-chevron-right opt-chev"></i></button>
             <button onclick="triggerRemovePost('${postId}')" class="opt-item opt-red"><span class="opt-icon"><i class="fas fa-trash-alt"></i></span><span>Delete Post<small>Cannot be undone</small></span><i class="fas fa-chevron-right opt-chev"></i></button>
         `;
     } else {
-        content.innerHTML = `
+        content.innerHTML = copyBtn + `
             <button onclick="openReportSheet('${postId}')" class="opt-item opt-orange"><span class="opt-icon"><i class="fas fa-flag"></i></span><span>Report Post<small>Tell us what is wrong</small></span><i class="fas fa-chevron-right opt-chev"></i></button>
         `;
     }
 }
+
+window.copyContentLink = (kind, id) => {
+    closeSheet('optionsModalBg', 'optionsSheet');
+    const link = `https://t.me/SnapPagesBot/app?startapp=${kind}_${id}${refSuffix()}`;
+    const done = () => { try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {} tg.showAlert('Link copied!'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, () => fallbackCopy(link, done));
+    else fallbackCopy(link, done);
+};
 
 window.triggerEditPost = async (postId) => {
     closeSheet('optionsModalBg', 'optionsSheet');

@@ -22,7 +22,17 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 // blacklisting every request from this deployment regardless of which API key was used.
 // A private channel (bot must be admin) used purely as storage for user-uploaded Shorts videos,
 // so raw video bytes never sit in Supabase — only the Telegram file_id is stored.
-const STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
+const ENV_STORAGE_CHANNEL_ID = process.env.STORAGE_CHANNEL_ID;
+// Storage channel can be set from the admin panel (app_settings.storage_channel_id); env var is the fallback
+let storageCache = { id: ENV_STORAGE_CHANNEL_ID || null, ts: 0 };
+async function getStorageChannel(force) {
+    if (!force && Date.now() - storageCache.ts < 60000) return storageCache.id;
+    try {
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'storage_channel_id').maybeSingle();
+        storageCache = { id: (data && data.value) || ENV_STORAGE_CHANNEL_ID || null, ts: Date.now() };
+    } catch (e) { storageCache.ts = Date.now(); }
+    return storageCache.id;
+}
 const MAX_VIDEO_BYTES = 18 * 1024 * 1024; // 18MB — Telegram Bot API can't reliably stream files near/above ~20MB
 const MAX_VIDEOS_IN_DB = 300;
 
@@ -103,8 +113,9 @@ function tgImageUrl(fileId) {
 }
 
 async function uploadImageToTelegram(base64Str) {
+    const STORAGE_CHANNEL_ID = await getStorageChannel();
     if (!STORAGE_CHANNEL_ID) {
-        console.error("uploadImageToTelegram: STORAGE_CHANNEL_ID is not configured — cannot store the image anywhere.");
+        console.error("uploadImageToTelegram: no storage channel configured (Admin panel → Storage Channel).");
         return null;
     }
     try {
@@ -1102,13 +1113,10 @@ app.post('/api/createPost', async (req, res) => {
         let imageUrls = [];
         let uploadFailures = 0;
         if (imagesBase64 && imagesBase64.length > 0) {
-            for (let img of imagesBase64) {
-                const uploadedUrl = await uploadImageToTelegram(img);
-                if (uploadedUrl) {
-                    imageUrls.push(uploadedUrl);
-                } else {
-                    uploadFailures++;
-                }
+            const results = await Promise.all(imagesBase64.slice(0, 4).map(img => uploadImageToTelegram(img)));   // parallel = faster posting
+            results.forEach(u => u ? imageUrls.push(u) : uploadFailures++);
+            if (uploadFailures > 0 && imageUrls.length === 0 && !String(text || '').trim()) {
+                return res.status(500).json({ error: "Photo upload failed — the storage channel isn't working. Admin: Admin panel → Storage Channel." });
             }
         }
 
@@ -1534,11 +1542,11 @@ app.post('/api/searchPosts', async (req, res) => {
 app.post('/api/getComments', async (req, res) => {
     const { postId, contentType = 'post' } = req.body;
     try {
-        let { data, error } = await supabase.from('comments').select('*').eq('post_id', postId).eq('content_type', contentType).order('created_at', { ascending: true });
+        let { data, error } = await supabase.from('comments').select('*').eq('post_id', postId).eq('content_type', contentType).order('created_at', { ascending: true }).limit(200);
         if (error) {
             console.error("getComments (content_type filter) failed, falling back:", error.message || error);
             // Most likely the content_type column doesn't exist yet (shorts_migration.sql not run) — fall back to matching by post_id only.
-            const fallback = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+            const fallback = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true }).limit(200);
             data = fallback.data;
         }
         res.json(data || []);
@@ -1773,7 +1781,8 @@ app.post('/api/createVideo', async (req, res) => {
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
     if (!videoBase64) return res.status(400).json({ error: "No video provided" });
-    if (!STORAGE_CHANNEL_ID) return res.status(500).json({ error: "Server is missing STORAGE_CHANNEL_ID configuration" });
+    const STORAGE_CHANNEL_ID = await getStorageChannel();
+    if (!STORAGE_CHANNEL_ID) return res.status(500).json({ error: "Storage channel is not set. Admin: open Admin panel → Storage Channel." });
 
     try {
         const base64Data = videoBase64.includes(',') ? videoBase64.split(',')[1] : videoBase64;
@@ -1801,7 +1810,7 @@ app.post('/api/createVideo', async (req, res) => {
             type: 'user',
             caption: caption || '',
             file_id: fileId,
-            storage_chat_id: STORAGE_CHANNEL_ID,
+            storage_chat_id: String(STORAGE_CHANNEL_ID),
             storage_message_id: sentMsg.message_id,
             owned_storage: true,
             likes_count: 0,
@@ -2287,6 +2296,31 @@ app.post('/api/admin/maintenance', requireAdminUser, requireAdminPassword, async
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
+    }
+});
+
+// Storage channel: where uploaded photos/videos are kept (the bot must be an admin there)
+app.post('/api/admin/getStorageChannel', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const id = await getStorageChannel(true);
+    res.json({ id: id || '', fromEnv: !!ENV_STORAGE_CHANNEL_ID && id === ENV_STORAGE_CHANNEL_ID });
+});
+app.post('/api/admin/setStorageChannel', requireAdminUser, requireAdminPassword, async (req, res) => {
+    let id = String(req.body.id || '').trim();
+    if (!id) return res.status(400).json({ error: "Enter the channel ID (like -1001234567890) or @username" });
+    try {
+        const chat = await bot.telegram.getChat(id);            // bot must be able to see it
+        const me = await bot.telegram.getMe();
+        const member = await bot.telegram.getChatMember(chat.id, me.id);
+        if (!['administrator', 'creator'].includes(member.status)) {
+            return res.status(400).json({ error: `Bot is not an admin in "${chat.title || id}". Add @${me.username} as admin with "Post messages" permission.` });
+        }
+        const test = await bot.telegram.sendMessage(chat.id, '✅ SnapPages storage channel connected');   // proves it can post
+        bot.telegram.deleteMessage(chat.id, test.message_id).catch(() => {});
+        await supabase.from('app_settings').upsert([{ key: 'storage_channel_id', value: String(chat.id) }]);
+        storageCache = { id: String(chat.id), ts: Date.now() };
+        res.json({ success: true, id: String(chat.id), title: chat.title || '' });
+    } catch (e) {
+        res.status(400).json({ error: `Telegram says: ${e.description || e.message || e}` });
     }
 });
 

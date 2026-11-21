@@ -193,6 +193,7 @@ async function initApp() {
 
         if (currentUser.is_admin) {
             document.getElementById('adminBadge').classList.remove('hidden');
+            document.getElementById('appHeader').classList.remove('hidden');
             document.getElementById('adminPanelBtn').classList.remove('hidden');
         }
 
