@@ -101,7 +101,8 @@ function formatCaptionBase(text, level, entities) {
 // Dynamic Post Previews uploads
 document.getElementById('imageUpload').addEventListener('change', function(e) {
     const files = Array.from(e.target.files);
-    if (imagesArray.length + files.length > 4) return tg.showAlert("Maximum 4 images allowed!");
+    const maxImgs = ((currentUser && currentUser.level) || 1) >= 3 ? 8 : 4;
+    if (imagesArray.length + files.length > maxImgs) return tg.showAlert(`Your level allows up to ${maxImgs} photos per post.` + (maxImgs < 8 ? ' Reach Level 3 for 8!' : ''));
     
     files.forEach(file => {
         const reader = new FileReader();

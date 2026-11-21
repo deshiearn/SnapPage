@@ -43,7 +43,9 @@ async function loadPosts(page = 1, clearFeed = true) {
             hasMorePosts = false;
         }
 
-        const resolvedHtml = posts.map(post => buildPostCardHtml(post)).join('');
+        await ensureAds();
+        if (clearFeed) adCursor = 0;
+        const resolvedHtml = posts.map((post, i) => buildPostCardHtml(post) + (feedAds.length && (i === Math.min(2, posts.length - 1) || i === 7) ? buildAdHtml() : '')).join('');
 
         if (clearFeed) {
             feed.innerHTML = resolvedHtml;
@@ -147,3 +149,33 @@ window.setFeedMode = (mode) => {
     try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
     loadPosts(1, true);
 };
+
+
+// ---------- Ads (created in Admin panel → Ads) ----------
+let feedAds = null, adCursor = 0;
+async function ensureAds() {
+    if (feedAds) return;
+    feedAds = [];
+    try { const r = await fetch('/api/getAds'); const d = await r.json(); if (Array.isArray(d)) feedAds = d; } catch (e) {}
+}
+function buildAdHtml() {
+    const ad = feedAds[adCursor++ % feedAds.length];
+    if (!ad) return '';
+    const img = ad.image_url ? `<img src="${ad.image_url}" class="ad-img" loading="lazy" alt="">` : '';
+    return `<div class="post-card ad-card fade-in" data-ad="${ad.id}">
+        <div class="ad-tag">Sponsored</div>${img}
+        <div class="ad-body"><h4>${escapeHtml(ad.title)}</h4>${ad.body ? `<p>${escapeHtml(ad.body)}</p>` : ''}
+        ${ad.link_url ? `<button class="ad-btn" onclick="adClick(${ad.id}, '${escapeHtml(ad.link_url)}')">${escapeHtml(ad.button_text || 'Learn more')}</button>` : ''}</div></div>`;
+}
+window.adClick = (id, url) => {
+    try { fetch('/api/adEvent', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id, type: 'click' }), keepalive: true }); } catch (e) {}
+    /t\.me\//.test(url) ? tg.openTelegramLink(url) : tg.openLink(url);
+};
+// count an impression once when an ad scrolls into view
+const adObserver = ('IntersectionObserver' in window) ? new IntersectionObserver((es) => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    adObserver.unobserve(e.target);
+    try { fetch('/api/adEvent', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: e.target.dataset.ad, type: 'view' }), keepalive: true }); } catch (x) {}
+}), { threshold: 0.6 }) : null;
+if (adObserver) new MutationObserver(() => document.querySelectorAll('.ad-card:not([data-obs])').forEach(el => { el.dataset.obs = 1; adObserver.observe(el); }))
+    .observe(document.getElementById('feed'), { childList: true });

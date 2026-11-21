@@ -1,6 +1,7 @@
 'use strict';
 // ================= Reactions: long-press the Like button =================
-const REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👍'];
+const REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👍', '🎉', '🥰', '💎', '🤯'];
+const REACTION_LEVEL = { '🎉': 2, '🥰': 2, '💎': 3, '🤯': 3 };   // premium reactions unlock by levelling up
 let pressTimer = null, longPressed = false, pickerTarget = null;
 
 function hideReactionPicker() {
@@ -12,7 +13,13 @@ function hideReactionPicker() {
 function showReactionPicker(btn) {
     pickerTarget = btn;
     const p = document.getElementById('reactionPicker');
-    p.innerHTML = REACTIONS.map((e, i) => `<button class="react-opt" style="animation-delay:${i * 40}ms" onclick="pickReaction('${e}')">${e}</button>`).join('');
+    const lv = (currentUser && currentUser.level) || 1;
+    p.innerHTML = REACTIONS.map((e, i) => {
+        const need = REACTION_LEVEL[e] || 1;
+        return need > lv
+            ? `<button class="react-opt locked" style="animation-delay:${i * 40}ms" onclick="tg.showAlert('Unlocks at Level ${need} — invite friends to level up!')">${e}<i class="fas fa-lock"></i></button>`
+            : `<button class="react-opt" style="animation-delay:${i * 40}ms" onclick="pickReaction('${e}')">${e}</button>`;
+    }).join('');
     p.classList.remove('hidden');
     const r = btn.getBoundingClientRect();
     const w = p.offsetWidth || 260;

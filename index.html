@@ -122,6 +122,7 @@
 
             <div class="tgme-group">
                 <button onclick="openModal('channelModal')" class="tgme-row"><span class="tg-ic" style="background:#8b5cf6"><i class="fas fa-robot"></i></span><span class="tgme-label" data-i18n="channels">My Channels</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button onclick="openPerks()" class="tgme-row"><span class="tg-ic" style="background:#f59e0b"><i class="fas fa-gem"></i></span><span class="tgme-label">Level Perks</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <button onclick="openReferSheet()" class="tgme-row"><span class="tg-ic" style="background:#22c55e"><i class="fas fa-gift"></i></span><span class="tgme-label" data-i18n="invite">Invite & Level Up</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <button id="adminPanelBtn" onclick="goToAdminPanel()" class="tgme-row hidden"><span class="tg-ic" style="background:#ef4444"><i class="fas fa-user-shield"></i></span><span class="tgme-label">Admin Panel</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="tgme-row"><span class="tg-ic" style="background:#3b82f6"><i class="fas fa-headset"></i></span><span class="tgme-label" data-i18n="support">Support</span><i class="fas fa-chevron-right tgme-chev"></i></a>
@@ -263,12 +264,12 @@
             <span class="font-bold">New story</span>
             <button id="storyShareBtn" onclick="shareStory()" class="text-sm font-bold bg-blue-600 px-4 py-1.5 rounded-full">Share</button>
         </div>
-        <div class="flex-1 flex items-center justify-center overflow-hidden px-3"><img id="storyPreview" class="max-h-full max-w-full object-contain rounded-xl"></div>
+        <div class="flex-1 flex items-center justify-center overflow-hidden px-3"><img id="storyPreview" class="max-h-full max-w-full object-contain rounded-xl"><video id="storyPreviewVid" class="hidden max-h-full max-w-full rounded-xl" muted loop playsinline controls></video></div>
         <div class="p-4"><input id="storyCaption" maxlength="200" placeholder="Add a caption..." class="w-full bg-white/15 text-white placeholder-white/60 rounded-full px-4 py-3 outline-none"></div>
     </div>
 
     <div id="storyViewer" class="hidden fixed inset-0 bg-black z-[140] select-none">
-        <img id="storyImg" class="absolute inset-0 w-full h-full object-contain">
+        <img id="storyImg" class="absolute inset-0 w-full h-full object-contain"><video id="storyVid" class="hidden absolute inset-0 w-full h-full object-contain" playsinline preload="auto"></video>
         <div id="storyZone" class="absolute inset-0"></div>
         <div class="absolute top-0 left-0 right-0 px-3 pointer-events-none" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 52px); background: linear-gradient(rgba(0,0,0,.55), transparent);">
             <div id="storyBars" class="flex gap-1 mb-3"></div>

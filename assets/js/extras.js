@@ -158,13 +158,32 @@ async function performHomeSearch(query) {
     const feed = document.getElementById('feed');
     feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
     try {
-        const res = await fetch('/api/searchPosts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
-        const results = await res.json();
-        if (!results || results.length === 0) {
-            feed.innerHTML = '<div class="text-center text-gray-400 py-10">No matching posts or videos found.</div>';
+        const res = await fetch('/api/searchAll', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
+        const r = await res.json();
+        const people = r.people || [], videos = r.videos || [], posts = r.posts || [];
+        if (!people.length && !videos.length && !posts.length) {
+            feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-search text-3xl mb-2 opacity-50"></i><p>Nothing found. Try another name, @username or word.</p></div>';
             return;
         }
-        feed.innerHTML = results.map(r => r.content_type === 'video' ? buildVideoResultCardHtml(r) : buildPostCardHtml(r)).join('');
+        let html = '';
+        if (people.length) {
+            html += '<div class="srch-sec"><div class="srch-h">People & Channels</div>' + people.map(p => `
+                <button class="srch-person" onclick="openProfile('${p.id}')">
+                    <img src="${p.photo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.name || 'U')}" class="srch-av" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=U'">
+                    <span class="srch-meta"><b>${escapeHtml(p.name || 'User')}${p.verified ? ' <i class="fas fa-check-circle" style="color:#3b82f6"></i>' : ''}</b><small>${p.username ? '@' + escapeHtml(p.username) : (p.type === 'channel' ? 'Channel' : 'User')}</small></span>
+                    <i class="fas fa-chevron-right opacity-40"></i>
+                </button>`).join('') + '</div>';
+        }
+        if (videos.length) {
+            html += '<div class="srch-sec"><div class="srch-h">Related Reels</div><div class="srch-reels">' + videos.map(v => `
+                <button class="srch-reel" onclick="openVideoInShorts('${v.id}')">
+                    <video src="${v.stream_url}#t=0.3" preload="metadata" muted playsinline></video>
+                    <span class="srch-play"><i class="fas fa-play"></i></span>
+                    <span class="srch-cap">${escapeHtml((v.caption || '').slice(0, 40))}</span>
+                </button>`).join('') + '</div></div>';
+        }
+        if (posts.length) html += '<div class="srch-h" style="padding:6px 4px">Posts</div>' + posts.map(p => buildPostCardHtml(p)).join('');
+        feed.innerHTML = html;
     } catch (e) {
         feed.innerHTML = '<div class="text-center text-red-500 py-10">Search failed. Check your connection.</div>';
     }

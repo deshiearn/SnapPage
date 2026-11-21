@@ -264,3 +264,21 @@ window.heroStyle = (id) => {
     let h = 0; String(id).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) % 360; });
     return `--hero1:hsl(${h} 72% 64%);--hero2:hsl(${(h + 28) % 360} 68% 46%)`;
 };
+
+
+// ---------- Level perks (free for everyone; extras unlock by levelling up) ----------
+window.openPerks = () => {
+    const lv = (currentUser && currentUser.level) || 1;
+    const rows = [
+        [1, 'fa-camera', '4 photos per post · 3 active stories', 'Everyone'],
+        [1, 'fa-video', 'Video stories (30 s) · all basic reactions', 'Everyone'],
+        [2, 'fa-face-smile-beam', 'Premium reactions 🎉 🥰 · 5 active stories', 'Level 2'],
+        [3, 'fa-gem', 'Exclusive reactions 💎 🤯 · 8 photos per post · 8 stories', 'Level 3']
+    ];
+    document.getElementById('legalTitle').textContent = 'Level Perks';
+    document.getElementById('legalBody').innerHTML =
+        `<p>You are <b>Level ${lv}</b>. Everything basic is free — invite friends with your link to unlock more!</p>` +
+        rows.map(r => `<div class="perk-row ${r[0] <= lv ? 'on' : ''}"><span class="perk-ic"><i class="fas ${r[3] === 'Everyone' ? r[1] : (r[0] <= lv ? r[1] : 'fa-lock')}"></i></span><span class="perk-t">${r[2]}<small>${r[3]}${r[0] <= lv ? ' · unlocked' : ''}</small></span></div>`).join('') +
+        `<button class="ad-btn" style="width:100%;margin-top:12px" onclick="closeSheet && closeSheet('legalModalBg','legalSheet'); openReferSheet()">Invite friends</button>`;
+    openSheet('legalModalBg', 'legalSheet');
+};
