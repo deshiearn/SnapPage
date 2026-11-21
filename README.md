@@ -58,6 +58,7 @@ Create a project, then in **SQL Editor** paste and run the files in `sql/` in th
 | 10 | `10_stories.sql` | stories (24-hour status) |
 | 11 | `11_notifications_and_username.sql` | in-app notifications + editable @username |
 | 12 | `12_settings_ads_premium.sql` | notification On/Off switch, ads table |
+| 14 | `14_story_video.sql` | Video stories |
 | 13 | `13_channel_sync_rich.sql` | channel sync (deletions/edits) + rich posts |
 
 Then make yourself admin: `update users set is_admin = true where tg_id = 'YOUR_TELEGRAM_ID';`
@@ -137,3 +138,10 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 - All API routes validate Telegram `initData` (HMAC) – the user id always comes from Telegram, never from the request body.
 - The Supabase **service key** is used only on the server. Admin routes need the user to be an admin **and** the admin password.
 - Banned users/channels are blocked from re-registering.
+
+
+## Search, video stories, Ads and Level Perks
+- **Search** finds people and channels (by name or @username → opens profile), a strip of related Reels thumbnails (tap → Reels page), and posts.
+- **Video stories**: up to 30 s / 12 MB. Run `sql/14_story_video.sql`.
+- **Ads**: Admin panel → Ads (title, text, image, link, button). Shown as "Sponsored" cards in the feed; impressions/clicks counted (run `sql/12_settings_ads_premium.sql`, it adds `bump_ad`).
+- **Level Perks**: all basic features free. Level 2 → reactions 🎉🥰, 5 stories; Level 3 → 💎🤯, 8 photos/post, 8 stories. See Me → Level Perks.

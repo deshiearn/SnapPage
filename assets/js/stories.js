@@ -53,6 +53,10 @@ document.getElementById('storyFileInput').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
+    if (file.type.startsWith('video/')) return prepStoryVideo(file);
+    storyVideo = null;
+    document.getElementById('storyPreviewVid').classList.add('hidden');
+    document.getElementById('storyPreview').classList.remove('hidden');
     const reader = new FileReader();
     reader.onload = () => {
         const img = new Image();
@@ -71,21 +75,44 @@ document.getElementById('storyFileInput').addEventListener('change', (e) => {
     };
     reader.readAsDataURL(file);
 });
-let storyDraft = null;
+let storyDraft = null, storyVideo = null;
+
+function prepStoryVideo(file) {
+    if (file.size > 12 * 1024 * 1024) { tg.showAlert('Video is too big. Pick a short clip under 12 MB (about 30 seconds).'); return; }
+    const url = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {
+        if (probe.duration > 31) { URL.revokeObjectURL(url); tg.showAlert('Story videos can be up to 30 seconds.'); return; }
+        const r = new FileReader();
+        r.onload = () => {
+            storyVideo = r.result; storyDraft = null;
+            const pv = document.getElementById('storyPreviewVid');
+            pv.src = url; pv.classList.remove('hidden');
+            document.getElementById('storyPreview').classList.add('hidden');
+            document.getElementById('storyCaption').value = '';
+            openModal('storyCompose'); try { pv.play(); } catch (e) {}
+        };
+        r.readAsDataURL(file);
+    };
+    probe.onerror = () => tg.showAlert('Could not read this video. Try an MP4 file.');
+    probe.src = url;
+}
 
 window.MB_SCREENS.storyCompose = () => MB.show('storyCompose', { text: 'Share Story', onClick: () => shareStory(), inPage: document.getElementById('storyShareBtn') });
 
 window.shareStory = async () => {
-    if (!storyDraft) return;
+    if (!storyDraft && !storyVideo) return;
     const btn = document.getElementById('storyShareBtn');
     btn.disabled = true; btn.innerText = 'Sharing...';
     if (window.MB) MB.update('storyCompose', { busy: true });
     try {
         const res = await fetch('/api/createStory', { method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tgAuth(), image: storyDraft, caption: document.getElementById('storyCaption').value.trim() }) });
+            body: JSON.stringify({ initData: tgAuth(), image: storyDraft, video: storyVideo, caption: document.getElementById('storyCaption').value.trim() }) });
         const data = await res.json();
         if (data && data.success) {
-            storyDraft = null;
+            storyDraft = null; storyVideo = null;
+            try { document.getElementById('storyPreviewVid').pause(); } catch (e) {}
             closeModal('storyCompose');
             await loadStories();
             try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
@@ -109,6 +136,7 @@ window.openStoryViewer = (groupIdx) => {
 
 window.closeStoryViewer = () => {
     clearTimeout(sv.timer);
+    try { document.getElementById('storyVid').pause(); } catch (e) {}
     closeModal('storyViewer');
     renderStoriesBar();
 };
@@ -118,7 +146,10 @@ function showStory() {
     const st = g && g.stories[sv.i];
     if (!st) { closeStoryViewer(); return; }
     markSeen(st.id);
-    document.getElementById('storyImg').src = st.image_url;
+    const vid = document.getElementById('storyVid'), img = document.getElementById('storyImg');
+    const isVid = st.media_type === 'video' && st.video_url;
+    vid.classList.toggle('hidden', !isVid); img.classList.toggle('hidden', !!isVid);
+    if (isVid) { img.removeAttribute('src'); } else { vid.pause(); vid.removeAttribute('src'); img.src = st.image_url; }
     document.getElementById('storyAvatar').src = g.author_photo;
     document.getElementById('storyName').innerText = g.author_name || 'User';
     document.getElementById('storyTime').innerText = timeAgo(st.created_at);
@@ -129,8 +160,13 @@ function showStory() {
         `<div class="story-seg"><div class="story-fill ${i < sv.i ? 'done' : ''}"></div></div>`).join('');
     // preload the next image
     const nxt = g.stories[sv.i + 1] || (storyGroups[sv.g + 1] && storyGroups[sv.g + 1].stories[0]);
-    if (nxt) new Image().src = nxt.image_url;
-    startStoryTimer(STORY_MS);
+    if (nxt && nxt.image_url) new Image().src = nxt.image_url;
+    if (isVid) {
+        vid.src = st.video_url; vid.currentTime = 0; sv.vid = vid;
+        vid.onloadedmetadata = () => { startStoryTimer(Math.min(30000, Math.max(2000, (vid.duration || 10) * 1000))); vid.play().catch(() => { vid.muted = true; vid.play().catch(() => {}); }); };
+        vid.onerror = () => startStoryTimer(STORY_MS);
+        clearTimeout(sv.timer);
+    } else { sv.vid = null; startStoryTimer(STORY_MS); }
 }
 
 function startStoryTimer(ms) {
@@ -143,6 +179,7 @@ function startStoryTimer(ms) {
 function pauseStory() {
     if (sv.paused) return;
     sv.paused = true;
+    if (sv.vid) try { sv.vid.pause(); } catch (e) {}
     clearTimeout(sv.timer);
     sv.remaining = Math.max(200, sv.remaining - (Date.now() - sv.startedAt));
     const fill = document.querySelectorAll('#storyBars .story-fill')[sv.i];
@@ -151,6 +188,7 @@ function pauseStory() {
 function resumeStory() {
     if (!sv.paused) return;
     sv.paused = false; sv.startedAt = Date.now();
+    if (sv.vid) try { sv.vid.play(); } catch (e) {}
     const fill = document.querySelectorAll('#storyBars .story-fill')[sv.i];
     if (fill) fill.style.animationPlayState = 'running';
     sv.timer = setTimeout(nextStory, sv.remaining);

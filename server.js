@@ -38,6 +38,20 @@ const MAX_VIDEO_BYTES = 18 * 1024 * 1024; // 18MB — Telegram Bot API can't rel
 const MAX_VIDEOS_IN_DB = 300;
 
 // ================= Referral Level Mapping =================
+// Level perks (everything basic is free; these unlock by levelling up through referrals)
+const PERKS = {
+    stories: { 1: 3, 2: 5, 3: 8 },            // active stories at once
+    photos:  { 1: 4, 2: 4, 3: 8 },            // photos per post
+    reactions: { 1: ['😂', '😮', '😢', '🔥', '👍'], 2: ['🎉', '🥰'], 3: ['💎', '🤯'] }   // extra reactions per level
+};
+const perkFor = (kind, level) => PERKS[kind][Math.min(3, Math.max(1, level || 1))];
+const allowedReactions = (level) => [1, 2, 3].filter(l => l <= (level || 1)).flatMap(l => PERKS.reactions[l]);
+async function levelOfUser(id) {
+    id = String(id);
+    const meta = (await getUserMetaBatch([id]))[id];
+    return getUserLevelCached(id, !!(meta && meta.is_verified));
+}
+
 const getLevelData = (refs) => {
     if (refs >= 3) return { level: 3, channels: 5 };
     if (refs >= 2) return { level: 2, channels: 3 };
@@ -1028,6 +1042,67 @@ app.post('/api/getPosts', async (req, res) => {
     }
 });
 
+
+// ================= Ads (created in Admin panel, shown between posts) =================
+let adsCache = { exp: 0, list: [] };
+app.get('/api/getAds', async (req, res) => {
+    try {
+        if (adsCache.exp < Date.now()) {
+            const { data, error } = await supabase.from('ads').select('id, title, body, image_url, link_url, button_text, placement').eq('active', true).order('created_at', { ascending: false }).limit(20);
+            adsCache = { exp: Date.now() + 120000, list: error ? [] : (data || []) };
+        }
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json(adsCache.list);
+    } catch (e) { res.json([]); }
+});
+const adSeen = new Map();   // dedupe impressions per user+ad per hour
+app.post('/api/adEvent', async (req, res) => {
+    res.json({ success: true });
+    try {
+        const id = parseInt(req.body.id); const kind = req.body.type === 'click' ? 'clicks' : 'impressions';
+        if (!id) return;
+        const who = String(req.headers['x-forwarded-for'] || req.ip || '') + ':' + id + ':' + kind;
+        if (adSeen.get(who) > Date.now() - 3600 * 1000) return;
+        adSeen.set(who, Date.now()); if (adSeen.size > 20000) adSeen.clear();
+        await supabase.rpc('bump_ad', { ad_id: id, col: kind });
+    } catch (e) { /* stats are best effort */ }
+});
+
+app.post('/api/admin/ads', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const { data, error } = await supabase.from('ads').select('*').order('created_at', { ascending: false }).limit(100);
+    if (error) return res.status(500).json({ error: "Ads need a database update: run sql/12_settings_ads_premium.sql in Supabase." });
+    res.json(data || []);
+});
+app.post('/api/admin/saveAd', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const b = req.body;
+    const title = String(b.title || '').trim().slice(0, 80);
+    if (!title) return res.status(400).json({ error: "Title is required" });
+    const link = String(b.link_url || '').trim();
+    if (link && !/^https?:\/\//i.test(link)) return res.status(400).json({ error: "Link must start with https://" });
+    try {
+        let image_url = String(b.image_url || '').trim();
+        if (b.imageBase64) {
+            const up = await uploadImageToTelegram(b.imageBase64);
+            if (!up) return res.status(500).json({ error: "Image upload failed — check the Storage Channel" });
+            image_url = up;
+        }
+        const row = { title, body: String(b.body || '').slice(0, 300), image_url, link_url: link, button_text: String(b.button_text || 'Learn more').slice(0, 24), placement: 'feed', active: b.active !== false };
+        const q = b.id ? supabase.from('ads').update(row).eq('id', b.id) : supabase.from('ads').insert([row]);
+        const { error } = await q;
+        if (error) throw error;
+        adsCache.exp = 0;
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+});
+app.post('/api/admin/toggleAd', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const { error } = await supabase.from('ads').update({ active: !!req.body.active }).eq('id', req.body.id);
+    adsCache.exp = 0; res.json({ success: !error });
+});
+app.post('/api/admin/deleteAd', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const { error } = await supabase.from('ads').delete().eq('id', req.body.id);
+    adsCache.exp = 0; res.json({ success: !error });
+});
+
 // ================= Edit own profile (display name + @username) =================
 app.post('/api/setNotify', async (req, res) => {
     const tgUser = validateTGData(req.body.initData);
@@ -1333,7 +1408,9 @@ app.post('/api/createPost', async (req, res) => {
         let imageUrls = [];
         let uploadFailures = 0;
         if (imagesBase64 && imagesBase64.length > 0) {
-            const results = await Promise.all(imagesBase64.slice(0, 4).map(img => uploadImageToTelegram(img)));   // parallel = faster posting
+            const maxPhotos = perkFor('photos', await levelOfUser(tgUser.id));
+            if (imagesBase64.length > maxPhotos) return res.status(403).json({ error: `Your level allows up to ${maxPhotos} photos per post. Level up to unlock more!` });
+            const results = await Promise.all(imagesBase64.slice(0, maxPhotos).map(img => uploadImageToTelegram(img)));   // parallel = faster posting
             results.forEach(u => u ? imageUrls.push(u) : uploadFailures++);
             if (uploadFailures > 0 && imageUrls.length === 0 && !String(text || '').trim()) {
                 return res.status(500).json({ error: "Photo upload failed — the storage channel isn't working. Admin: Admin panel → Storage Channel." });
@@ -1545,12 +1622,13 @@ app.post('/api/trackViews', async (req, res) => {
 // ================= Reactions (long-press the Like button) =================
 // ❤️ is the classic like (likes_users). Every other emoji is stored in the "reactions" JSON column as
 // { userId: emoji } — one reaction per person, and picking one replaces a previous like/reaction.
-const REACTION_EMOJIS = ['😂', '😮', '😢', '🔥', '👍'];
+const REACTION_EMOJIS = ['😂', '😮', '😢', '🔥', '👍', '🎉', '🥰', '💎', '🤯'];
 app.post('/api/react', async (req, res) => {
     const { initData, contentType = 'post', id, emoji } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
     if (!REACTION_EMOJIS.includes(emoji)) return res.status(400).json({ error: "Unknown reaction" });
+    if (emoji !== '❤️' && !allowedReactions(await levelOfUser(tgUser.id)).includes(emoji)) return res.status(403).json({ error: "This reaction unlocks at a higher level — invite friends to level up!" });
     try {
         const table = contentType === 'video' ? 'videos' : 'posts';
         const { data: row, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
@@ -1737,6 +1815,37 @@ app.get('/api/trendingTags', async (req, res) => {
         }
         res.set('Cache-Control', 'public, max-age=300').json(trendingCache.tags);
     } catch (e) { res.json([]); }
+});
+
+// People + reels + posts in one go (home search)
+app.post('/api/searchAll', async (req, res) => {
+    let query = String(req.body.query || '').slice(0, 60).replace(/[%,()]/g, ' ').trim();
+    if (!query) return res.json({ people: [], videos: [], posts: [] });
+    try {
+        const isTag = query.startsWith('#');
+        const handle = query.replace(/^@/, '');
+        const peoplePromise = isTag ? Promise.resolve([]) : (async () => {
+            const out = [];
+            let { data: us, error } = await supabase.from('users').select('tg_id, name, username, app_username, photo_url, is_verified').or(`name.ilike.%${handle}%,username.ilike.%${handle}%,app_username.ilike.%${handle}%`).not('tg_id', 'like', 'g%').limit(8);
+            if (error) ({ data: us } = await supabase.from('users').select('tg_id, name, username, photo_url, is_verified').or(`name.ilike.%${handle}%,username.ilike.%${handle}%`).not('tg_id', 'like', 'g%').limit(8));
+            (us || []).forEach(u => out.push({ id: String(u.tg_id), type: 'user', name: u.name, username: u.app_username || u.username || '', photo: u.photo_url || '', verified: !!u.is_verified || String(u.tg_id) === FOUNDER_ID, founder: String(u.tg_id) === FOUNDER_ID }));
+            const lc = handle.toLowerCase();
+            (await getChannelMap()).forEach((v, id) => {
+                if (out.length >= 12) return;
+                const nm = String(v.ch.name || v.ch.title || ''), un = String(v.ch.username || '');
+                if (nm.toLowerCase().includes(lc) || (un !== 'private' && un.toLowerCase().includes(lc))) out.push({ id, type: 'channel', name: nm, username: un === 'private' ? '' : un, photo: v.ch.photo || '', verified: !!v.ch.verified || v.owner.is_verified });
+            });
+            return out;
+        })();
+        const [people, pr, vr] = await Promise.all([
+            peoplePromise,
+            supabase.from('posts').select('*').ilike('text', `%${query}%`).order('created_at', { ascending: false }).limit(15),
+            supabase.from('videos').select('*').ilike('caption', `%${query}%`).order('created_at', { ascending: false }).limit(12)
+        ]);
+        const posts = (await enrichPosts(pr.data || [])).map(p => ({ ...p, content_type: 'post' }));
+        const videos = (await enrichVideos(vr.data || [])).map(v => ({ id: v.id, caption: v.caption, stream_url: v.stream_url, likes_count: v.likes_count, author_name: v.author_name }));
+        res.json({ people, videos, posts });
+    } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
 });
 
 app.post('/api/searchPosts', async (req, res) => {
@@ -1993,6 +2102,11 @@ app.get('/api/tgImage/:fileId', async (req, res) => {
     } catch (e) {
         res.status(404).send("Image not found");
     }
+});
+
+app.get('/api/tgVideo/:fileId', async (req, res) => {
+    try { res.set('Cache-Control', 'public, max-age=3000'); res.redirect(await getCachedFileLink(req.params.fileId)); }
+    catch (e) { res.status(404).send('Video not found'); }
 });
 
 // Upload a new video (users only — channels are captured automatically via channel_post)
@@ -2617,7 +2731,7 @@ app.post('/api/getStories', async (req, res) => {
         const groups = new Map();
         rows.forEach(r => {
             const g = groups.get(r.author_id) || { author_id: r.author_id, author_name: r.author_name, stories: [], latest: 0 };
-            g.stories.push({ id: r.id, image_url: r.image_url, caption: r.caption, created_at: r.created_at });
+            g.stories.push({ id: r.id, image_url: r.image_url, video_url: r.video_url || null, media_type: r.media_type || 'image', caption: r.caption, created_at: r.created_at });
             g.latest = Math.max(g.latest, new Date(r.created_at).getTime());
             groups.set(r.author_id, g);
         });
@@ -2639,11 +2753,13 @@ app.post('/api/getStories', async (req, res) => {
 });
 
 app.post('/api/createStory', async (req, res) => {
-    const { initData, image } = req.body;
+    const { initData, image, video } = req.body;
     const caption = String(req.body.caption || '').slice(0, 200);
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
-    if (!image || typeof image !== 'string' || image.length > 8 * 1024 * 1024) return res.status(400).json({ error: "Image missing or too large" });
+    const isVideo = typeof video === 'string' && video.length > 0;
+    if (!isVideo && (!image || typeof image !== 'string' || image.length > 8 * 1024 * 1024)) return res.status(400).json({ error: "Image missing or too large" });
+    if (isVideo && video.length > 17 * 1024 * 1024) return res.status(400).json({ error: "Story video is too large (max ~12 MB / 30 s)" });
     try {
         const user = await getOrCreateUser(tgUser);
         if (!user) return res.status(404).json({ error: "User not found" });
@@ -2651,17 +2767,32 @@ app.post('/api/createStory', async (req, res) => {
         const since = new Date(Date.now() - STORY_TTL_MS).toISOString();
         const { count, error: cErr } = await supabase.from('stories').select('*', { count: 'exact', head: true }).eq('author_id', me).gte('created_at', since);
         if (cErr) return res.status(500).json({ error: "Stories need a database update: run sql/10_stories.sql in Supabase, then try again." });
-        if ((count || 0) >= MAX_ACTIVE_STORIES_PER_USER) return res.status(429).json({ error: `You can have up to ${MAX_ACTIVE_STORIES_PER_USER} stories at a time. Delete one or wait 24 hours.` });
+        const maxStories = perkFor('stories', await levelOfUser(me));
+        if ((count || 0) >= maxStories) return res.status(429).json({ error: `Your level allows ${maxStories} active stories. Delete one or level up for more!` });
 
-        const imageUrl = await uploadImageToTelegram(image);
-        if (!imageUrl) return res.status(500).json({ error: "Image upload failed. Ask the admin to check the storage channel setup." });
-
-        const { error } = await supabase.from('stories').insert([{ author_id: me, author_name: user.name, image_url: imageUrl, caption, created_at: new Date().toISOString() }]);
-        if (error) throw error;
+        const row = { author_id: me, author_name: user.name, image_url: '', caption, created_at: new Date().toISOString() };
+        if (isVideo) {
+            const STORAGE = await getStorageChannel();
+            if (!STORAGE) return res.status(500).json({ error: "Storage channel is not set. Admin: Admin panel → Storage Channel." });
+            const buf = Buffer.from(video.includes(',') ? video.split(',')[1] : video, 'base64');
+            if (buf.length > 12 * 1024 * 1024) return res.status(400).json({ error: "Story video is too large (max 12 MB)" });
+            const sent = await bot.telegram.sendVideo(STORAGE, { source: buf, filename: `story_${Date.now()}.mp4` }, { caption: `Story: ${user.name} (${me})` });
+            if (!sent.video) return res.status(500).json({ error: "Video upload failed" });
+            row.video_url = `/api/tgVideo/${sent.video.file_id}`; row.media_type = 'video';
+        } else {
+            const imageUrl = await uploadImageToTelegram(image);
+            if (!imageUrl) return res.status(500).json({ error: "Image upload failed. Ask the admin to check the storage channel setup." });
+            row.image_url = imageUrl;
+        }
+        const { error } = await supabase.from('stories').insert([row]);
+        if (error) {
+            if (isVideo && /video_url|media_type/.test(error.message || '')) return res.status(500).json({ error: "Video stories need a database update: run sql/14_story_video.sql in Supabase." });
+            throw error;
+        }
         storyCache.exp = 0;
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: e.message || e });
+        res.status(500).json({ error: e.message || String(e) });
     }
 });
 
