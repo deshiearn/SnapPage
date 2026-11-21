@@ -34,11 +34,19 @@
         <button onclick="location.reload()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold">Try Again</button>
     </div>
 
+    <!-- Browser-only banner: shown when the app is opened outside Telegram -->
+    <div id="guestBanner" class="hidden guest-banner">
+        <span class="text-[12px] font-semibold leading-snug">Use Telegram to access all features</span>
+        <button onclick="openInTelegram()" class="guest-banner-btn"><i class="fas fa-paper-plane"></i> Open Telegram</button>
+    </div>
+
     <!-- Header (No SnapPages Text, dynamic safe spacing) -->
     <header id="appHeader" class="p-3 bg-white/90 backdrop-blur-md sticky top-0 z-10 font-bold text-lg flex justify-between shadow-sm animate-none">
         <span id="headerTitle"></span>
-        <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
-            <i class="fas fa-user-shield"></i> Admin
+        <div class="flex items-center gap-2">
+            <div id="adminBadge" class="hidden bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer" onclick="goToAdminPanel()">
+                <i class="fas fa-user-shield"></i> Admin
+            </div>
         </div>
     </header>
 
@@ -50,6 +58,7 @@
             <input type="text" id="homeSearchInput" class="w-full bg-white border rounded-full pl-9 pr-9 py-2 text-sm outline-none shadow-sm" placeholder="Search posts & videos...">
             <button id="homeSearchClearBtn" onclick="clearHomeSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-times-circle"></i></button>
         </div>
+        <div id="storiesBar" class="flex gap-3 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="trendingTags" class="hidden flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
         <div id="feedTabs" class="flex gap-2 mb-3">
             <button id="feedTabAll" onclick="setFeedMode('all')" class="feed-chip active">For You</button>
@@ -69,7 +78,7 @@
     <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
         <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
 
-        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(env(safe-area-inset-top, 24px) + 60px);">
+        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);">
             <button onclick="toggleShortsSound()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
                 <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
             </button>
@@ -102,6 +111,7 @@
                 <h3 id="settingsProfileName" class="font-bold text-base text-gray-900 flex items-center gap-1">Telegram User</h3>
                 <p id="settingsProfileUsername" class="text-xs text-gray-500">@username</p>
                 <span id="settingsProfileLevel" class="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level 1</span>
+                <button onclick="openEditProfile()" class="mt-1 ml-1 text-[11px] font-bold text-blue-500"><i class="fas fa-pen"></i> Edit</button>
                 <span id="settingsStreak" class="hidden inline-block mt-1 ml-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 font-bold"></span>
             </div>
         </div>
@@ -118,6 +128,9 @@
     <nav id="bottomNav" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
         <button onclick="switchTab('home')" class="nav-btn active text-gray-400 transition" id="nav-home"><i class="fas fa-home text-2xl"></i></button>
         <button onclick="switchTab('shorts')" class="nav-btn text-gray-400 transition" id="nav-shorts"><i class="fas fa-play-circle text-2xl"></i></button>
+        <button id="bellBtn" onclick="openNotifs()" class="nav-btn text-gray-400 transition relative" aria-label="Notifications">
+            <i class="fas fa-bell text-2xl"></i><span id="notifBadge" class="notif-badge hidden">0</span>
+        </button>
         <button onclick="switchTab('settings')" class="nav-btn text-gray-400 transition" id="nav-settings">
             <img id="navProfilePic" src="https://ui-avatars.com/api/?name=U" class="w-8 h-8 rounded-full border-2 border-transparent object-cover">
         </button>
@@ -127,7 +140,7 @@
 
     <!-- CREATE / EDIT POST MODAL -->
     <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl animate-none max-h-[92vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h3 id="postModalTitle" class="font-bold">Create Post</h3>
                 <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
@@ -138,7 +151,25 @@
             <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
             
             <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
+            <div id="postLivePreviewWrap" class="hidden mb-3"><p class="text-[11px] font-bold text-gray-400 tracking-wide mb-1.5"><i class="fas fa-eye"></i> LIVE PREVIEW</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
             <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Post</button>
+        </div>
+    </div>
+
+    <!-- EDIT PROFILE (name + username) -->
+    <div id="editProfileModal" class="hidden fixed inset-0 blur-bg z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold">Edit Profile</h3>
+                <button onclick="closeModal('editProfileModal')"><i class="fas fa-times"></i></button>
+            </div>
+            <label class="text-[11px] font-bold text-gray-400 tracking-wide">NAME</label>
+            <input id="epName" maxlength="40" class="w-full bg-gray-50 border rounded-xl px-3 py-2.5 mb-3 outline-none text-sm" placeholder="Your name">
+            <label class="text-[11px] font-bold text-gray-400 tracking-wide">USERNAME</label>
+            <div class="flex items-center bg-gray-50 border rounded-xl px-3 mb-1"><span class="text-gray-400 text-sm">@</span><input id="epUser" maxlength="20" autocapitalize="off" autocomplete="off" class="flex-1 bg-transparent px-1 py-2.5 outline-none text-sm" placeholder="username"></div>
+            <p class="text-[11px] text-gray-400 mb-4">4–20 letters, numbers or _ . Leave empty to remove.</p>
+            <p id="epError" class="hidden text-xs text-red-500 font-semibold mb-3"></p>
+            <button id="epSave" onclick="saveProfileEdit()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Save</button>
         </div>
     </div>
 
@@ -158,6 +189,40 @@
             <button id="submitVideoBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Upload</button>
         </div>
     </div>
+
+    <!-- STORIES: hidden file picker, compose screen, full-screen viewer -->
+    <input type="file" id="storyFileInput" accept="image/*" class="hidden">
+
+    <div id="storyCompose" class="hidden fixed inset-0 bg-black z-[130] flex flex-col">
+        <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 56px);">
+            <button onclick="closeModal('storyCompose')" class="text-sm font-bold opacity-80">Cancel</button>
+            <span class="font-bold">New story</span>
+            <button id="storyShareBtn" onclick="shareStory()" class="text-sm font-bold bg-blue-600 px-4 py-1.5 rounded-full">Share</button>
+        </div>
+        <div class="flex-1 flex items-center justify-center overflow-hidden px-3"><img id="storyPreview" class="max-h-full max-w-full object-contain rounded-xl"></div>
+        <div class="p-4"><input id="storyCaption" maxlength="200" placeholder="Add a caption..." class="w-full bg-white/15 text-white placeholder-white/60 rounded-full px-4 py-3 outline-none"></div>
+    </div>
+
+    <div id="storyViewer" class="hidden fixed inset-0 bg-black z-[140] select-none">
+        <img id="storyImg" class="absolute inset-0 w-full h-full object-contain">
+        <div id="storyZone" class="absolute inset-0"></div>
+        <div class="absolute top-0 left-0 right-0 px-3 pointer-events-none" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 52px); background: linear-gradient(rgba(0,0,0,.55), transparent);">
+            <div id="storyBars" class="flex gap-1 mb-3"></div>
+            <div class="flex items-center gap-2 text-white pb-3">
+                <img id="storyAvatar" class="w-8 h-8 rounded-full object-cover border border-white/60">
+                <span id="storyName" class="font-bold text-sm"></span>
+                <span id="storyTime" class="text-xs opacity-70"></span>
+                <div class="ml-auto flex items-center gap-4 pointer-events-auto">
+                    <button id="storyDeleteBtn" onclick="deleteCurrentStory()" class="hidden"><i class="fas fa-trash-alt"></i></button>
+                    <button onclick="closeStoryViewer()"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+        </div>
+        <p id="storyCaptionView" class="hidden absolute bottom-10 left-0 right-0 text-center text-white text-base px-6 py-3 pointer-events-none" style="background: linear-gradient(transparent, rgba(0,0,0,.6));"></p>
+    </div>
+
+    <!-- REACTION PICKER (long-press the Like button) -->
+    <div id="reactionPicker" class="hidden"></div>
 
     <!-- PROFILE BOTTOM SHEET -->
     <div id="profileModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
@@ -186,6 +251,20 @@
         </div>
     </div>
 
+    <!-- NOTIFICATIONS BOTTOM SHEET -->
+    <div id="notifModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="notifSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-3 border-b pb-2">
+                <h3 class="font-bold">Notifications</h3>
+                <div class="flex items-center gap-4">
+                    <button onclick="clearAllNotifs()" class="text-xs font-bold text-red-500"><i class="fas fa-trash-alt"></i> Clear all</button>
+                    <button onclick="closeSheet('notifModalBg', 'notifSheet')"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+            <div id="notifList" class="flex-1 overflow-y-auto space-y-1.5"></div>
+        </div>
+    </div>
+
     <!-- COMMENTS BOTTOM SHEET -->
     <div id="commentModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
         <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[75vh] flex flex-col shadow-2xl">
@@ -194,6 +273,10 @@
                 <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
+            <div id="replyBar" class="hidden flex items-center justify-between text-xs bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 mb-2">
+                <span>Replying to <b id="replyBarName"></b></span>
+                <button onclick="cancelReply()" class="text-blue-400"><i class="fas fa-times"></i></button>
+            </div>
             <div id="commentInputRow" class="flex gap-2">
                 <input type="text" id="commentInput" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900 animate-none" placeholder="Write a comment...">
                 <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
@@ -275,6 +358,8 @@
         <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
+    <script src="/assets/js/theme.js?v=__V__" defer></script>
+    <script src="/assets/js/guest.js?v=__V__" defer></script>
     <script src="/assets/js/core.js?v=__V__" defer></script>
     <script src="/assets/js/ui.js?v=__V__" defer></script>
     <script src="/assets/js/format.js?v=__V__" defer></script>
@@ -283,6 +368,10 @@
     <script src="/assets/js/actions.js?v=__V__" defer></script>
     <script src="/assets/js/extras.js?v=__V__" defer></script>
     <script src="/assets/js/profile.js?v=__V__" defer></script>
+    <script src="/assets/js/reactions.js?v=__V__" defer></script>
+    <script src="/assets/js/views.js?v=__V__" defer></script>
+    <script src="/assets/js/stories.js?v=__V__" defer></script>
+    <script src="/assets/js/notifs.js?v=__V__" defer></script>
     <script src="/assets/js/boot.js?v=__V__" defer></script>
 </body>
 </html>

@@ -23,6 +23,7 @@ window.switchTab = (tab) => {
 
     if (tab === 'home') {
         loadPosts(1, true); // Clean re-fetch on Home nav click
+        if (typeof loadStories === 'function') loadStories();
     }
 };
 
@@ -64,6 +65,12 @@ window.exitShorts = () => {
     switchTab('home');
 };
 
+// Native MainButton per screen: each entry is built by the file that owns the feature
+// (format.js / stories.js / extras.js) and registered here by modal id.
+window.MB_SCREENS = window.MB_SCREENS || {};
+function mbOpen(id) { const f = window.MB_SCREENS[id]; if (f) f(); }
+function mbClose(id) { if (window.MB && window.MB_SCREENS[id]) MB.hide(id); }
+
 // UI Open / Close modals
 window.openModal = (id) => {
     if (id === 'channelModal') {
@@ -79,20 +86,18 @@ window.openModal = (id) => {
         // Track modal stack to invoke native BackButton on Telegram header
         openModalsStack.push(id);
         tg.BackButton.show();
-        
+        mbOpen(id);
     }
 
     if(id === 'postModal') {
         // NOTE: this must NOT reset the title/editModePostId here — triggerEditPost()
         // sets those up *before* calling openModal(), and doing it here would silently
         // flip an edit back into "Create Post" mode. See openNewPostModal() for that reset.
-        const canPostImages = currentUser && (currentUser.is_verified || (currentUser.level || 1) >= 2);
+        // Everyone can post photos + text now (no level gate)
         const addPhotosBtn = document.getElementById('addPhotosBtn');
-        addPhotosBtn.disabled = !canPostImages;
-        addPhotosBtn.classList.toggle('opacity-40', !canPostImages);
-        addPhotosBtn.innerHTML = canPostImages
-            ? '<i class="fas fa-image"></i> Add Photos (Max 4)'
-            : '<i class="fas fa-lock"></i> Image posts unlock at Level 2';
+        addPhotosBtn.disabled = false;
+        addPhotosBtn.classList.remove('opacity-40');
+        addPhotosBtn.innerHTML = '<i class="fas fa-image"></i> Add Photos (Max 4)';
     }
 };
 
@@ -111,7 +116,8 @@ window.closeModal = (id) => {
     if (el) {
         el.classList.add('hidden');
         openModalsStack = openModalsStack.filter(m => m !== id);
-        
+        mbClose(id);
+
         // If all modals are closed, hide Telegram's Native BackButton
         if (openModalsStack.length === 0) {
             tg.BackButton.hide();
@@ -127,7 +133,8 @@ const SHEET_MAP = {
     commentModalBg: 'commentSheet',
     referModalBg: 'referSheet',
     channelModalBg: 'channelSheet',
-    profileModalBg: 'profileSheet'
+    profileModalBg: 'profileSheet',
+    notifModalBg: 'notifSheet'
 };
 
 function openSheet(bg, sheet) {
@@ -135,12 +142,14 @@ function openSheet(bg, sheet) {
     setTimeout(() => document.getElementById(sheet).classList.add('open'), 10);
     openModalsStack.push(bg);
     tg.BackButton.show();
+    mbOpen(bg);
 }
 
 window.closeSheet = (bg, sheet) => {
     document.getElementById(sheet).classList.remove('open');
     setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
     openModalsStack = openModalsStack.filter(m => m !== bg);
+    mbClose(bg);
     if (openModalsStack.length === 0) tg.BackButton.hide();
 }
 window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
@@ -151,6 +160,8 @@ tg.BackButton.onClick(() => {
         const lastModal = openModalsStack[openModalsStack.length - 1];
         if (lastModal === '__shorts__') {
             exitShorts();
+        } else if (lastModal === 'storyViewer') {
+            closeStoryViewer();
         } else if (SHEET_MAP[lastModal]) {
             closeSheet(lastModal, SHEET_MAP[lastModal]);
         } else {

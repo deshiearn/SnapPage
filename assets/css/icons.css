@@ -6,7 +6,9 @@
 .far,.fa-regular{font-family:"FAR";font-weight:400}
 .fa-spin{animation:fa-spin 1s linear infinite}
 @keyframes fa-spin{to{transform:rotate(360deg)}}
+.fa-at::before{content:"\40"}
 .fa-backward::before{content:"\f04a"}
+.fa-bell::before{content:"\f0f3"}
 .fa-check-circle::before{content:"\f058"}
 .fa-chevron-right::before{content:"\f054"}
 .fa-comment::before{content:"\f075"}
@@ -14,6 +16,7 @@
 .fa-crown::before{content:"\f521"}
 .fa-download::before{content:"\f019"}
 .fa-ellipsis-v::before{content:"\f142"}
+.fa-eye::before{content:"\f06e"}
 .fa-film::before{content:"\f008"}
 .fa-flag::before{content:"\f024"}
 .fa-forward::before{content:"\f04e"}
@@ -30,6 +33,7 @@
 .fa-play::before{content:"\f04b"}
 .fa-play-circle::before{content:"\f144"}
 .fa-plus::before{content:"\2b"}
+.fa-reply::before{content:"\f3e5"}
 .fa-robot::before{content:"\f544"}
 .fa-rotate-right::before{content:"\f2f9"}
 .fa-search::before{content:"\f002"}

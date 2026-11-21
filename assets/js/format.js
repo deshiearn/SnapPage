@@ -106,14 +106,44 @@ document.getElementById('imageUpload').addEventListener('change', function(e) {
     files.forEach(file => {
         const reader = new FileReader();
         reader.onload = (ev) => {
-            imagesArray.push(ev.target.result);
-            renderPreviews();
+            // Downscale to max 1280px JPEG: smaller upload = the post goes live much faster
+            const img = new Image();
+            img.onload = () => {
+                const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+                const c = document.createElement('canvas');
+                c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                imagesArray.push(c.toDataURL('image/jpeg', 0.85));
+                renderPreviews();
+            };
+            img.onerror = () => { imagesArray.push(ev.target.result); renderPreviews(); };
+            img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     });
+    e.target.value = '';
 });
 
+// Feed-style card for the post being written (live preview + optimistic "instant" post)
+function draftPost(extra) {
+    const u = currentUser || {};
+    return Object.assign({
+        id: 'draft', author_id: u.tg_id, author_name: escapeHtml(u.name || 'You'), author_photo: u.photo_url || '',
+        author_level: u.level || 1, author_verified: !!u.is_verified, type: 'user',
+        text: document.getElementById('postText').value, image_urls: imagesArray.slice(),
+        likes_count: 0, likes_users: [], reactions: {}, views: 0
+    }, extra || {});
+}
+function renderLivePreview() {
+    const wrap = document.getElementById('postLivePreviewWrap');
+    if (!wrap) return;
+    if (!postReady()) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    document.getElementById('postLivePreview').innerHTML = buildPostCardHtml(draftPost()).replace('fade-in', '');
+}
+
 function renderPreviews() {
+    if (typeof syncPostMB === 'function') syncPostMB();
     const c = document.getElementById('imgPreviewContainer');
     c.innerHTML = '';
     imagesArray.forEach((src, idx) => {
@@ -126,59 +156,59 @@ function renderPreviews() {
 window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
 // Create / Edit Post Submission
-document.getElementById('submitPostBtn').addEventListener('click', async () => {
+const postBtn = document.getElementById('submitPostBtn');
+const postReady = () => !!(document.getElementById('postText').value.trim() || imagesArray.length);
+function syncPostMB() {
+    renderLivePreview(); if (window.MB) MB.update('postModal', { active: postReady(), text: editModePostId ? 'Save' : 'Post' }); }
+window.MB_SCREENS.postModal = () => MB.show('postModal', { text: editModePostId ? 'Save' : 'Post', active: postReady(), onClick: () => submitPost(), inPage: postBtn });
+document.getElementById('postText').addEventListener('input', syncPostMB);
+
+postBtn.addEventListener('click', () => submitPost());
+
+// Instant posting: the composer closes at once and the post shows up in the feed right away
+// (dimmed, "Posting…") while the upload runs in the background.
+async function submitPost() {
     const text = document.getElementById('postText').value;
-    if(!text && imagesArray.length === 0) return;
-    const btn = document.getElementById('submitPostBtn');
-    btn.innerText = "Processing..."; btn.disabled = true;
+    if (!text.trim() && imagesArray.length === 0) return;
+    const images = imagesArray.slice();
+    const editId = editModePostId;
+    const tempId = 'tmp' + Date.now();
+
+    if (!editId) {
+        const feed = document.getElementById('feed');
+        const card = document.createElement('div');
+        card.id = tempId; card.className = 'opacity-60 pointer-events-none';
+        card.innerHTML = `<div class="text-[11px] font-bold text-blue-500 mb-1 px-1"><i class="fas fa-spinner fa-spin"></i> Posting…</div>` + buildPostCardHtml(draftPost());
+        feed.prepend(card);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Reset + close the composer immediately
+    document.getElementById('postText').value = '';
+    imagesArray = []; editModePostId = null;
+    renderPreviews();
+    closeModal('postModal');
+    try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
 
     try {
-        if (editModePostId) {
-            const res = await fetch('/api/editPost', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    initData: tg.initData,
-                    postId: editModePostId,
-                    text: text,
-                    imageUrls: imagesArray
-                })
-            });
-            const data = await res.json();
-            if (data && data.success) {
-                tg.showAlert(data.warning || "Post edited successfully!");
-            } else {
-                throw new Error(data.error || "Update failed");
-            }
-        } else {
-            // Route insert through secure Service Role backend API first to bypass DB RLS Blocks
-            const apiRes = await fetch('/api/createPost', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    initData: tg.initData,
-                    text: text,
-                    imagesBase64: imagesArray
-                })
-            });
-            
-            const apiData = await apiRes.json();
-            if (apiData && apiData.success) {
-                tg.showAlert(apiData.warning || "Post published successfully!");
-            } else {
-                throw new Error(apiData.error || "Creation failed");
-            }
-        }
-    } catch(e) {
-        console.error("Submission failed:", e);
+        const url = editId ? '/api/editPost' : '/api/createPost';
+        const payload = editId
+            ? { initData: tgAuth(), postId: editId, text, imageUrls: images }
+            : { initData: tgAuth(), text, imagesBase64: images };
+        const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!(data && data.success)) throw new Error((data && data.error) || (editId ? 'Update failed' : 'Creation failed'));
+        if (data.warning) tg.showAlert(data.warning);
+        try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+    } catch (e) {
+        console.error('Submission failed:', e);
+        const t = document.getElementById(tempId); if (t) t.remove();
+        // Give the draft back so nothing is lost
+        document.getElementById('postText').value = text; imagesArray = images; editModePostId = editId;
+        renderPreviews();
         tg.showAlert(`Failed to publish: ${e.message || e}`);
+        openModal('postModal');
+        return;
     }
-    
-    closeModal('postModal');
-    document.getElementById('postText').value = '';
-    imagesArray = []; 
-    renderPreviews();
-    btn.innerText = "Post"; btn.disabled = false;
-    editModePostId = null;
     loadPosts(1, true);
-});
+}

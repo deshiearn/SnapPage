@@ -9,9 +9,12 @@ Built to run entirely on **free tiers**: Render (hosting) + Supabase (database) 
 ## Features
 - **Feed** with *For You* and *Following* tabs, infinite scroll, pinned posts, search
 - **Profiles** (users and channels) with follower counts, a Follow button and their posts
+- **Stories** – 24-hour image status on top of the feed (tap to view, hold to pause, up to 5 at a time)
 - **Shorts** – TikTok-style vertical video feed (videos are stored in Telegram, not in the database)
 - **Channel auto-post** – add a channel, and every new post/video in it appears in the feed; the channel owner gets a Telegram notification with *Remove Post* / *Open App* buttons
-- **Comments** with likes, albums/multi-image posts, caption formatting (bold, links, `@bot` mentions)
+- **Comments** with replies, @mentions (notified via the bot), likes, albums/multi-image posts, caption formatting (bold, links, `@bot` mentions)
+- **Reactions** – long-press the Like button: ❤️ 😂 😮 😢 🔥 👍; the reaction totals show under each post like Telegram, tap a chip to toggle yours
+- **View counts** on posts, and a **weekly channel report** sent to channel owners by the bot every Sunday (~10:00 Bangladesh time)
 - **Hashtags** (tap to search, Bengali supported) and **trending tags**; **daily streak** 🔥
 - **Referral levels** – 2 referrals → Level 2 (image posts, links, 3 channels), 3 referrals → Level 3 (rich text links, 5 channels)
 - **Telegram notifications** for likes, comments and new followers (rate-limited)
@@ -50,6 +53,10 @@ Create a project, then in **SQL Editor** paste and run the files in `sql/` in th
 | 5 | `05_fix_reports_table.sql` | makes reports work for posts and videos |
 | 6 | `06_social_migration.sql` | follow system + performance indexes |
 | 7 | `07_streak_migration.sql` | daily streak |
+| 8 | `08_reactions_and_replies.sql` | comment replies + emoji reactions |
+| 9 | `09_views_and_stats.sql` | view counts |
+| 10 | `10_stories.sql` | stories (24-hour status) |
+| 11 | `11_notifications_and_username.sql` | in-app notifications + editable @username |
 
 Then make yourself admin: `update users set is_admin = true where tg_id = 'YOUR_TELEGRAM_ID';`
 
@@ -66,6 +73,33 @@ New **Web Service** from this repo — Build: `npm install`, Start: `npm start`.
 | `ADMIN_PASSWORD` | password for the Admin Panel |
 
 `RENDER_EXTERNAL_URL` is provided by Render automatically (used for the webhook and the keep-alive ping).
+
+## Telegram look & feel
+
+- **Theme colours** – `assets/js/theme.js` reads `Telegram.WebApp.themeParams` and exposes them as CSS variables (`--app-bg`, `--app-surface`, `--app-text`, `--app-hint`, `--app-link`, `--app-accent`, ...). It re-applies on `themeChanged`, so switching Telegram's theme updates the app live. If a client sends no params, built-in light/dark defaults are used. Header, background and bottom-bar colours are also set (`setHeaderColor`, `setBackgroundColor`, `setBottomBarColor`, version-guarded).
+- **MainButton** – the native bottom button is used for *Post / Save* (composer), *Share Story* and *Invite Friends* (referral sheet; opens Telegram's share sheet). It shows a progress spinner while uploading and is disabled for an empty post. Outside Telegram (or on very old clients) the in-page buttons stay visible instead. Register a new screen with `MB_SCREENS['<modalId>'] = () => MB.show(...)`.
+- **Safe areas** – `--top-inset` follows `safeAreaInset` + `contentSafeAreaInset` in fullscreen (Bot API 8.0+), falling back to CSS `env()`.
+
+## Profiles, share links & invites
+
+- Profile sheet has **Posts / Reels** tabs. Reels show as a small thumbnail grid; tapping one opens the main Reels page starting at that reel (rest of the feed follows).
+- **Copy Link / Share** on a profile gives `https://t.me/<bot>/app?startapp=profile_<id>_ref_<yourId>`. Opening it lands straight on that profile, and a brand-new user who joins through it is counted as *your* invite (referral levels). Post and Reel share links carry the same `_ref_` suffix.
+- Follow needs `sql/06_social_migration.sql` (creates `snap_follows`). If it is missing the app now says so instead of a vague error.
+
+## Instant posting + live preview
+
+- While writing, a **Live Preview** shows the post exactly as it will look in the feed (text, hashtags, photos).
+- Pressing Post closes the composer immediately and shows the post at the top of the feed ("Posting…") while it uploads in the background. If the upload fails, the card is removed and the draft is restored so nothing is lost.
+- Photos are downscaled in the browser (max 1280px JPEG) before upload, which makes posting faster and saves Supabase/Telegram bandwidth.
+
+## Browser mode, notifications & profile editing
+
+- **Open in a normal browser** (outside Telegram): the app creates a throw-away *guest account* (signed token from `/api/guestInit`, stored in `localStorage`, max 15 new guests/hour per IP) and shows a top banner: *"Use Telegram to access all features"* with an **Open Telegram** button. Guests can browse, post, like and comment; Telegram DMs/referrals need the real Telegram app.
+- **In-app notifications** (🔔 in the header): likes, reactions, comments, replies, @mentions, comment likes, shares, view milestones (10/25/50/100…), new followers and new referrals. Tap one to jump to that post / comment / reel / profile; ✕ removes it, *Clear all* wipes the list. Rows older than 30 days are pruned automatically. Needs `sql/11`.
+- **Edit profile** (Settings → *Edit*): change display name and `@username` (4–20 letters/numbers/_, unique). Old posts show the new name automatically.
+- **Photo + text posts are open to every user** (the old Level-2 gate is gone).
+- **Performance**: off-screen cards skip rendering (`content-visibility`), weak phones / data-saver get a *lite* mode (no blur, fewer animations), `prefers-reduced-motion` is respected.
+- After adding a new `fa-*` icon run `python3 tools/build-icons.py` (needs a Font Awesome Free 6 folder, see the script header).
 
 ## Working within the free tiers
 The app is designed so that normal growth does not hit a limit:

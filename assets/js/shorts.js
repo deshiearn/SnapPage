@@ -30,7 +30,9 @@ async function loadShorts(reset = false) {
         document.getElementById('shortsEmptyState').classList.add('hidden');
         if (videos.length < 5) hasMoreShorts = false;
 
-        videos.forEach(v => feed.insertAdjacentHTML('beforeend', renderShortItem(v)));
+        videos.forEach(v => {
+            if (!feed.querySelector(`[data-video-id="${v.id}"]`)) feed.insertAdjacentHTML('beforeend', renderShortItem(v));
+        });
         observeShorts();
     } catch (e) {
         console.error("Shorts load failed:", e);
@@ -41,6 +43,8 @@ async function loadShorts(reset = false) {
 }
 
 function renderShortItem(v) {
+    const myReaction = currentUser && v.reactions ? (v.reactions[currentUser.tg_id] || '') : '';
+    const shortLikeCount = (v.likes_count || 0) + Object.keys(v.reactions || {}).length;
     const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
     const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
     const captionHtml = animateEmojis(formatCaption(v.caption, v.author_level || 1, v.entities));
@@ -74,15 +78,16 @@ function renderShortItem(v) {
             </div>
         </div>
 
-        <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(env(safe-area-inset-top, 24px) + 60px);" onclick="openProfile('${v.author_id}')">
+        <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);" onclick="openProfile('${v.author_id}')">
             <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
             <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
         </div>
 
         <div class="absolute right-3 bottom-28 flex flex-col items-center gap-5 text-white">
-            <button onclick="likeVideo(this, '${v.id}')" class="flex flex-col items-center gap-1">
-                <i class="${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
-                <span class="text-xs like-count">${v.likes_count || 0}</span>
+            <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn flex flex-col items-center gap-1">
+                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
+                <span class="text-xs like-count">${shortLikeCount}</span>
+                <span class="text-sm leading-none" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="flex flex-col items-center gap-1">
                 <i class="fas fa-comment text-2xl"></i>
@@ -221,8 +226,30 @@ document.getElementById('shortsFeed').addEventListener('scroll', function() {
     }
 });
 
+// Opens the main Reels page starting at one specific reel (used by profile grid + deep links)
+window.openShortById = async (videoId) => {
+    try {
+        const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+        const video = await res.json();
+        const feed = document.getElementById('shortsFeed');
+        if (video && video.id) {
+            feed.innerHTML = renderShortItem(video);
+            shortsPage = 1; hasMoreShorts = true;
+            document.getElementById('shortsEmptyState').classList.add('hidden');
+            if (!shortsActive) switchTab('shorts');
+            feed.scrollTop = 0;
+            observeShorts();
+            document.getElementById('shortsEntryLoading').classList.add('hidden');
+            loadShorts(false);          // the rest of the reels follow below, without duplicates
+        } else {
+            switchTab('shorts');
+        }
+    } catch (e) { switchTab('shorts'); }
+};
+
 window.shareVideoDirectly = (id) => {
-    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}`;
+    trackShare('video', id);
+    const forwardLink = `https://t.me/SnapPagesBot/app?startapp=video_${id}${refSuffix()}`;
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(forwardLink)}&text=${encodeURIComponent('Check out this Short on SnapPages!')}`);
 };
 
@@ -232,11 +259,13 @@ window.likeVideo = async (btn, videoId) => {
     try {
         const res = await fetch('/api/likeVideo', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, videoId })
+            body: JSON.stringify({ initData: tgAuth(), videoId })
         });
         const data = await res.json();
         if (data && data.success) {
             btn.querySelector('.like-count').innerText = data.likesCount;
+            const emo = btn.querySelector('.react-emoji'); if (emo) emo.classList.add('hidden');
+            syncReactionUI('video', videoId, data);
             const icon = btn.querySelector('i');
             icon.className = (data.hasLiked ? 'fas fa-heart text-red-500 text-2xl' : 'far fa-heart text-2xl') + ' icon-pop';
         }
@@ -268,7 +297,7 @@ window.openShortOptions = (videoId, authorId, type) => {
 window.saveVideoToChat = async (videoId) => {
     closeSheet('optionsModalBg', 'optionsSheet');
     try {
-        const res = await fetch('/api/saveVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+        const res = await fetch('/api/saveVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), videoId }) });
         const data = await res.json();
         if (data && data.success) tg.showAlert("Saved! Check your chat with the bot.");
         else tg.showAlert(`Failed: ${data.error || 'Server error'}`);
@@ -279,7 +308,7 @@ window.deleteVideoDirect = (videoId) => {
     closeSheet('optionsModalBg', 'optionsSheet');
     tg.showConfirm("Delete this video?", async (ok) => {
         if (!ok) return;
-        const res = await fetch('/api/deleteVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tg.initData, videoId }) });
+        const res = await fetch('/api/deleteVideo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ initData: tgAuth(), videoId }) });
         const data = await res.json();
         if (data && data.success) {
             const el = document.querySelector(`.short-item[data-video-id="${videoId}"]`);
@@ -311,7 +340,7 @@ document.getElementById('submitVideoBtn').addEventListener('click', async () => 
     try {
         const res = await fetch('/api/createVideo', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData, caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
+            body: JSON.stringify({ initData: tgAuth(), caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
         });
         const data = await res.json();
         if (data && data.success) {

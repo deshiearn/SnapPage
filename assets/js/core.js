@@ -24,17 +24,12 @@ try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
 setTimeout(() => { const l = document.getElementById('appLoadingScreen'); if (l) l.classList.add('hidden'); }, 10000);
 
 // Automatic Dark / Light mode detection
-function applyAutoTheme() {
-    if (tg.colorScheme === 'dark') {
-        document.body.classList.add('bg-gray-900', 'text-white', 'dark-mode');
-        document.body.classList.remove('bg-gray-100', 'text-gray-900');
-    } else {
-        document.body.classList.remove('bg-gray-900', 'text-white', 'dark-mode');
-        document.body.classList.add('bg-gray-100', 'text-gray-900');
-    }
-}
-tg.onEvent('themeChanged', applyAutoTheme);
+// Theme is handled by theme.js (applyTheme + themeChanged listener)
+function applyAutoTheme() { applyTheme(); }
 applyAutoTheme();
+
+// "_ref_<myId>" appended to share links so people who join through them count as my invites
+window.refSuffix = () => (typeof currentUser !== 'undefined' && currentUser && /^\d+$/.test(String(currentUser.tg_id))) ? `_ref_${currentUser.tg_id}` : '';
 
 function getTelegramUser() {
     const user = tg.initDataUnsafe?.user || {};
@@ -83,22 +78,14 @@ async function handleSharedDeepLink() {
         const startParam = (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || urlParams.get('startapp');
         if (!startParam) return;
 
-        if (startParam.startsWith('video_')) {
-            const videoId = startParam.replace('video_', '');
-            switchTab('shorts');
-            const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
-            const video = await res.json();
-            if (video && video.id) {
-                const feed = document.getElementById('shortsFeed');
-                feed.insertAdjacentHTML('afterbegin', renderShortItem(video));
-                document.getElementById('shortsEmptyState').classList.add('hidden');
-                observeShorts();
-                feed.firstElementChild.scrollIntoView();
-            }
-        } else if (startParam.startsWith('profile_')) {
-            openProfile(startParam.replace('profile_', ''));
-        } else if (startParam.startsWith('post_')) {
-            const postId = startParam.replace('post_', '');
+        // Shared links may carry the sharer's id ("..._ref_123"); the server already counted it as an invite
+        const sp = startParam.replace(/_ref_\d+$/, '');
+        if (sp.startsWith('video_')) {
+            await openShortById(sp.replace('video_', ''));
+        } else if (sp.startsWith('profile_')) {
+            openProfile(sp.replace('profile_', ''));
+        } else if (sp.startsWith('post_')) {
+            const postId = sp.replace('post_', '');
             const res = await fetch('/api/getPostById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ postId }) });
             const post = await res.json();
             if (post && post.id) {
@@ -122,6 +109,19 @@ function renderSharedPostWrapper(post) {
 }
 
 // Support link can be changed from the Admin Panel; falls back to the default set in the HTML
+// Settings header + nav avatar from the saved profile (name / @username can be edited in-app)
+function refreshProfileHeader() {
+    if (!currentUser) return;
+    const uname = currentUser.app_username || currentUser.username;
+    const un = document.getElementById('settingsProfileUsername');
+    if (un) un.innerText = uname ? `@${uname}` : '';
+    const nm = document.getElementById('settingsProfileName');
+    if (nm) nm.innerHTML = escapeHtml(currentUser.name || 'User') + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
+    if (currentUser.photo_url) {
+        ['navProfilePic', 'settingsProfilePic'].forEach(id => { const e = document.getElementById(id); if (e) e.src = currentUser.photo_url; });
+    }
+}
+
 async function loadSupportLink() {
     try {
         const res = await fetch('/api/appStatus');
@@ -146,6 +146,8 @@ async function initApp() {
         }
     } catch (e) { /* if the status check fails, fail open so the app is still usable */ }
 
+    await ensureGuest();
+    showGuestBanner();
     const liveUser = getTelegramUser();
     
     // 1. UPDATE LIVE TELEGRAM DATA IMMEDIATELY
@@ -166,21 +168,23 @@ async function initApp() {
         const authRes = await fetch('/api/auth', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tg.initData })
+            body: JSON.stringify({ initData: tgAuth() })
         });
         
         const authData = await authRes.json();
         
         if (authData && authData.success) {
             currentUser = authData.user;
+            if (window.IS_GUEST) liveUser.name = currentUser.name;
         } else {
             throw new Error("Auth API response failed");
         }
 
         // Refresh UI with calculated DB details
         const nameEl = document.getElementById('settingsProfileName');
-        nameEl.innerHTML = liveUser.name + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
+        nameEl.innerHTML = escapeHtml(currentUser.name || liveUser.name) + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
         document.getElementById('settingsProfileLevel').innerText = `Level ${currentUser.level || 1}`;
+        refreshProfileHeader();
         if (currentUser.streak_count > 0) {
             const st = document.getElementById('settingsStreak');
             st.innerText = `🔥 ${currentUser.streak_count}-day streak`;
@@ -200,6 +204,8 @@ async function initApp() {
     // 3. Load Feed — must finish before we try to pin a shared post on top of it
     try {
         loadTrendingTags();
+        loadStories();
+        loadNotifCount();
         await loadPosts(1, true);
         await loadSupportLink();
 

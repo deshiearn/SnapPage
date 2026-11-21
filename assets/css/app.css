@@ -2,7 +2,7 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Animated Small Bottom Nav */
-.bottom-nav { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); width: 220px; transition: 0.3s; }
+.bottom-nav { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); width: 280px; transition: 0.3s; }
 
 /* Image Slider */
 .img-slider { scroll-snap-type: x mandatory; overflow-x: auto; scrollbar-width: none; }
@@ -53,49 +53,49 @@ main:not(.hidden), #tab-shorts:not(.hidden) { animation: tabIn .35s ease-out; }
 
 /* Safe top area for Telegram Header overlapping prevention */
 body {
-    padding-top: env(safe-area-inset-top, 24px);
+    padding-top: var(--top-inset, env(safe-area-inset-top, 24px));
 }
 
 /* Dark Mode — dark grey theme with full contrast coverage */
-.dark-mode { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
-.dark-mode header { background-color: rgba(28,28,30,0.92) !important; border-bottom: 1px solid #38383a; }
-.dark-mode .bg-white { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
-.dark-mode #appLoadingScreen, .dark-mode #maintenanceOverlay { background-color: #1c1c1e !important; }
-.dark-mode .text-gray-900, .dark-mode .text-gray-800, .dark-mode .text-gray-700, .dark-mode .text-gray-600 { color: #f2f2f7 !important; }
-.dark-mode .text-gray-500, .dark-mode .text-gray-400 { color: #a1a1a6 !important; }
-.dark-mode .border, .dark-mode .border-b, .dark-mode .border-t { border-color: #3a3a3c !important; }
-.dark-mode .bg-gray-50 { background-color: #3a3a3c !important; color: #f2f2f7 !important; }
-.dark-mode .bg-gray-100, .dark-mode .bg-gray-200 { background-color: #1c1c1e !important; color: #f2f2f7 !important; }
-.dark-mode .hover\:bg-gray-50:hover { background-color: #3a3a3c !important; }
-.dark-mode .bottom-nav { background: rgba(44,44,46,0.92) !important; border-color: #48484a !important; }
-.dark-mode .bottom-sheet { background-color: #2c2c2e !important; color: #f2f2f7 !important; }
-.dark-mode input, .dark-mode textarea, .dark-mode select { background-color: #3a3a3c !important; color: #fff !important; border-color: #48484a !important; }
-.dark-mode input::placeholder, .dark-mode textarea::placeholder { color: #8e8e93 !important; }
-.dark-mode .bg-blue-50 { background-color: rgba(10,132,255,0.15) !important; } .dark-mode .bg-blue-100 { background-color: rgba(10,132,255,0.22) !important; }
+.dark-mode { background-color: var(--app-bg) !important; color: var(--app-text) !important; }
+.dark-mode header { background-color: var(--app-bg-glass) !important; border-bottom: 1px solid var(--app-sep); }
+.dark-mode .bg-white { background-color: var(--app-surface) !important; color: var(--app-text) !important; }
+.dark-mode #appLoadingScreen, .dark-mode #maintenanceOverlay { background-color: var(--app-bg) !important; }
+.dark-mode .text-gray-900, .dark-mode .text-gray-800, .dark-mode .text-gray-700, .dark-mode .text-gray-600 { color: var(--app-text) !important; }
+.dark-mode .text-gray-500, .dark-mode .text-gray-400 { color: var(--app-hint) !important; }
+.dark-mode .border, .dark-mode .border-b, .dark-mode .border-t { border-color: var(--app-surface2) !important; }
+.dark-mode .bg-gray-50 { background-color: var(--app-surface2) !important; color: var(--app-text) !important; }
+.dark-mode .bg-gray-100, .dark-mode .bg-gray-200 { background-color: var(--app-bg) !important; color: var(--app-text) !important; }
+.dark-mode .hover\:bg-gray-50:hover { background-color: var(--app-surface2) !important; }
+.dark-mode .bottom-nav { background: var(--app-surface-glass) !important; border-color: var(--app-sep2) !important; }
+.dark-mode .bottom-sheet { background-color: var(--app-surface) !important; color: var(--app-text) !important; }
+.dark-mode input, .dark-mode textarea, .dark-mode select { background-color: var(--app-surface2) !important; color: #fff !important; border-color: var(--app-sep2) !important; }
+.dark-mode input::placeholder, .dark-mode textarea::placeholder { color: var(--app-hint) !important; }
+.dark-mode .bg-blue-50 { background-color: var(--app-accent-tint) !important; } .dark-mode .bg-blue-100 { background-color: var(--app-accent-tint2) !important; }
 .dark-mode .bg-purple-50 { background-color: rgba(191,90,242,0.15) !important; } .dark-mode .bg-purple-100 { background-color: rgba(191,90,242,0.22) !important; }
 .dark-mode .bg-pink-50 { background-color: rgba(255,55,95,0.15) !important; } .dark-mode .bg-pink-100 { background-color: rgba(255,55,95,0.22) !important; }
 .dark-mode .bg-green-50, .dark-mode .bg-green-100 { background-color: rgba(48,209,88,0.18) !important; }
 .dark-mode .bg-yellow-100 { background-color: rgba(255,214,10,0.2) !important; }
 .dark-mode .bg-red-50, .dark-mode .bg-red-100 { background-color: rgba(255,69,58,0.18) !important; }
-.dark-mode .text-blue-600, .dark-mode .text-blue-800 { color: #64b5ff !important; }
+.dark-mode .text-blue-600, .dark-mode .text-blue-800 { color: var(--app-link) !important; }
 .dark-mode .text-purple-600, .dark-mode .text-purple-800 { color: #d49bff !important; }
 .dark-mode .text-pink-600 { color: #ff8aa8 !important; }
 .dark-mode .text-green-600, .dark-mode .text-green-800 { color: #5ee08a !important; }
 .dark-mode .text-yellow-800 { color: #ffd60a !important; }
-.dark-mode .text-red-600, .dark-mode .text-red-500 { color: #ff6b61 !important; }
-.dark-mode .border-blue-100, .dark-mode .border-purple-100, .dark-mode .border-pink-100 { border-color: #48484a !important; }
-.dark-mode .img-skeleton { background: linear-gradient(90deg,#2c2c2e,#3a3a3c,#2c2c2e) !important; background-size: 200% 100% !important; }
+.dark-mode .text-red-600, .dark-mode .text-red-500 { color: var(--app-danger) !important; }
+.dark-mode .border-blue-100, .dark-mode .border-purple-100, .dark-mode .border-pink-100 { border-color: var(--app-sep2) !important; }
+.dark-mode .img-skeleton { background: linear-gradient(90deg,var(--app-surface),var(--app-surface2),var(--app-surface)) !important; background-size: 200% 100% !important; }
 .dark-mode .bg-gradient-to-br { color: #fff !important; }
 
 .dark-mode .sheet-handle { background: #636366; }
-.dark-mode .opt-item { background: #3a3a3c !important; }
-.dark-mode .opt-item small { color: #a1a1a6; }
-.dark-mode .opt-blue .opt-icon { background: rgba(10,132,255,.22); color: #64b5ff; } .dark-mode .opt-blue { color: #64b5ff; }
-.dark-mode .opt-red .opt-icon { background: rgba(255,69,58,.22); color: #ff6b61; } .dark-mode .opt-red { color: #ff6b61; }
+.dark-mode .opt-item { background: var(--app-surface2) !important; }
+.dark-mode .opt-item small { color: var(--app-hint); }
+.dark-mode .opt-blue .opt-icon { background: var(--app-accent-tint2); color: var(--app-link); } .dark-mode .opt-blue { color: var(--app-link); }
+.dark-mode .opt-red .opt-icon { background: rgba(255,69,58,.22); color: var(--app-danger); } .dark-mode .opt-red { color: var(--app-danger); }
 .dark-mode .opt-green .opt-icon { background: rgba(48,209,88,.22); color: #5ee08a; } .dark-mode .opt-green { color: #5ee08a; }
 .dark-mode .opt-orange .opt-icon { background: rgba(255,159,10,.22); color: #ffb340; } .dark-mode .opt-orange { color: #ffb340; }
 .dark-mode .opt-purple .opt-icon { background: rgba(191,90,242,.22); color: #d49bff; } .dark-mode .opt-purple { color: #d49bff; }
-.dark-mode .sheet-cancel { background: #48484a !important; color: #f2f2f7; }
+.dark-mode .sheet-cancel { background: var(--app-sep2) !important; color: var(--app-text); }
 .dark-mode .menu-row { background: transparent; }
 
 /* Animations */
@@ -137,13 +137,137 @@ body {
 .profile-stat { text-align: center; }
 .profile-stat b { display: block; font-size: 18px; }
 .profile-stat span { font-size: 11px; color: #6b7280; }
-.dark-mode .feed-chip { background: #2c2c2e; color: #a1a1a6; border-color: #3a3a3c; }
-.dark-mode .feed-chip.active { background: #0a84ff; color: #fff; border-color: #0a84ff; }
-.dark-mode .follow-btn.following { background: #48484a; color: #f2f2f7; }
-.dark-mode .profile-stat span { color: #a1a1a6; }
+.dark-mode .feed-chip { background: var(--app-surface); color: var(--app-hint); border-color: var(--app-surface2); }
+.dark-mode .feed-chip.active { background: var(--app-accent); color: #fff; border-color: var(--app-accent); }
+.dark-mode .follow-btn.following { background: var(--app-sep2); color: var(--app-text); }
+.dark-mode .profile-stat span { color: var(--app-hint); }
 
 .trend-chip { flex-shrink: 0; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: #eff6ff; color: #2563eb; transition: transform .15s ease; }
 .trend-chip:active { transform: scale(.94); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-.dark-mode .trend-chip { background: rgba(10,132,255,.18); color: #64b5ff; }
+.dark-mode .trend-chip { background: var(--app-accent-tint); color: var(--app-link); }
+
+/* Reactions */
+.react-btn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.react-emoji { display: inline-block; line-height: 1; font-size: 16px; }
+#reactionPicker { position: fixed; z-index: 120; display: flex; gap: 2px; padding: 6px 8px; border-radius: 9999px; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+#reactionPicker.hidden { display: none; }
+.react-opt { font-size: 26px; line-height: 1; padding: 4px 6px; border-radius: 9999px; transition: transform .15s ease; animation: reactIn .28s cubic-bezier(.22,1.5,.36,1) backwards; }
+.react-opt:active { transform: scale(1.5) translateY(-6px); }
+@keyframes reactIn { from { opacity: 0; transform: translateY(14px) scale(.4); } to { opacity: 1; transform: none; } }
+.dark-mode #reactionPicker { background: var(--app-surface); }
+.dark-mode #replyBar { background: var(--app-accent-tint); color: var(--app-link); }
+
+/* Reaction chips under a post (like Telegram) */
+.react-row:empty { display: none; }
+.react-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 9999px; font-size: 13px; background: #f3f4f6; color: #374151; border: 1px solid transparent; transition: transform .15s ease, background .2s ease; }
+.react-chip b { font-size: 12px; font-weight: 700; }
+.react-chip:active { transform: scale(.92); }
+.react-chip.mine { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+.dark-mode .react-chip { background: var(--app-surface2); color: #e5e5ea; }
+.dark-mode .react-chip.mine { background: var(--app-accent-tint2); color: var(--app-link); border-color: rgba(10,132,255,.5); }
+
+/* Stories */
+.story-item { position: relative; flex-shrink: 0; width: 66px; text-align: center; cursor: pointer; }
+.story-item span { display: block; margin-top: 4px; font-size: 11px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.story-ring { width: 62px; height: 62px; border-radius: 9999px; padding: 3px; background: linear-gradient(45deg, #f59e0b, #ec4899, #8b5cf6); transition: transform .15s ease; }
+.story-ring:active { transform: scale(.93); }
+.story-ring.seen { background: #d1d5db; }
+.story-ring.none { background: transparent; border: 2px dashed #cbd5e1; padding: 2px; }
+.story-avatar { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; border: 2px solid #fff; background: #fff; }
+.story-plus { position: absolute; right: 2px; top: 40px; width: 20px; height: 20px; border-radius: 9999px; background: #2563eb; color: #fff; font-size: 10px; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; }
+.story-seg { flex: 1; height: 3px; border-radius: 9999px; background: rgba(255,255,255,.35); overflow: hidden; }
+.story-fill { height: 100%; width: 0; background: #fff; }
+.story-fill.done { width: 100%; }
+@keyframes storyFill { from { width: 0; } to { width: 100%; } }
+.dark-mode .story-item span { color: var(--app-hint); }
+.dark-mode .story-avatar { border-color: var(--app-bg); background: var(--app-bg); }
+.dark-mode .story-ring.seen { background: var(--app-sep2); }
+.dark-mode .story-ring.none { border-color: #636366; }
+.dark-mode .story-plus { border-color: var(--app-bg); }
+
+/* ---- Telegram-themed light mode (colours come from tg.themeParams via theme.js) ---- */
+body.themed:not(.dark-mode) { background-color: var(--app-bg); color: var(--app-text); }
+body.themed:not(.dark-mode) header { background-color: var(--app-surface-glass) !important; }
+body.themed:not(.dark-mode) .bg-white { background-color: var(--app-surface) !important; }
+body.themed:not(.dark-mode) .bg-gray-50 { background-color: var(--app-surface2) !important; }
+body.themed:not(.dark-mode) .bg-gray-100, body.themed:not(.dark-mode) .bg-gray-200 { background-color: var(--app-bg) !important; }
+body.themed:not(.dark-mode) .bottom-nav { background: var(--app-surface-glass) !important; }
+body.themed:not(.dark-mode) .bottom-sheet { background-color: var(--app-surface) !important; }
+body.themed:not(.dark-mode) .text-gray-900, body.themed:not(.dark-mode) .text-gray-800, body.themed:not(.dark-mode) .text-gray-700 { color: var(--app-text) !important; }
+body.themed:not(.dark-mode) .text-gray-600, body.themed:not(.dark-mode) .text-gray-500, body.themed:not(.dark-mode) .text-gray-400 { color: var(--app-hint) !important; }
+body.themed:not(.dark-mode) .border, body.themed:not(.dark-mode) .border-b, body.themed:not(.dark-mode) .border-t { border-color: var(--app-sep) !important; }
+body.themed:not(.dark-mode) .text-blue-600, body.themed:not(.dark-mode) .text-blue-500 { color: var(--app-link) !important; }
+body.themed:not(.dark-mode) .bg-blue-50, body.themed:not(.dark-mode) .bg-blue-100 { background-color: var(--app-accent-tint) !important; }
+/* Primary buttons follow Telegram's button colour in both modes */
+body.themed .bg-blue-600 { background-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }
+body.themed .feed-chip.active { background: var(--app-accent) !important; border-color: var(--app-accent) !important; color: var(--app-accent-text) !important; }
+
+/* Profile tabs + reel grid */
+.profile-tab { color: #9ca3af; border-bottom: 2px solid transparent; transition: color .2s, border-color .2s; }
+.profile-tab.active { color: var(--app-link, #2563eb); border-bottom-color: var(--app-link, #2563eb); }
+.reel-thumb:active { opacity: .8; }
+
+/* Browser (non-Telegram) banner */
+.guest-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 60; height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; color: #fff; background: linear-gradient(90deg, #2563eb, #7c3aed); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.guest-banner-btn { flex-shrink: 0; background: #fff; color: #2563eb; font-weight: 800; font-size: 12px; padding: 6px 12px; border-radius: 9999px; }
+.guest-banner-btn:active { transform: scale(.95); }
+body.has-guest-bar { padding-top: 44px; }
+body.has-guest-bar #appHeader { top: 44px; }
+
+/* =================== Polish: professional look + smooth on every phone =================== */
+:root { --ease-out: cubic-bezier(.22,1,.36,1); --radius-card: 18px; }
+* { -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: auto; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", Roboto, "Noto Sans Bengali", "Hind Siliguri", sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overscroll-behavior-y: none; }
+button, a, [onclick] { touch-action: manipulation; }
+button { transition: transform .14s var(--ease-out), opacity .2s ease, background-color .2s ease; }
+button:active:not(:disabled) { transform: scale(.96); }
+button:disabled { opacity: .55; }
+
+/* Cards: layered shadow + hairline border; off-screen cards skip layout/paint (big win on weak phones) */
+.post-card { border-radius: var(--radius-card) !important; border-color: rgba(0,0,0,.06) !important; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 18px -8px rgba(16,24,40,.14) !important; content-visibility: auto; contain-intrinsic-size: auto 460px; }
+.dark-mode .post-card { border-color: rgba(255,255,255,.06) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 20px -10px rgba(0,0,0,.6) !important; }
+.post-card img { border-radius: 14px; }
+
+/* Header + nav: frosted, hairline */
+#appHeader { box-shadow: 0 1px 0 rgba(0,0,0,.06) !important; }
+.dark-mode #appHeader { box-shadow: 0 1px 0 rgba(255,255,255,.06) !important; }
+.bottom-nav { box-shadow: 0 10px 30px -8px rgba(16,24,40,.28) !important; border-color: rgba(0,0,0,.06) !important; }
+.nav-btn { position: relative; transition: transform .2s var(--ease-out), color .2s ease; }
+.nav-btn.active { transform: translateY(-2px) scale(1.08); }
+.nav-btn.active::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: currentColor; animation: dotIn .3s var(--ease-out); }
+@keyframes dotIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* Primary buttons: soft gradient + glow */
+body.themed .bg-blue-600 { background-image: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)); box-shadow: 0 4px 14px -4px var(--app-accent); }
+
+/* Bell + badge */
+.bell-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; color: inherit; background: rgba(120,120,128,.12); }
+.notif-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--app-surface, #fff); animation: badgePop .35s cubic-bezier(.3,1.6,.5,1); }
+@keyframes badgePop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* Notification rows */
+.notif-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 10px; border-radius: 16px; cursor: pointer; transition: background .2s ease, opacity .22s ease, transform .22s ease, max-height .22s ease; max-height: 120px; animation: optIn .35s var(--ease-out) backwards; }
+.notif-row:active { background: rgba(120,120,128,.12); }
+.notif-row.unread { background: var(--app-accent-tint, rgba(37,99,235,.08)); }
+.notif-row.removing { opacity: 0; transform: translateX(40px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+.notif-type { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--app-surface, #fff); display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+.notif-x { width: 30px; height: 30px; border-radius: 50%; color: #9ca3af; font-size: 12px; flex-shrink: 0; }
+.notif-x:active { background: rgba(120,120,128,.2); }
+.flash-hl { animation: flashHl 2.2s ease; }
+@keyframes flashHl { 0%, 60% { box-shadow: 0 0 0 3px var(--app-accent, #2563eb); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Scroll containers behave natively */
+.bottom-sheet, #commentList, #notifList, #shortsFeed, .img-slider { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* Weak phones / data saver: no blur, lighter shadows, fewer animations (class added by theme.js) */
+body.lite .blur-bg, body.lite .bottom-nav, body.lite #appHeader { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.lite .blur-bg { background: rgba(0,0,0,.62); }
+body.lite .post-card { box-shadow: 0 1px 2px rgba(16,24,40,.08) !important; }
+body.lite .fade-in, body.lite .notif-row, body.lite .opt-item { animation: none !important; }
+body.lite .img-skeleton { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
