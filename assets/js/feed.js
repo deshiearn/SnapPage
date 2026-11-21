@@ -88,6 +88,7 @@ function buildPostCardHtml(post) {
         imgHtml += `</div>`;
     }
 
+    const isRich = post.rich && post.rich.blocks && post.rich.blocks.length;
     const captionHtml = animateEmojis(formatCaption(post.text, post.author_level || 1, post.entities));
     const hasLiked = post.likes_users && currentUser && post.likes_users.includes(currentUser.tg_id);
     const myReaction = currentUser && post.reactions ? (post.reactions[currentUser.tg_id] || '') : '';
@@ -112,10 +113,10 @@ function buildPostCardHtml(post) {
                 </div>
                 <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
             </div>
-            <p class="mb-1 text-sm whitespace-pre-wrap text-gray-800 caption-clamp">${captionHtml}</p>
-            <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-blue-500 mb-3">See more</button>
+            ${isRich ? `<div class="mb-3">${renderRich(post.rich)}</div>` : `<p class="mb-1 text-sm whitespace-pre-wrap text-gray-800 caption-clamp">${captionHtml}</p>
+            <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-blue-500 mb-3">${t('see_more')}</button>
             <div class="mb-3 see-more-spacer"></div>
-            ${imgHtml}
+            ${imgHtml}`}
             <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked)}</div>
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                 <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">

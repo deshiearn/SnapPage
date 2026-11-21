@@ -103,65 +103,70 @@
 
     <!-- Search Tab -->
     <!-- Settings Tab -->
-    <main id="tab-settings" class="hidden p-4 max-w-lg mx-auto space-y-4 fade-in">
-        <!-- Profile card -->
-        <div class="settings-hero">
-            <button onclick="openEditProfile()" class="settings-avatar-btn" aria-label="Edit profile">
-                <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="settings-avatar">
-                <span class="settings-avatar-cam"><i class="fas fa-camera"></i></span>
+    <main id="tab-settings" class="hidden max-w-lg mx-auto fade-in tgme">
+        <!-- Telegram-style header: gradient + big avatar + name + @username -->
+        <div class="tgme-hero">
+            <button onclick="shareMyProfile()" class="tgme-circle" style="left:14px" aria-label="Share profile"><i class="fas fa-link"></i></button>
+            <button onclick="openEditProfile()" class="tgme-pill" style="right:14px"><span data-i18n="edit">Edit</span></button>
+            <button onclick="openEditProfile()" class="tgme-avatar-btn" aria-label="Edit profile">
+                <img id="settingsProfilePic" src="https://ui-avatars.com/api/?name=U" class="tgme-avatar">
             </button>
-            <h3 id="settingsProfileName" class="font-extrabold text-lg flex items-center justify-center gap-1 mt-2">Telegram User</h3>
-            <p id="settingsProfileUsername" class="text-xs opacity-80"></p>
-            <div class="flex items-center justify-center gap-2 mt-2">
-                <span id="settingsProfileLevel" class="settings-chip">Level 1</span>
-                <span id="settingsStreak" class="hidden settings-chip"></span>
-                <button onclick="openEditProfile()" class="settings-chip"><i class="fas fa-pen"></i> <span data-i18n="edit">Edit</span></button>
-            </div>
+            <h3 id="settingsProfileName" class="tgme-name">Telegram User</h3>
+            <p class="tgme-sub"><span id="settingsProfileLevel">Level 1</span><span id="settingsProfileUsername" class="tgme-handle"></span><span id="settingsStreak" class="hidden tgme-streak"></span></p>
         </div>
 
-        <!-- Appearance + language + notifications -->
-        <p class="settings-label" data-i18n="preferences">Preferences</p>
-        <div class="settings-card">
-            <div class="settings-row-col">
-                <span class="settings-title"><i class="fas fa-adjust"></i> <span data-i18n="theme">Theme</span></span>
-                <div class="seg" id="themeSeg">
-                    <button data-theme-btn="system" onclick="setThemePref('system')" data-i18n="system">System</button>
-                    <button data-theme-btn="light" onclick="setThemePref('light')" data-i18n="light">Light</button>
-                    <button data-theme-btn="dark" onclick="setThemePref('dark')" data-i18n="dark">Dark</button>
-                </div>
+        <div class="tgme-body">
+            <div class="tgme-group">
+                <button onclick="openMyProfile()" class="tgme-row"><span class="tg-ic" style="background:#ef476f"><i class="fas fa-user"></i></span><span class="tgme-label">My Profile</span><i class="fas fa-chevron-right tgme-chev"></i></button>
             </div>
-            <div class="settings-row-col">
-                <span class="settings-title"><i class="fas fa-globe"></i> <span data-i18n="language">Language</span></span>
-                <div class="seg">
-                    <button data-lang-btn="bn" onclick="setLang('bn')">বাংলা</button>
-                    <button data-lang-btn="en" onclick="setLang('en')">English</button>
-                </div>
-            </div>
-            <div class="settings-row">
-                <div class="flex-1 min-w-0">
-                    <span class="settings-title"><i class="fas fa-bell"></i> <span data-i18n="notifications">Notifications</span></span>
-                    <p class="text-[11px] text-gray-400 mt-0.5" data-i18n="notif_desc">Telegram bot messages for likes, comments & more</p>
-                </div>
-                <label class="toggle-switch"><input type="checkbox" id="notifyToggle" onchange="setNotifyPref(this.checked)" checked><span class="toggle-slider"></span></label>
-            </div>
-        </div>
 
-        <p class="settings-label">SnapPages</p>
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden border">
-            <button onclick="openModal('channelModal')" class="menu-row  w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-purple"><span class="opt-icon"><i class="fas fa-robot"></i></span><span class="font-semibold text-gray-800 flex-1">Set Auto Post Channels</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
-            <button onclick="openReferSheet()" class="menu-row  w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-green"><span class="opt-icon"><i class="fas fa-gift"></i></span><span class="font-semibold text-gray-800 flex-1">Refer &amp; Earn</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
-            <button id="adminPanelBtn" onclick="goToAdminPanel()" class="menu-row hidden w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-red"><span class="opt-icon"><i class="fas fa-user-shield"></i></span><span class="font-semibold text-gray-800 flex-1">Admin Panel</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
-            <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="menu-row border-b-0 w-full text-left p-3.5 border-b flex items-center gap-3 hover:bg-gray-50 opt-blue"><span class="opt-icon"><i class="fas fa-headset"></i></span><span class="font-semibold text-gray-800 flex-1" data-i18n="support">Support</span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></a>
-        </div>
-    
+            <div class="tgme-group">
+                <button onclick="openModal('channelModal')" class="tgme-row"><span class="tg-ic" style="background:#8b5cf6"><i class="fas fa-robot"></i></span><span class="tgme-label" data-i18n="channels">My Channels</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button onclick="openReferSheet()" class="tgme-row"><span class="tg-ic" style="background:#22c55e"><i class="fas fa-gift"></i></span><span class="tgme-label" data-i18n="invite">Invite & Level Up</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button id="adminPanelBtn" onclick="goToAdminPanel()" class="tgme-row hidden"><span class="tg-ic" style="background:#ef4444"><i class="fas fa-user-shield"></i></span><span class="tgme-label">Admin Panel</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <a id="supportLink" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="tgme-row"><span class="tg-ic" style="background:#3b82f6"><i class="fas fa-headset"></i></span><span class="tgme-label" data-i18n="support">Support</span><i class="fas fa-chevron-right tgme-chev"></i></a>
+            </div>
 
-        <p class="settings-label" data-i18n="legal">About & Legal</p>
-        <div class="settings-card">
-            <button onclick="openLegal('privacy')" class="settings-row w-full text-left"><span class="settings-title flex-1"><i class="fas fa-shield-alt"></i> <span data-i18n="privacy">Privacy Policy</span></span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
-            <button onclick="openLegal('terms')" class="settings-row w-full text-left"><span class="settings-title flex-1"><i class="fas fa-file-alt"></i> <span data-i18n="terms">Terms of Use</span></span><i class="fas fa-chevron-right text-[11px] text-gray-400"></i></button>
+            <div class="tgme-group">
+                <button onclick="openSheet('prefsModalBg','prefsSheet')" class="tgme-row"><span class="tg-ic" style="background:#6b7280"><i class="fas fa-cog"></i></span><span class="tgme-label">Settings</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button onclick="openLegal('privacy')" class="tgme-row"><span class="tg-ic" style="background:#0ea5e9"><i class="fas fa-shield-alt"></i></span><span class="tgme-label" data-i18n="privacy">Privacy Policy</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button onclick="openLegal('terms')" class="tgme-row"><span class="tg-ic" style="background:#f59e0b"><i class="fas fa-file-alt"></i></span><span class="tgme-label" data-i18n="terms">Terms of Use</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+            </div>
+            <p class="text-center text-[11px] text-gray-400 pb-28 pt-2">SnapPages · made for Telegram</p>
         </div>
-        <p class="text-center text-[11px] text-gray-400 pb-24">SnapPages · made for Telegram</p>
     </main>
+
+    <!-- SETTINGS SHEET (theme, language, notifications) -->
+    <div id="prefsModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
+        <div id="prefsSheet" class="bg-white w-full rounded-t-3xl p-5 pb-8 bottom-sheet flex flex-col shadow-2xl">
+            <div class="sheet-handle"></div>
+            <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-lg">Settings</h3><button onclick="closeSheet('prefsModalBg','prefsSheet')"><i class="fas fa-times text-xl"></i></button></div>
+            <div class="settings-card">
+                <div class="settings-row-col">
+                    <span class="settings-title"><i class="fas fa-adjust"></i> <span data-i18n="theme">Theme</span></span>
+                    <div class="seg" id="themeSeg">
+                        <button data-theme-btn="system" onclick="setThemePref('system')" data-i18n="system">System</button>
+                        <button data-theme-btn="light" onclick="setThemePref('light')" data-i18n="light">Light</button>
+                        <button data-theme-btn="dark" onclick="setThemePref('dark')" data-i18n="dark">Dark</button>
+                    </div>
+                </div>
+                <div class="settings-row-col">
+                    <span class="settings-title"><i class="fas fa-globe"></i> <span data-i18n="language">Language</span></span>
+                    <div class="seg">
+                        <button data-lang-btn="bn" onclick="setLang('bn')">বাংলা</button>
+                        <button data-lang-btn="en" onclick="setLang('en')">English</button>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="flex-1 min-w-0">
+                        <span class="settings-title"><i class="fas fa-bell"></i> <span data-i18n="notifications">Notifications</span></span>
+                        <p class="text-[11px] text-gray-400 mt-0.5" data-i18n="notif_desc">Telegram bot messages for likes, comments & more</p>
+                    </div>
+                    <label class="toggle-switch"><input type="checkbox" id="notifyToggle" onchange="setNotifyPref(this.checked)" checked><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- SMALL BOTTOM NAV -->
     <nav id="bottomNav" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bottom-nav shadow-2xl rounded-full flex justify-between items-center px-6 py-3 z-40 border border-gray-200">
@@ -285,9 +290,9 @@
 
     <!-- PROFILE BOTTOM SHEET -->
     <div id="profileModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="profileSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[88vh] flex flex-col shadow-2xl">
+        <div id="profileSheet" class="bg-white w-full rounded-t-3xl p-0 overflow-hidden bottom-sheet h-[90vh] flex flex-col shadow-2xl relative">
             <div class="sheet-handle"></div>
-            <div class="overflow-y-auto flex-1 -mx-1 px-1" id="profileBody"></div>
+            <div class="overflow-y-auto flex-1" id="profileBody"></div>
         </div>
     </div>
 
@@ -423,6 +428,7 @@
     <script src="/assets/js/core.js?v=__V__" defer></script>
     <script src="/assets/js/ui.js?v=__V__" defer></script>
     <script src="/assets/js/format.js?v=__V__" defer></script>
+    <script src="/assets/js/rich.js?v=__V__" defer></script>
     <script src="/assets/js/feed.js?v=__V__" defer></script>
     <script src="/assets/js/shorts.js?v=__V__" defer></script>
     <script src="/assets/js/actions.js?v=__V__" defer></script>

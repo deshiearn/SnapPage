@@ -12,7 +12,9 @@
 .fa-bell::before{content:"\f0f3"}
 .fa-camera::before{content:"\f030"}
 .fa-check-circle::before{content:"\f058"}
+.fa-check-square::before{content:"\f14a"}
 .fa-chevron-right::before{content:"\f054"}
+.fa-cog::before{content:"\f013"}
 .fa-comment::before{content:"\f075"}
 .fa-copy::before{content:"\f0c5"}
 .fa-crown::before{content:"\f521"}
@@ -44,12 +46,14 @@
 .fa-share::before{content:"\f064"}
 .fa-shield-alt::before{content:"\f3ed"}
 .fa-spinner::before{content:"\f110"}
+.fa-square::before{content:"\f0c8"}
 .fa-thumbtack::before{content:"\f08d"}
 .fa-times::before{content:"\f00d"}
 .fa-times-circle::before{content:"\f057"}
 .fa-tools::before{content:"\f7d9"}
 .fa-trash::before{content:"\f1f8"}
 .fa-trash-alt::before{content:"\f2ed"}
+.fa-user::before{content:"\f007"}
 .fa-user-plus::before{content:"\f234"}
 .fa-user-shield::before{content:"\f505"}
 .fa-user-slash::before{content:"\f506"}

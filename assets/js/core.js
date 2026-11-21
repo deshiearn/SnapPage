@@ -113,9 +113,11 @@ function renderSharedPostWrapper(post) {
 // Settings header + nav avatar from the saved profile (name / @username can be edited in-app)
 function refreshProfileHeader() {
     if (!currentUser) return;
+    const hero = document.querySelector('.tgme-hero'); if (hero) hero.setAttribute('style', heroStyle(currentUser.tg_id));
     const uname = currentUser.app_username || currentUser.username;
     const un = document.getElementById('settingsProfileUsername');
     if (un) un.innerText = uname ? `@${uname}` : '';
+    const lv = document.getElementById('settingsProfileLevel'); if (lv) lv.innerText = `Level ${currentUser.level || 1}`;
     const nm = document.getElementById('settingsProfileName');
     if (nm) nm.innerHTML = escapeHtml(currentUser.name || 'User') + (currentUser.is_verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : '');
     if (currentUser.photo_url) {

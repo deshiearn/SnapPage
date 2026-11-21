@@ -57,6 +57,8 @@ Create a project, then in **SQL Editor** paste and run the files in `sql/` in th
 | 9 | `09_views_and_stats.sql` | view counts |
 | 10 | `10_stories.sql` | stories (24-hour status) |
 | 11 | `11_notifications_and_username.sql` | in-app notifications + editable @username |
+| 12 | `12_settings_ads_premium.sql` | notification On/Off switch, ads table |
+| 13 | `13_channel_sync_rich.sql` | channel sync (deletions/edits) + rich posts |
 
 Then make yourself admin: `update users set is_admin = true where tg_id = 'YOUR_TELEGRAM_ID';`
 
@@ -100,6 +102,13 @@ New **Web Service** from this repo — Build: `npm install`, Start: `npm start`.
 - **Photo + text posts are open to every user** (the old Level-2 gate is gone).
 - **Performance**: off-screen cards skip rendering (`content-visibility`), weak phones / data-saver get a *lite* mode (no blur, fewer animations), `prefers-reduced-motion` is respected.
 - After adding a new `fa-*` icon run `python3 tools/build-icons.py` (needs a Font Awesome Free 6 folder, see the script header).
+
+## Channel sync, rich posts & Me page
+
+- **Storage channel** is set in *Admin panel → Storage Channel* (the bot is tested: must be admin and able to post).
+- **Channel sync**: when a channel changes its photo/name the app updates at once; edited channel posts are edited in the app; posts/videos deleted in the channel are removed from the app (Bot API sends no delete event, so recent posts are probed every 10 min while the app is used and hourly — needs the storage channel and `sql/13`).
+- **New Telegram formats** (`rich_message`, Bot API 10.1+): tables, slideshows, collages, lists, headings, quotes are rendered natively (`assets/js/rich.js`).
+- **Me page / profiles** follow Telegram iOS: gradient header with big avatar, rounded menu groups; Theme / Language / Notifications live under *Settings*. The Founder profile (`FOUNDER_ID`, default 7767338426) gets the animated premium look.
 
 ## Working within the free tiers
 The app is designed so that normal growth does not hit a limit:

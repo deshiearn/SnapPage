@@ -31,17 +31,19 @@ function renderProfile(p) {
         : `<button id="profileFollowBtn" onclick="toggleFollow()" class="follow-btn ${p.isFollowing ? 'following' : ''}">${p.isFollowing ? t('following') : t('follow')}</button>`;
     const canTg = !String(p.id).startsWith('g') && !p.isSelf && (p.username || !isChannel);
     const tgBtn = canTg
-        ? `<button onclick="openProfileLink('${p.type}', '${p.id}', '${p.username || ''}')" class="pf-tg"><i class="fas fa-paper-plane"></i> ${isChannel ? t('visit_tg') : t('chat_tg')}</button>` : '';
+        ? `<button onclick="openProfileLink('${p.type}', '${p.id}', '${p.username || ''}')" class="pf-tg-btn"><i class="fas fa-paper-plane"></i> ${isChannel ? t('visit_tg') : t('chat_tg')}</button>` : '';
     const founder = p.founder
         ? `<div class="founder-pill"><i class="fas fa-crown founder-star"></i> ${t('founder')}</div>` : '';
     document.getElementById('profileBody').innerHTML = `
-        <div class="${p.founder ? 'pf-founder' : ''}">
-          <div class="pf-banner"></div>
-          <div class="flex flex-col items-center text-center pb-4 border-b px-1">
+        <div class="pf-hero ${p.founder ? 'pf-founder' : ''}" style="${heroStyle(p.id)}">
+            <button onclick="closeSheet('profileModalBg','profileSheet')" class="tgme-circle" style="left:14px;top:18px" aria-label="Close"><i class="fas fa-times"></i></button>
+            <button onclick="shareProfileLink()" class="tgme-circle" style="right:14px;top:18px" aria-label="Share"><i class="fas fa-share"></i></button>
             <img src="${p.photo}" class="pf-avatar" onerror="this.src='https://ui-avatars.com/api/?name=U'">
-            <h2 class="pf-name mt-2">${escapeHtml(p.name || 'User')}${verified}</h2>
+            <h2 class="pf-name">${escapeHtml(p.name || 'User')}${verified}</h2>
             ${founder}
-            <p class="text-xs text-gray-400 mt-1">${handle ? '@' + escapeHtml(handle) + ' · ' : ''}${isChannel ? 'Channel' : 'Level ' + (p.level || 1)}</p>
+            <p class="pf-handle">${isChannel ? 'Channel' : 'Level ' + (p.level || 1)}${handle ? ' · @' + escapeHtml(handle) : ''}</p>
+        </div>
+        <div class="px-4 pb-2">
             <div class="pf-stats">
                 <div class="profile-stat"><b>${p.posts}</b><span>${t('posts')}</span></div>
                 <div class="profile-stat"><b>${p.reels || 0}</b><span>${t('reels')}</span></div>
@@ -51,16 +53,14 @@ function renderProfile(p) {
             <div class="pf-actions">${followBtn}</div>
             <div class="pf-sub">
                 <button onclick="copyProfileLink()"><i class="fas fa-link"></i> ${t('copy_link')}</button>
-                <button onclick="shareProfileLink()"><i class="fas fa-share"></i> ${t('share')}</button>
+                ${tgBtn}
             </div>
-            ${tgBtn}
-          </div>
         </div>
-        <div class="flex border-b">
+        <div class="flex border-b mx-4">
             <button id="ptab-posts" onclick="showProfileTab('posts')" class="profile-tab flex-1 py-2.5 text-sm font-bold"><i class="fas fa-image"></i> ${t('posts')}</button>
             <button id="ptab-reels" onclick="showProfileTab('reels')" class="profile-tab flex-1 py-2.5 text-sm font-bold"><i class="fas fa-film"></i> ${t('reels')}</button>
         </div>
-        <div id="profilePosts" class="pt-4 space-y-4"></div>`;
+        <div id="profilePosts" class="pt-4 space-y-4 px-4 pb-10"></div>`;
 }
 
 // Profile link: opens the app straight on this profile; "_ref_<me>" makes new users count as my invites
@@ -94,7 +94,7 @@ window.showProfileTab = (tab) => {
     const box = document.getElementById('profilePosts');
     if (!box) return;
     box.innerHTML = '<div class="text-center text-gray-400 py-6"><i class="fas fa-spinner fa-spin"></i></div>';
-    box.className = tab === 'reels' ? 'pt-3' : 'pt-4 space-y-4';
+    box.className = tab === 'reels' ? 'pt-3 px-4 pb-10' : 'pt-4 space-y-4 px-4 pb-10';
     (tab === 'reels' ? loadProfileReels : loadProfilePosts)(currentProfile.id);
 };
 
@@ -250,4 +250,17 @@ window.openLegal = (kind) => {
     document.getElementById('legalTitle').textContent = d[0];
     document.getElementById('legalBody').innerHTML = d[1].map(x => `<p>${escapeHtml(x)}</p>`).join('');
     openSheet('legalModalBg', 'legalSheet');
+};
+
+window.openMyProfile = () => { if (currentUser) openProfile(String(currentUser.tg_id)); };
+window.shareMyProfile = () => {
+    if (!currentUser) return;
+    const link = `https://t.me/SnapPagesBot/app?startapp=profile_${currentUser.tg_id}${refSuffix()}`;
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent((currentUser.name || 'My profile') + ' on SnapPages')}`);
+};
+
+// Telegram-style per-person header colour (stable hue from the id)
+window.heroStyle = (id) => {
+    let h = 0; String(id).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) % 360; });
+    return `--hero1:hsl(${h} 72% 64%);--hero2:hsl(${(h + 28) % 360} 68% 46%)`;
 };

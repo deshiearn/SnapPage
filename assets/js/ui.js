@@ -135,7 +135,8 @@ const SHEET_MAP = {
     channelModalBg: 'channelSheet',
     profileModalBg: 'profileSheet',
     notifModalBg: 'notifSheet',
-    legalModalBg: 'legalSheet'
+    legalModalBg: 'legalSheet',
+    prefsModalBg: 'prefsSheet'
 };
 
 function openSheet(bg, sheet) {
