@@ -162,7 +162,7 @@ function buildAdHtml() {
     const ad = feedAds[adCursor++ % feedAds.length];
     if (!ad) return '';
     const img = ad.image_url ? `<img src="${ad.image_url}" class="ad-img" loading="lazy" alt="">` : '';
-    return `<div class="post-card ad-card fade-in" data-ad="${ad.id}">
+    return `<div class="post-card ad-card bg-white fade-in ${ad.image_url ? '' : 'ad-noimg'}" data-ad="${ad.id}">
         <div class="ad-tag">Sponsored</div>${img}
         <div class="ad-body"><h4>${escapeHtml(ad.title)}</h4>${ad.body ? `<p>${escapeHtml(ad.body)}</p>` : ''}
         ${ad.link_url ? `<button class="ad-btn" onclick="adClick(${ad.id}, '${escapeHtml(ad.link_url)}')">${escapeHtml(ad.button_text || 'Learn more')}</button>` : ''}</div></div>`;

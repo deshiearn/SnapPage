@@ -38,7 +38,10 @@ function renderProfile(p) {
         <div class="pf-hero ${p.founder ? 'pf-founder' : ''}" style="${heroStyle(p.id)}">
             <button onclick="closeSheet('profileModalBg','profileSheet')" class="tgme-circle" style="left:14px;top:18px" aria-label="Close"><i class="fas fa-times"></i></button>
             <button onclick="shareProfileLink()" class="tgme-circle" style="right:14px;top:18px" aria-label="Share"><i class="fas fa-share"></i></button>
-            <img src="${p.photo}" class="pf-avatar" onerror="this.src='https://ui-avatars.com/api/?name=U'">
+            ${p.founder ? '<span class="fd-orb o1"></span><span class="fd-orb o2"></span><i class="fd-sp s1"></i><i class="fd-sp s2"></i><i class="fd-sp s3"></i><i class="fd-sp s4"></i><i class="fd-sp s5"></i><i class="fd-sp s6"></i>' : ''}
+            ${p.founder
+                ? `<div class="fd-avwrap"><i class="fas fa-crown fd-crown"></i><div class="fd-ring"><img src="${p.photo}" class="pf-avatar" onerror="this.src='https://ui-avatars.com/api/?name=U'"></div></div>`
+                : `<img src="${p.photo}" class="pf-avatar" onerror="this.src='https://ui-avatars.com/api/?name=U'">`}
             <h2 class="pf-name">${escapeHtml(p.name || 'User')}${verified}</h2>
             ${founder}
             <p class="pf-handle">${isChannel ? 'Channel' : 'Level ' + (p.level || 1)}${handle ? ' · @' + escapeHtml(handle) : ''}</p>
