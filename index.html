@@ -186,31 +186,34 @@
 
     <!-- CREATE / EDIT POST MODAL -->
     <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-end justify-center sheet-modal">
-        <div class="cmp-sheet bg-white">
-            <div class="sheet-handle" style="margin-bottom:6px"></div>
-            <div class="cmp-head">
-                <button class="cmp-cancel" onclick="closeModal('postModal')">Cancel</button>
+        <div class="tgi-sheet">
+            <div class="tgi-nav">
+                <button class="tgi-cancel" onclick="closeModal('postModal')">Cancel</button>
                 <h3 id="postModalTitle" data-i18n="create_post">Create Post</h3>
-                <button id="submitPostBtn" class="cmp-go" disabled>Post</button>
+                <button id="submitPostBtn" class="tgi-act" disabled>Post</button>
             </div>
-            <div class="cmp-scroll">
-                <div class="cmp-author">
-                    <img id="cmpAvatar" src="" alt="">
-                    <div><b id="cmpName">You</b><small id="cmpMeta"><i class="fas fa-earth-americas"></i> Public</small></div>
+            <div class="tgi-scroll">
+                <div class="tgi-card tgi-compose">
+                    <div class="tgi-author">
+                        <img id="cmpAvatar" src="" alt="">
+                        <div><b id="cmpName">You</b><small id="cmpMeta"><i class="fas fa-earth-americas"></i> Public</small></div>
+                    </div>
+                    <textarea id="postText" maxlength="1000" rows="4" class="cmp-text" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
+                    <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+                    <div id="imgPreviewContainer" class="cmp-grid"></div>
                 </div>
-                <textarea id="postText" maxlength="1000" rows="4" class="cmp-text" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
-                <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
-                <div id="imgPreviewContainer" class="cmp-grid"></div>
-                <div id="postLivePreviewWrap" class="hidden mt-3"><p class="cmp-label"><i class="fas fa-eye"></i> LIVE PREVIEW</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
-                <div style="height:12px"></div>
-            </div>
-            <div id="cmpEmojis" class="cmp-emojis hidden"></div>
-            <div class="cmp-tools">
-                <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="cmp-tool" aria-label="Add photos"><i class="fas fa-image"></i><em id="cmpPhotoBadge">0/4</em></button>
-                <button onclick="cmpInsert('#')" class="cmp-tool" aria-label="Hashtag"><i class="fas fa-hashtag"></i></button>
-                <button onclick="cmpInsert('@')" class="cmp-tool" aria-label="Mention"><i class="fas fa-at"></i></button>
-                <button onclick="cmpToggleEmoji()" class="cmp-tool" aria-label="Emoji"><i class="fas fa-face-smile"></i></button>
-                <span id="cmpCount" class="cmp-count">0/1000</span>
+                <p class="tgi-foot"><span>Add #hashtags so people can find your post.</span><span id="cmpCount" class="cmp-count">0/1000</span></p>
+
+                <div class="tgi-card">
+                    <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="tgi-row"><span class="tg-ic" style="background:#34c759"><i class="fas fa-image"></i></span><span class="tgi-label">Photos</span><span class="tgi-val" id="cmpPhotoBadge">0/4</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                    <button onclick="cmpInsert('#')" class="tgi-row"><span class="tg-ic" style="background:#007aff"><i class="fas fa-hashtag"></i></span><span class="tgi-label">Hashtag</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                    <button onclick="cmpInsert('@')" class="tgi-row"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-at"></i></span><span class="tgi-label">Mention</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                    <button onclick="cmpToggleEmoji()" class="tgi-row"><span class="tg-ic" style="background:#ff2d55"><i class="fas fa-face-smile"></i></span><span class="tgi-label">Emoji</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                    <div id="cmpEmojis" class="cmp-emojis hidden"></div>
+                </div>
+
+                <div id="postLivePreviewWrap" class="hidden"><p class="tgi-head">Preview</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
+                <div style="height:calc(env(safe-area-inset-bottom,0px) + 24px)"></div>
             </div>
         </div>
     </div>
@@ -252,26 +255,34 @@
 
     <!-- VIDEO UPLOAD MODAL (Shorts) -->
     <div id="videoUploadModal" class="hidden fixed inset-0 blur-bg z-[70] flex items-end justify-center sheet-modal">
-        <div class="cmp-sheet bg-white">
-            <div class="sheet-handle" style="margin-bottom:6px"></div>
-            <div class="cmp-head">
-                <button class="cmp-cancel" onclick="closeModal('videoUploadModal')">Cancel</button>
+        <div class="tgi-sheet">
+            <div class="tgi-nav">
+                <button class="tgi-cancel" onclick="closeModal('videoUploadModal')">Cancel</button>
                 <h3>New Reel</h3>
-                <button id="submitVideoBtn" class="cmp-go" disabled>Share</button>
+                <button id="submitVideoBtn" class="tgi-act" disabled>Share</button>
             </div>
-            <div class="cmp-scroll">
+            <div class="tgi-scroll">
                 <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" class="hidden">
-                <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="vu-drop" aria-label="Choose video">
-                    <video id="vuPreview" class="hidden" muted playsinline loop></video>
-                    <span id="vuEmpty" class="vu-empty"><span class="vu-ic"><i class="fas fa-clapperboard"></i></span><b>Choose a video</b><small>MP4 · MOV · WebM — up to 15 MB</small></span>
-                    <span id="vuMeta" class="vu-chip hidden"></span>
-                    <span id="vuChange" class="vu-change hidden"><i class="fas fa-arrows-rotate"></i> Change</span>
-                </button>
-                <div id="vuProgress" class="hidden vu-progress"><div class="vu-track"><i id="vuBar"></i></div><span id="vuPct">0%</span></div>
-                <p id="videoFileName" class="hidden"></p>
-                <textarea id="videoCaptionText" maxlength="300" rows="3" class="cmp-text cmp-box" placeholder="Write a caption… add #hashtags so people can find it"></textarea>
-                <div class="vu-tips"><span><i class="fas fa-bolt"></i> Short clips get watched to the end</span><span id="vuCount">0/300</span></div>
-                <div style="height:14px"></div>
+                <div class="tgi-card" style="padding:14px 0">
+                    <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="vu-drop" aria-label="Choose video">
+                        <video id="vuPreview" class="hidden" muted playsinline loop></video>
+                        <span id="vuEmpty" class="vu-empty"><span class="vu-ic"><i class="fas fa-clapperboard"></i></span><b>Choose a video</b><small>MP4 · MOV · WebM — up to 15 MB</small></span>
+                        <span id="vuMeta" class="vu-chip hidden"></span>
+                        <span id="vuChange" class="vu-change hidden"><i class="fas fa-arrows-rotate"></i> Change</span>
+                    </button>
+                    <div id="vuProgress" class="hidden vu-progress"><div class="vu-track"><i id="vuBar"></i></div><span id="vuPct">0%</span></div>
+                </div>
+                <p id="videoFileName" class="tgi-foot hidden" style="justify-content:center"></p>
+
+                <p class="tgi-head">Caption</p>
+                <div class="tgi-card"><textarea id="videoCaptionText" maxlength="300" rows="3" class="cmp-text cmp-box" placeholder="Write a caption…"></textarea></div>
+                <p class="tgi-foot"><span>Add #hashtags so people can find it.</span><span id="vuCount">0/300</span></p>
+
+                <div class="tgi-card">
+                    <button onclick="document.getElementById('videoUploadInput').click()" class="tgi-row"><span class="tg-ic" style="background:#af52de"><i class="fas fa-film"></i></span><span class="tgi-label">Choose from gallery</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                </div>
+                <p class="tgi-foot"><span>Short vertical clips get watched to the end.</span></p>
+                <div style="height:calc(env(safe-area-inset-bottom,0px) + 24px)"></div>
             </div>
         </div>
     </div>
