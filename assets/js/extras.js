@@ -7,7 +7,7 @@ window.openReferSheet = async () => {
     document.getElementById('referInputLink').value = link;
 
     const list = document.getElementById('referHistoryList');
-    list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Loading stats...</p>';
+    list.innerHTML = '<p class="rf-empty">Loading…</p>';
 
     try {
         const res = await fetch('/api/getReferStats', {
@@ -34,32 +34,16 @@ window.openReferSheet = async () => {
         document.getElementById('referProgressBar').style.width = Math.min(100, Math.round(direct / 3 * 100)) + '%';
         document.getElementById('referProgressLabel').innerText = need > 0 ? `${direct}/${direct >= 2 ? 3 : 2} direct referrals — invite ${need} more to reach Level ${lvl + 1}` : 'Max level reached 🎉';
 
-        list.innerHTML = '';
+        const tier = { 1: ['Direct', '#3b82f6'], 2: ['2nd tier', '#8b5cf6'], 3: ['3rd tier', '#ec4899'] };
         const renderRow = (user, level) => {
-            const color = level === 1 ? 'blue' : (level === 2 ? 'purple' : 'pink');
-            const tierLabel = level === 1 ? 'Direct' : (level === 2 ? '2nd Tier' : '3rd Tier');
             const avatar = user.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}`;
             const handle = user.username ? `@${user.username}` : 'No username';
-            return `
-            <div class="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border text-xs">
-                <div class="flex items-center gap-2.5">
-                    <img src="${avatar}" class="w-8 h-8 rounded-full object-cover">
-                    <div>
-                        <p class="font-bold text-gray-800">${escapeHtml(user.name || 'User')}</p>
-                        <p class="text-[10px] text-gray-400">${escapeHtml(handle)}</p>
-                    </div>
-                </div>
-                <span class="bg-${color}-100 text-${color}-600 text-[10px] px-2 py-0.5 rounded-full font-bold">${tierLabel}</span>
-            </div>`;
+            return `<div class="rf-row"><img src="${avatar}" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=U'">
+                <span class="rf-pt">${escapeHtml(user.name || 'User')}<small>${escapeHtml(handle)}</small></span>
+                <em style="background:${tier[level][1]}1f;color:${tier[level][1]}">${tier[level][0]}</em></div>`;
         };
-
-        level1Users.forEach(u => list.innerHTML += renderRow(u, 1));
-        level2Users.forEach(u => list.innerHTML += renderRow(u, 2));
-        level3Users.forEach(u => list.innerHTML += renderRow(u, 3));
-
-        if(list.innerHTML === '') {
-            list.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">Zero invites yet.</p>';
-        }
+        const rows = level1Users.map(u => renderRow(u, 1)).concat(level2Users.map(u => renderRow(u, 2)), level3Users.map(u => renderRow(u, 3)));
+        list.innerHTML = rows.length ? rows.join('') : '<p class="rf-empty">No invites yet — share your link to get started.</p>';
 
     } catch (err) {
         console.error(err);
@@ -73,6 +57,10 @@ window.MB_SCREENS.referModalBg = () => MB.show('referModalBg', { text: 'Invite F
     tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent('Join me on SnapPages!'));
 } });
 
+window.shareReferLink = () => {
+    const link = document.getElementById('referInputLink').value;
+    if (link) tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent('Join me on SnapPages!'));
+};
 window.copyReferLinkDirect = () => {
     const input = document.getElementById('referInputLink');
     input.select();

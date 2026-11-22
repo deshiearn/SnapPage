@@ -145,3 +145,8 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 - **Video stories**: up to 30 s / 12 MB. Run `sql/14_story_video.sql`.
 - **Ads**: Admin panel → Ads (title, text, image, link, button). Shown as "Sponsored" cards in the feed; impressions/clicks counted (run `sql/12_settings_ads_premium.sql`, it adds `bump_ad`).
 - **Level Perks**: all basic features free. Level 2 → reactions 🎉🥰, 5 stories; Level 3 → 💎🤯, 8 photos/post, 8 stories. See Me → Level Perks.
+
+## Reels redesign, Referral page, static emojis
+- **Reels**: full-screen, Following / For You tabs, back + sound + upload in the top bar, action rail on the right (avatar with +Follow, like/reactions, comment, share, more), author + caption bottom-left, scrubbable progress bar, double-tap to like (heart burst), auto-plays the next reel when one ends, next video is pre-loaded. Portrait videos fill the screen, landscape ones fit.
+- **Referral page** now uses the same grouped-card style as the Me page (level hero, copy/share, network stats, perks, history).
+- Emojis inside posts are plain static text (no animation) for a calmer, lighter feed.

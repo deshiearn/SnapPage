@@ -2020,6 +2020,16 @@ app.post('/api/likeComment', async (req, res) => {
 // User uploads go through a dedicated storage channel (STORAGE_CHANNEL_ID); channel
 // videos are auto-synced straight from the origin channel_post (see bot.on('channel_post')).
 
+// Adds is_following so the Reels "+" badge knows who you already follow
+async function markFollowing(videos, initData) {
+    try {
+        const u = initData && validateTGData(initData);
+        if (!u) return videos;
+        const set = new Set(await getFollowingIds(u.id.toString()));
+        return videos.map(v => ({ ...v, is_following: set.has(String(v.author_id)) || String(v.author_id) === u.id.toString() }));
+    } catch (e) { return videos; }
+}
+
 async function enrichVideos(videos) {
     const list = await enrichAuthors(videos);
     return list.map(v => ({ ...v, stream_url: `/api/videoStream/${v.id}` }));
@@ -2033,11 +2043,17 @@ app.post('/api/getShorts', async (req, res) => {
     try {
         let q = supabase.from('videos').select('*');
         if (authorId) q = q.eq('author_id', String(authorId));
+        if (req.body.following) {
+            const u = validateTGData(req.body.initData);
+            const ids = u ? await getFollowingIds(u.id.toString()) : [];
+            if (!ids.length) return res.json([]);
+            q = q.in('author_id', ids.map(String));
+        }
         const { data: videos, error } = await q
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
         if (error) throw error;
-        res.json(await enrichVideos(videos || []));
+        res.json(await markFollowing(await enrichVideos(videos || []), req.body.initData));
     } catch (e) {
         console.error("Shorts feed error:", e);
         res.json([]);
@@ -2050,7 +2066,7 @@ app.post('/api/getVideoById', async (req, res) => {
     try {
         const { data: video, error } = await supabase.from('videos').select('*').eq('id', videoId).maybeSingle();
         if (error || !video) return res.status(404).json({ error: "Video not found" });
-        const [enriched] = await enrichVideos([video]);
+        const [enriched] = await markFollowing(await enrichVideos([video]), req.body.initData);
         res.json(enriched);
     } catch (e) {
         res.status(500).json({ error: e.message || e });
