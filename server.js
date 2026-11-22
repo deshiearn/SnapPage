@@ -12,8 +12,34 @@ const app = express();
 try { app.use(require('compression')()); } catch (e) { console.warn('compression not installed — responses will be uncompressed'); }
 
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+// 28 MB covers the biggest legal upload (18 MB video as base64) without letting one request eat the 512 MB of free-tier RAM
+app.use(express.json({ limit: '28mb' }));
+app.use(express.urlencoded({ limit: '2mb', extended: true }));
+
+// ---- lightweight live metrics (shown in Admin → System) ----
+const METRICS = { inflight: 0, peak: 0, buckets: new Map() };
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/')) return next();
+    METRICS.inflight++; METRICS.peak = Math.max(METRICS.peak, METRICS.inflight);
+    const t0 = Date.now(), minute = Math.floor(t0 / 60000);
+    res.on('finish', () => {
+        METRICS.inflight--;
+        const b = METRICS.buckets.get(minute) || { n: 0, ms: 0, err: 0 };
+        b.n++; b.ms += Date.now() - t0; if (res.statusCode >= 500) b.err++;
+        METRICS.buckets.set(minute, b);
+        if (METRICS.buckets.size > 15) METRICS.buckets.delete(Math.min(...METRICS.buckets.keys()));
+    });
+    next();
+});
+// At most 3 big uploads at once, so a burst can't push the 512 MB instance out of memory
+let uploadsInFlight = 0;
+function uploadGate(req, res, next) {
+    if (uploadsInFlight >= 3) return res.status(503).json({ error: "Lots of people are uploading right now — please try again in a few seconds." });
+    uploadsInFlight++; let done = false;
+    const rel = () => { if (!done) { done = true; uploadsInFlight--; } };
+    res.on('finish', rel); res.on('close', rel);
+    next();
+}
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -35,7 +61,19 @@ async function getStorageChannel(force) {
     return storageCache.id;
 }
 const MAX_VIDEO_BYTES = 18 * 1024 * 1024; // 18MB — Telegram Bot API can't reliably stream files near/above ~20MB
-const MAX_VIDEOS_IN_DB = 300;
+const MAX_VIDEOS_IN_DB = 300;   // legacy default; real caps come from app_settings (Admin → System)
+const DEFAULT_LIMITS = { max_posts: 20000, max_videos: 1500 };   // ~60 MB + ~5 MB of the 500 MB free Supabase DB
+let limitsCache = { ts: 0, v: { ...DEFAULT_LIMITS } };
+async function getLimits(force) {
+    if (!force && Date.now() - limitsCache.ts < 60000) return limitsCache.v;
+    try {
+        const { data } = await supabase.from('app_settings').select('key, value').in('key', ['max_posts', 'max_videos']);
+        const v = { ...DEFAULT_LIMITS };
+        (data || []).forEach(r => { const n = parseInt(r.value); if (n > 0) v[r.key] = n; });
+        limitsCache = { ts: Date.now(), v };
+    } catch (e) { limitsCache.ts = Date.now(); }
+    return limitsCache.v;
+}
 
 // ================= Referral Level Mapping =================
 // Level perks (everything basic is free; these unlock by levelling up through referrals)
@@ -127,10 +165,30 @@ function tgImageUrl(fileId) {
     return `/api/tgImage/${fileId}`;
 }
 
+let lastUploadErr = '';
+function friendlyTgErr(e) {
+    const m = String((e && (e.description || e.message)) || e);
+    if (/chat not found/i.test(m)) return "Storage channel not found — Admin: re-save it in Admin panel → Settings → Storage Channel.";
+    if (/not enough rights|administrator|forbidden|kicked|have no rights/i.test(m)) return 'The bot cannot post in the storage channel — make it an admin with "Post messages".';
+    if (/too many requests|retry after/i.test(m)) return "Telegram is rate-limiting uploads — try again in a few seconds.";
+    if (/too big|too large/i.test(m)) return "That file is too big for Telegram.";
+    if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(m)) return "The upload timed out — check your connection and retry.";
+    return 'Upload failed: ' + m.slice(0, 120);
+}
+async function tgRetry(fn) {            // one automatic retry for flood-wait / network blips
+    try { return await fn(); }
+    catch (e) {
+        const wait = e && e.parameters && e.parameters.retry_after;
+        if (wait && wait <= 5) { await new Promise(r => setTimeout(r, wait * 1000 + 200)); return fn(); }
+        if (/ETIMEDOUT|ECONNRESET|socket hang up/i.test(String(e && (e.message || e)))) { await new Promise(r => setTimeout(r, 600)); return fn(); }
+        throw e;
+    }
+}
 async function uploadImageToTelegram(base64Str) {
     const STORAGE_CHANNEL_ID = await getStorageChannel();
     if (!STORAGE_CHANNEL_ID) {
         console.error("uploadImageToTelegram: no storage channel configured (Admin panel → Storage Channel).");
+        lastUploadErr = "Storage channel is not set. Admin: Admin panel → Settings → Storage Channel.";
         return null;
     }
     try {
@@ -140,7 +198,7 @@ async function uploadImageToTelegram(base64Str) {
         }
         const buffer = Buffer.from(cleanBase64, 'base64');
 
-        const sentMsg = await bot.telegram.sendPhoto(STORAGE_CHANNEL_ID, { source: buffer, filename: `img_${Date.now()}.jpg` });
+        const sentMsg = await tgRetry(() => bot.telegram.sendPhoto(STORAGE_CHANNEL_ID, { source: buffer, filename: `img_${Date.now()}.jpg` }));
         const sizes = sentMsg.photo;
         if (!sizes || sizes.length === 0) {
             console.error("uploadImageToTelegram: sendPhoto succeeded but returned no photo sizes.");
@@ -150,6 +208,7 @@ async function uploadImageToTelegram(base64Str) {
         return tgImageUrl(fileId);
     } catch (e) {
         console.error("uploadImageToTelegram failed:", e.message || e);
+        lastUploadErr = friendlyTgErr(e);
         return null;
     }
 }
@@ -871,8 +930,9 @@ async function enforcePostCap(cap = 2500) {
 
 // Keep only the most recent 50 videos (per the spec's storage cap). Only deletes the
 // Telegram message when we own the storage copy (user uploads) — never a channel's own post.
-async function enforceVideoCap(cap = MAX_VIDEOS_IN_DB) {
+async function enforceVideoCap(cap) {
     try {
+        if (!cap) cap = (await getLimits()).max_videos;
         const { count } = await supabase.from('videos').select('*', { count: 'exact', head: true });
         if (count && count > cap) {
             const excess = count - cap;
@@ -886,6 +946,32 @@ async function enforceVideoCap(cap = MAX_VIDEOS_IN_DB) {
         }
     } catch (e) { console.error("Video cap enforcement failed:", e); }
 }
+
+// Oldest (non-pinned) posts roll off once the database cap is reached — keeps the free 500 MB DB healthy
+async function enforcePostCap(cap) {
+    try {
+        if (!cap) cap = (await getLimits()).max_posts;
+        const { count } = await supabase.from('posts').select('*', { count: 'exact', head: true });
+        if (!count || count <= cap) return 0;
+        const excess = Math.min(count - cap, 500);
+        const { data: oldest } = await supabase.from('posts').select('id').eq('is_pinned', false).order('created_at', { ascending: true }).limit(excess);
+        const ids = (oldest || []).map(r => r.id);
+        if (ids.length) await supabase.from('posts').delete().in('id', ids);
+        return ids.length;
+    } catch (e) { console.error('Post cap enforcement failed:', e.message || e); return 0; }
+}
+// Housekeeping every 6 h: caps, old notifications, expired stories, and bounded in-memory caches
+async function housekeeping() {
+    await enforcePostCap(); await enforceVideoCap();
+    try { await supabase.from('stories').delete().lt('created_at', new Date(Date.now() - 2 * 86400000).toISOString()); } catch (e) {}
+    const now = Date.now();
+    for (const m of [userMetaCache, userLevelCache]) { for (const [k, v] of m) if (v.exp < now) m.delete(k); if (m.size > 5000) m.clear(); }
+    for (const [k, v] of fileLinkCache) if (v.exp && v.exp < now) fileLinkCache.delete(k);
+    if (fileLinkCache.size > 3000) fileLinkCache.clear();
+    for (const m of [notifyLog, guestLog, adSeen, viewRate]) if (m.size > 20000) m.clear();
+}
+setInterval(housekeeping, 6 * 3600 * 1000);
+setTimeout(housekeeping, 90 * 1000);
 
 // ================= APIs =================
 
@@ -977,6 +1063,29 @@ app.post('/api/auth', async (req, res) => {
             return res.status(500).json({ error: "User record could not be loaded" });
         }
 
+        // Keep name / @username / photo in step with Telegram (needs sql/15). Name + username come free with the
+        // login data; the photo is re-fetched in the background at most every 6 h. Hand-edited name/photo are never overwritten.
+        if ('tg_synced_at' in user && isRealTgId(tgId)) {
+            const stale = !user.tg_synced_at || Date.now() - new Date(user.tg_synced_at).getTime() > 6 * 3600 * 1000;
+            if (stale) {
+                const patch = { tg_synced_at: new Date().toISOString() };
+                const tgName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+                if (!user.name_edited && tgName && tgName !== user.name) patch.name = tgName;
+                if ((tgUser.username || null) !== (user.username || null)) patch.username = tgUser.username || null;
+                Object.assign(user, patch);
+                (async () => {
+                    try {
+                        if (!user.photo_edited) {
+                            const pic = await getTgProfilePic(tgId);
+                            if (pic && !pic.includes('ui-avatars') && pic !== user.photo_url) { patch.photo_url = pic; }
+                        }
+                        await supabase.from('users').update(patch).eq('tg_id', tgId);
+                        if (patch.name || patch.photo_url) invalidateAuthorCaches();
+                    } catch (e) { /* best effort */ }
+                })();
+            }
+        }
+
         // Daily streak: +1 for each consecutive day the user opens the app (needs sql/07; silently skipped if columns are missing)
         try {
             const today = new Date().toISOString().slice(0, 10);
@@ -1002,6 +1111,66 @@ app.post('/api/auth', async (req, res) => {
 });
 
 // Secure endpoint to get all Posts with Pagination and author data mapping
+
+// ================= "For You" ranking (built to keep people scrolling) =================
+// score = (1 + likes + 1.5·reactions + 0.12·views) / (age_hours + 2)^1.15
+//   ×1.4 brand-new (<30 min)  ×1.7 authors you follow  ×0.6 your own  ×0.15 already seen  ×(0.9–1.1) jitter
+// then picked greedily so one author can't fill the screen (each repeat is worth 45 % less).
+// Pagination is stateless: the client sends `exclude` (ids already on screen) and, once the ranked window of the
+// latest items is used up, a `cursor` (created_at) that continues through older items newest-first.
+const candCache = {};
+async function getCandidates(table, size) {
+    const c = candCache[table];
+    if (c && c.exp > Date.now()) return c.rows;
+    let q = supabase.from(table).select('*').order('created_at', { ascending: false }).limit(size);
+    if (table === 'posts') q = q.eq('is_pinned', false);
+    const { data } = await q;
+    candCache[table] = { exp: Date.now() + 45000, rows: data || [] };
+    return candCache[table].rows;
+}
+function rankItems(rows, o) {
+    const now = Date.now(), authorCount = {}, out = [];
+    const scored = rows.filter(r => !o.exclude.has(String(r.id))).map(r => {
+        const ageH = Math.max(0.05, (now - new Date(r.created_at).getTime()) / 3.6e6);
+        const rx = r.reactions ? Object.keys(r.reactions).length : 0;
+        let sc = (1 + (r.likes_count || 0) + rx * 1.5 + (r.views || 0) * 0.12) / Math.pow(ageH + 2, 1.15);
+        if (ageH < 0.5) sc *= 1.4;
+        if (o.following.has(String(r.author_id))) sc *= 1.7;
+        if (String(r.author_id) === o.me) sc *= 0.6;
+        if (o.seen.has(String(r.id))) sc *= 0.15;
+        return { r, sc: sc * (0.9 + Math.random() * 0.2) };
+    });
+    while (out.length < o.limit && scored.length) {
+        let bi = 0, bs = -1;
+        for (let i = 0; i < scored.length; i++) {
+            const v = scored[i].sc * Math.pow(0.55, authorCount[scored[i].r.author_id] || 0);
+            if (v > bs) { bs = v; bi = i; }
+        }
+        const pick = scored.splice(bi, 1)[0].r;
+        authorCount[pick.author_id] = (authorCount[pick.author_id] || 0) + 1;
+        out.push(pick);
+    }
+    return out;
+}
+async function rankedFeed(table, body, limit, size) {
+    const u = validateTGData(body.initData);
+    const me = u ? u.id.toString() : '';
+    const ids = (a) => new Set((Array.isArray(a) ? a : []).slice(-400).map(String));
+    const exclude = ids(body.exclude), seen = ids(body.seen);
+    const older = async (cursor, n) => {
+        let q = supabase.from(table).select('*').lt('created_at', cursor).order('created_at', { ascending: false }).limit(n);
+        if (table === 'posts') q = q.eq('is_pinned', false);
+        const { data } = await q;
+        return (data || []).map(r => ({ ...r, _older: 1 }));
+    };
+    if (body.cursor) return older(String(body.cursor), limit);
+    const cands = await getCandidates(table, size);
+    const following = me ? new Set(await getFollowingIds(me)) : new Set();
+    let out = rankItems(cands, { exclude, seen, following, me, limit });
+    if (out.length < limit && cands.length) out = out.concat(await older(cands[cands.length - 1].created_at, limit - out.length));
+    return out;
+}
+
 app.post('/api/getPosts', async (req, res) => {
     const page = Math.max(1, parseInt(req.body.page) || 1);
     const limit = Math.min(20, Math.max(1, parseInt(req.body.limit) || 10));   // hard cap keeps responses small
@@ -1022,6 +1191,16 @@ app.post('/api/getPosts', async (req, res) => {
             if (authorId) q = q.eq('author_id', String(authorId));
             return q;
         };
+
+        // Main "For You" feed: ranked by engagement + freshness (see rankedFeed)
+        if (!followIds && !authorId && (req.body.exclude || req.body.cursor !== undefined || req.body.ranked)) {
+            let rows = await rankedFeed('posts', req.body, limit, 200);
+            if (page === 1 && !req.body.cursor) {
+                const { data: pinned } = await supabase.from('posts').select('*').eq('is_pinned', true).order('created_at', { ascending: false });
+                rows = [...(pinned || []), ...rows];
+            }
+            return res.json(await enrichPosts(rows));
+        }
 
         // Pinned posts only lead the main "For You" feed
         if (page === 1 && !followIds && !authorId) {
@@ -1083,7 +1262,7 @@ app.post('/api/admin/saveAd', requireAdminUser, requireAdminPassword, async (req
         let image_url = String(b.image_url || '').trim();
         if (b.imageBase64) {
             const up = await uploadImageToTelegram(b.imageBase64);
-            if (!up) return res.status(500).json({ error: "Image upload failed — check the Storage Channel" });
+            if (!up) return res.status(500).json({ error: lastUploadErr || "Image upload failed — check the Storage Channel" });
             image_url = up;
         }
         const row = { title, body: String(b.body || '').slice(0, 300), image_url, link_url: link, button_text: String(b.button_text || 'Learn more').slice(0, 24), placement: 'feed', active: b.active !== false };
@@ -1137,10 +1316,14 @@ app.post('/api/setProfile', async (req, res) => {
         if (req.body.photoBase64) {
             if (String(req.body.photoBase64).length > 4 * 1024 * 1024) return res.status(400).json({ error: "Photo is too large" });
             const url = await uploadImageToTelegram(req.body.photoBase64);
-            if (!url) return res.status(500).json({ error: "Photo upload failed — storage channel isn't set (Admin panel → Storage Channel)" });
+            if (!url) return res.status(500).json({ error: lastUploadErr || "Photo upload failed — check the Storage Channel" });
             patch.photo_url = url;
         }
-        const { error } = await supabase.from('users').update(patch).eq('tg_id', me);
+        const tgName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+        const flagged = { ...patch, name_edited: name !== tgName };
+        if (patch.photo_url) flagged.photo_edited = true;
+        let { error } = await supabase.from('users').update(flagged).eq('tg_id', me);
+        if (error && /name_edited|photo_edited/.test(error.message || '')) ({ error } = await supabase.from('users').update(patch).eq('tg_id', me));   // sql/15 not run yet
         if (error) throw error;
         invalidateAuthorCaches();
         res.json({ success: true, name, username: handle, photo: patch.photo_url || null });
@@ -1393,7 +1576,7 @@ app.post('/api/getReferStats', async (req, res) => {
 });
 
 // Create Post (images hosted directly on Telegram; RLS Bypass)
-app.post('/api/createPost', async (req, res) => {
+app.post('/api/createPost', uploadGate, async (req, res) => {
     const { initData, text, imagesBase64 } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
@@ -1413,7 +1596,7 @@ app.post('/api/createPost', async (req, res) => {
             const results = await Promise.all(imagesBase64.slice(0, maxPhotos).map(img => uploadImageToTelegram(img)));   // parallel = faster posting
             results.forEach(u => u ? imageUrls.push(u) : uploadFailures++);
             if (uploadFailures > 0 && imageUrls.length === 0 && !String(text || '').trim()) {
-                return res.status(500).json({ error: "Photo upload failed — the storage channel isn't working. Admin: Admin panel → Storage Channel." });
+                return res.status(500).json({ error: lastUploadErr || "Photo upload failed — the storage channel isn't working." });
             }
         }
 
@@ -1433,9 +1616,10 @@ app.post('/api/createPost', async (req, res) => {
         await enforcePostCap();
 
         const response = { success: true };
+        if (Math.random() < 0.05) enforcePostCap();   // cheap probabilistic check; housekeeping also runs every 6 h
         if (uploadFailures > 0) {
             console.error(`createPost: ${uploadFailures} image(s) failed to upload — check STORAGE_CHANNEL_ID is set and the bot is an admin there.`);
-            response.warning = `Post created, but ${uploadFailures} image(s) failed to upload. Ask the admin to check the storage channel setup.`;
+            response.warning = `Post created, but ${uploadFailures} image(s) failed to upload. ${lastUploadErr}`;
         }
         res.json(response);
     } catch (e) {
@@ -2041,6 +2225,10 @@ app.post('/api/getShorts', async (req, res) => {
     const limit = Math.min(parseInt(req.body.limit) || 5, 20);
     const offset = (parseInt(page) - 1) * limit;
     try {
+        if (!authorId && !req.body.following && (req.body.exclude || req.body.cursor !== undefined || req.body.ranked)) {
+            const rows = await rankedFeed('videos', req.body, limit, 120);
+            return res.json(await markFollowing(await enrichVideos(rows), req.body.initData));
+        }
         let q = supabase.from('videos').select('*');
         if (authorId) q = q.eq('author_id', String(authorId));
         if (req.body.following) {
@@ -2126,7 +2314,7 @@ app.get('/api/tgVideo/:fileId', async (req, res) => {
 });
 
 // Upload a new video (users only — channels are captured automatically via channel_post)
-app.post('/api/createVideo', async (req, res) => {
+app.post('/api/createVideo', uploadGate, async (req, res) => {
     const { initData, caption, videoBase64 } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
@@ -2145,11 +2333,11 @@ app.post('/api/createVideo', async (req, res) => {
         const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
         const authorName = user ? user.name : tgUser.first_name || "User";
 
-        const sentMsg = await bot.telegram.sendVideo(
+        const sentMsg = await tgRetry(() => bot.telegram.sendVideo(
             STORAGE_CHANNEL_ID,
             { source: buffer, filename: `snappages_${Date.now()}.mp4` },
             { caption: `From: ${authorName} (${tgUser.id})` }
-        );
+        ));
 
         const fileId = sentMsg.video ? sentMsg.video.file_id : null;
         if (!fileId) return res.status(500).json({ error: "Upload to storage channel failed" });
@@ -2173,6 +2361,7 @@ app.post('/api/createVideo', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error("Video upload failed:", e);
+        if (!res.headersSent) return res.status(500).json({ error: friendlyTgErr(e) });
         res.status(500).json({ error: e.message || e });
     }
 });
@@ -2296,7 +2485,7 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
         const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
         const { count: totalPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true });
         const { count: totalVideos } = await supabase.from('videos').select('*', { count: 'exact', head: true });
-        const { data: allUsers } = await supabase.from('users').select('channels');
+        const { data: allUsers } = await supabase.from('users').select('channels').not('channels', 'is', null);
         const totalChannels = (allUsers || []).reduce((sum, u) => sum + ((u.channels && u.channels.length) || 0), 0);
         const { count: totalReports } = await supabase.from('reports').select('*', { count: 'exact', head: true });
 
@@ -2650,6 +2839,63 @@ app.post('/api/admin/maintenance', requireAdminUser, requireAdminPassword, async
 });
 
 // Storage channel: where uploaded photos/videos are kept (the bot must be an admin there)
+
+// ================= Admin → System (health, capacity, limits, storage test) =================
+app.post('/api/admin/system', requireAdminUser, requireAdminPassword, async (req, res) => {
+    try {
+        const cnt = async (t, f) => { try { let q = supabase.from(t).select('*', { count: 'exact', head: true }); if (f) q = f(q); const { count } = await q; return count || 0; } catch (e) { return null; } };
+        const [users, posts, videos, stories, notifs, ads, comments] = await Promise.all([
+            cnt('users'), cnt('posts'), cnt('videos'), cnt('stories'), cnt('notifications'), cnt('ads'), cnt('comments')
+        ]);
+        let db = null;
+        try { const { data, error } = await supabase.rpc('db_stats'); if (!error && data) db = data; } catch (e) {}
+        const mem = process.memoryUsage();
+        const now = Math.floor(Date.now() / 60000);
+        let n = 0, ms = 0, err = 0;
+        for (let i = 1; i <= 5; i++) { const b = METRICS.buckets.get(now - i); if (b) { n += b.n; ms += b.ms; err += b.err; } }
+        const storage = await getStorageChannel(true);
+        res.json({
+            memory: { rssMB: Math.round(mem.rss / 1048576), heapMB: Math.round(mem.heapUsed / 1048576), limitMB: 512 },
+            uptimeSeconds: Math.round(process.uptime()), node: process.version,
+            traffic: { reqPerMin: Math.round(n / 5), avgMs: n ? Math.round(ms / n) : 0, errors5m: err, inflight: METRICS.inflight, peakInflight: METRICS.peak, uploadsInFlight },
+            counts: { users, posts, videos, stories, notifications: notifs, ads, comments },
+            db: db ? { usedMB: Math.round(db.db_bytes / 1048576), limitMB: 500, tables: db.tables } : null,
+            limits: await getLimits(true), storageChannel: storage || ''
+        });
+    } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+});
+app.post('/api/admin/setLimits', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const rows = [];
+    for (const k of ['max_posts', 'max_videos']) {
+        const n = parseInt(req.body[k]);
+        if (!(n >= 100 && n <= 200000)) return res.status(400).json({ error: `${k} must be between 100 and 200000` });
+        rows.push({ key: k, value: String(n) });
+    }
+    const { error } = await supabase.from('app_settings').upsert(rows);
+    if (error) return res.status(500).json({ error: error.message });
+    limitsCache.ts = 0;
+    res.json({ success: true, limits: await getLimits(true) });
+});
+app.post('/api/admin/testStorage', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const id = await getStorageChannel(true);
+    if (!id) return res.status(400).json({ error: "Storage channel is not set." });
+    const t0 = Date.now();
+    try {
+        const tiny = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        const m = await tgRetry(() => bot.telegram.sendPhoto(id, { source: Buffer.from(tiny, 'base64'), filename: 'test.png' }));
+        bot.telegram.deleteMessage(id, m.message_id).catch(() => {});
+        res.json({ success: true, ms: Date.now() - t0 });
+    } catch (e) { res.status(400).json({ error: friendlyTgErr(e) }); }
+});
+app.post('/api/admin/runCleanup', requireAdminUser, requireAdminPassword, async (req, res) => {
+    const before = process.memoryUsage().rss;
+    channelMapCache.exp = 0; adsCache.exp = 0; storyCache.exp = 0; indexHtmlCache = null;
+    userMetaCache.clear(); userLevelCache.clear(); fileLinkCache.clear();
+    await housekeeping();
+    if (global.gc) global.gc();
+    res.json({ success: true, rssMB: Math.round(process.memoryUsage().rss / 1048576), beforeMB: Math.round(before / 1048576) });
+});
+
 app.post('/api/admin/getStorageChannel', requireAdminUser, requireAdminPassword, async (req, res) => {
     const id = await getStorageChannel(true);
     res.json({ id: id || '', fromEnv: !!ENV_STORAGE_CHANNEL_ID && id === ENV_STORAGE_CHANNEL_ID });
@@ -2768,7 +3014,7 @@ app.post('/api/getStories', async (req, res) => {
     }
 });
 
-app.post('/api/createStory', async (req, res) => {
+app.post('/api/createStory', uploadGate, async (req, res) => {
     const { initData, image, video } = req.body;
     const caption = String(req.body.caption || '').slice(0, 200);
     const tgUser = validateTGData(initData);
@@ -2797,7 +3043,7 @@ app.post('/api/createStory', async (req, res) => {
             row.video_url = `/api/tgVideo/${sent.video.file_id}`; row.media_type = 'video';
         } else {
             const imageUrl = await uploadImageToTelegram(image);
-            if (!imageUrl) return res.status(500).json({ error: "Image upload failed. Ask the admin to check the storage channel setup." });
+            if (!imageUrl) return res.status(500).json({ error: lastUploadErr || "Image upload failed." });
             row.image_url = imageUrl;
         }
         const { error } = await supabase.from('stories').insert([row]);
@@ -2895,7 +3141,11 @@ app.get('/', (req, res) => {
     res.set('Cache-Control', 'no-cache');
     res.type('html').send(getIndexHtml());
 });
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'indexadmin.html')));
+let adminHtmlCache = null;
+app.get('/admin', (req, res) => {
+    if (!adminHtmlCache) adminHtmlCache = fs.readFileSync(path.join(__dirname, 'indexadmin.html'), 'utf8').replace(/__V__/g, ASSET_VERSION);
+    res.set('Cache-Control', 'no-cache').type('html').send(adminHtmlCache);
+});
 app.use(bot.webhookCallback('/webhook'));
 
 // Render's free plan puts the service to sleep after ~15 min without traffic, and the first request

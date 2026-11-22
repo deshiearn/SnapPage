@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=fe790678" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -186,20 +186,32 @@
 
     <!-- CREATE / EDIT POST MODAL -->
     <div id="postModal" class="hidden fixed inset-0 blur-bg z-50 flex items-end justify-center sheet-modal">
-        <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <div class="sheet-handle"></div>
-            <div class="flex justify-between items-center mb-4">
-                <h3 id="postModalTitle" class="font-bold" data-i18n="create_post">Create Post</h3>
-                <button onclick="closeModal('postModal')"><i class="fas fa-times"></i></button>
+        <div class="cmp-sheet bg-white">
+            <div class="sheet-handle" style="margin-bottom:6px"></div>
+            <div class="cmp-head">
+                <button class="cmp-cancel" onclick="closeModal('postModal')">Cancel</button>
+                <h3 id="postModalTitle" data-i18n="create_post">Create Post</h3>
+                <button id="submitPostBtn" class="cmp-go" disabled>Post</button>
             </div>
-            <textarea id="postText" class="w-full bg-gray-50 rounded-xl p-3 h-24 mb-3 outline-none" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
-            
-            <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
-            <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-image"></i> Add Photos (Max 4)</button>
-            
-            <div id="imgPreviewContainer" class="flex gap-2 overflow-x-auto mb-3"></div>
-            <div id="postLivePreviewWrap" class="hidden mb-3"><p class="text-[11px] font-bold text-gray-400 tracking-wide mb-1.5"><i class="fas fa-eye"></i> LIVE PREVIEW</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
-            <button id="submitPostBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Post</button>
+            <div class="cmp-scroll">
+                <div class="cmp-author">
+                    <img id="cmpAvatar" src="" alt="">
+                    <div><b id="cmpName">You</b><small id="cmpMeta"><i class="fas fa-earth-americas"></i> Public</small></div>
+                </div>
+                <textarea id="postText" maxlength="1000" rows="4" class="cmp-text" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
+                <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+                <div id="imgPreviewContainer" class="cmp-grid"></div>
+                <div id="postLivePreviewWrap" class="hidden mt-3"><p class="cmp-label"><i class="fas fa-eye"></i> LIVE PREVIEW</p><div id="postLivePreview" class="pointer-events-none select-none"></div></div>
+                <div style="height:12px"></div>
+            </div>
+            <div id="cmpEmojis" class="cmp-emojis hidden"></div>
+            <div class="cmp-tools">
+                <button id="addPhotosBtn" onclick="document.getElementById('imageUpload').click()" class="cmp-tool" aria-label="Add photos"><i class="fas fa-image"></i><em id="cmpPhotoBadge">0/4</em></button>
+                <button onclick="cmpInsert('#')" class="cmp-tool" aria-label="Hashtag"><i class="fas fa-hashtag"></i></button>
+                <button onclick="cmpInsert('@')" class="cmp-tool" aria-label="Mention"><i class="fas fa-at"></i></button>
+                <button onclick="cmpToggleEmoji()" class="cmp-tool" aria-label="Emoji"><i class="fas fa-face-smile"></i></button>
+                <span id="cmpCount" class="cmp-count">0/1000</span>
+            </div>
         </div>
     </div>
 
@@ -240,19 +252,27 @@
 
     <!-- VIDEO UPLOAD MODAL (Shorts) -->
     <div id="videoUploadModal" class="hidden fixed inset-0 blur-bg z-[70] flex items-end justify-center sheet-modal">
-        <div class="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 shadow-2xl">
-            <div class="sheet-handle"></div>
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold">Upload Short</h3>
-                <button onclick="closeModal('videoUploadModal')"><i class="fas fa-times"></i></button>
+        <div class="cmp-sheet bg-white">
+            <div class="sheet-handle" style="margin-bottom:6px"></div>
+            <div class="cmp-head">
+                <button class="cmp-cancel" onclick="closeModal('videoUploadModal')">Cancel</button>
+                <h3>New Reel</h3>
+                <button id="submitVideoBtn" class="cmp-go" disabled>Share</button>
             </div>
-            <textarea id="videoCaptionText" class="w-full bg-gray-50 rounded-xl p-3 h-20 mb-3 outline-none" placeholder="Write a caption..."></textarea>
-
-            <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" class="hidden">
-            <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="w-full text-blue-500 border border-blue-500 px-4 py-2 rounded-full text-sm mb-3"><i class="fas fa-film"></i> Choose Video (Max 15MB)</button>
-            <p id="videoFileName" class="text-xs text-gray-400 mb-3 truncate"></p>
-
-            <button id="submitVideoBtn" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Upload</button>
+            <div class="cmp-scroll">
+                <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" class="hidden">
+                <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="vu-drop" aria-label="Choose video">
+                    <video id="vuPreview" class="hidden" muted playsinline loop></video>
+                    <span id="vuEmpty" class="vu-empty"><span class="vu-ic"><i class="fas fa-clapperboard"></i></span><b>Choose a video</b><small>MP4 · MOV · WebM — up to 15 MB</small></span>
+                    <span id="vuMeta" class="vu-chip hidden"></span>
+                    <span id="vuChange" class="vu-change hidden"><i class="fas fa-arrows-rotate"></i> Change</span>
+                </button>
+                <div id="vuProgress" class="hidden vu-progress"><div class="vu-track"><i id="vuBar"></i></div><span id="vuPct">0%</span></div>
+                <p id="videoFileName" class="hidden"></p>
+                <textarea id="videoCaptionText" maxlength="300" rows="3" class="cmp-text cmp-box" placeholder="Write a caption… add #hashtags so people can find it"></textarea>
+                <div class="vu-tips"><span><i class="fas fa-bolt"></i> Short clips get watched to the end</span><span id="vuCount">0/300</span></div>
+                <div style="height:14px"></div>
+            </div>
         </div>
     </div>
 

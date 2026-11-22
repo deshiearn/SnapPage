@@ -1,0 +1,22 @@
+/* Admin panel — same look as the app (grouped cards, rounded corners, blue accent), light + dark */
+:root{--bg:#f2f2f7;--card:#fff;--text:#111;--hint:#8e8e93;--sep:rgba(120,120,128,.2);--acc:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f2f2f7;--hint:#9a9aa1;--sep:rgba(255,255,255,.12)}}
+body{font-family:-apple-system,BlinkMacSystemFont,"Inter","SF Pro Text","Segoe UI",Roboto,"Noto Sans Bengali","Hind Siliguri",sans-serif;-webkit-font-smoothing:antialiased;padding-top:env(safe-area-inset-top,0px);background:var(--bg)!important;color:var(--text)!important;overscroll-behavior-y:none}
+.bg-white{background:var(--card)!important;color:var(--text)}.bg-gray-100{background:var(--bg)!important}
+.bg-gray-50{background:rgba(120,120,128,.1)!important;color:var(--text)}
+.border,.border-b,.border-t{border-color:var(--sep)!important}
+.text-gray-900,.text-gray-800,.text-gray-700,.text-gray-600{color:var(--text)!important}.text-gray-500,.text-gray-400{color:var(--hint)!important}
+input,textarea,select{color:var(--text);background:rgba(120,120,128,.1)}
+.rounded-xl{border-radius:16px}.rounded-2xl{border-radius:20px}
+.admin-tab-btn{flex:1;min-width:max-content;text-align:center;padding:11px 10px;font-size:12px;font-weight:700;color:var(--hint);border-bottom:2px solid transparent;transition:color .2s}
+.admin-tab-btn.active{color:var(--acc);border-bottom-color:var(--acc)}
+#adminPanelContent>.flex{overflow-x:auto;scrollbar-width:none}#adminPanelContent>.flex::-webkit-scrollbar{display:none}
+.admin-tab-content{display:none}.admin-tab-content.active{display:block;animation:adIn .25s ease}
+@keyframes adIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.toggle-switch{position:relative;width:44px;height:24px}.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:#9ca3af;border-radius:999px;transition:.2s}
+.toggle-slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle-switch input:checked+.toggle-slider{background:var(--acc)}.toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px)}
+.bar{height:8px;border-radius:9px;background:rgba(120,120,128,.18);overflow:hidden}.bar i{display:block;height:100%;width:0;background:#22c55e;border-radius:9px;transition:width .6s}.bar i.warn{background:#f59e0b}.bar i.bad{background:#ef4444}
+.stat{background:rgba(120,120,128,.1);border-radius:14px;padding:10px 4px}.stat b{display:block;font-size:17px;font-weight:800}.stat span{font-size:11px;color:var(--hint)}
+button{transition:transform .12s,opacity .15s}button:active{transform:scale(.97)}

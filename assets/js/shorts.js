@@ -8,22 +8,24 @@ let shortsObserver = null;
 // sound button is a real user gesture, so we can safely unmute from then on.
 let shortsMuted = true;
 
-let shortsMode = 'foryou';   // 'foryou' | 'following'
+let shortsMode = 'foryou';
+let shortsLoaded = [], shortsCursor = null;   // 'foryou' | 'following'
 
 async function loadShorts(reset = false) {
     if (isLoadingShorts) return;
     isLoadingShorts = true;
     const feed = document.getElementById('shortsFeed');
-    if (reset) { feed.innerHTML = ''; shortsPage = 1; hasMoreShorts = true; }
+    if (reset) { feed.innerHTML = ''; shortsPage = 1; hasMoreShorts = true; shortsLoaded = []; shortsCursor = null; }
     const empty = document.getElementById('shortsEmptyState');
 
     try {
         const res = await fetch('/api/getShorts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ page: shortsPage, limit: 5, initData: tgAuth(), following: shortsMode === 'following' })
+            body: JSON.stringify({ page: shortsPage, limit: 5, initData: tgAuth(), following: shortsMode === 'following', ranked: true, exclude: shortsLoaded.slice(-300), cursor: shortsCursor || undefined, seen: getSeenIds('v').slice(-300) })
         });
         const videos = await res.json();
+        if (Array.isArray(videos)) videos.forEach(v => { shortsLoaded.push(String(v.id)); if (v._older) shortsCursor = v.created_at; });
 
         if (!videos || videos.length === 0) {
             hasMoreShorts = false;
@@ -68,13 +70,13 @@ function renderShortItem(v) {
     const avatar = v.author_photo || 'https://ui-avatars.com/api/?name=U';
     return `
     <div class="short-item rl-item" data-video-id="${v.id}" data-author="${v.author_id}">
-        <video class="rl-video" src="${v.stream_url}" playsinline muted preload="metadata" poster=""
+        <video class="rl-video" data-src="${v.stream_url}" playsinline muted preload="none"
             onloadedmetadata="this.classList.toggle('rl-cover', this.videoHeight >= this.videoWidth * 1.2)"
             onwaiting="this.closest('.rl-item').classList.add('buffering')"
             onplaying="this.closest('.rl-item').classList.remove('buffering', 'paused')"
             oncanplay="this.closest('.rl-item').classList.remove('buffering')"
             onpause="if(!this.ended)this.closest('.rl-item').classList.add('paused')"
-            ontimeupdate="rlProgress(this)" onended="rlEnded(this)"></video>
+            ontimeupdate="rlProgress(this)" onended="rlEnded(this)" onerror="rlVideoError(this)"></video>
         <div class="rl-shade"></div>
 
         <div class="rl-spin"></div>
@@ -109,7 +111,7 @@ function renderShortItem(v) {
 // ----- progress bar / scrubbing / autoplay next -----
 window.rlProgress = (v) => {
     const bar = v.closest('.rl-item').querySelector('.rl-bar i');
-    if (bar && v.duration) bar.style.width = (v.currentTime / v.duration * 100) + '%';
+    if (bar && v.duration) bar.style.transform = 'scaleX(' + (v.currentTime / v.duration) + ')';
 };
 window.rlScrub = (e, el) => {
     e.stopPropagation();
@@ -210,36 +212,87 @@ window.refreshShorts = async () => {
     if (icon) icon.classList.remove('fa-spin');
 };
 
-// Autoplay the reel in view, pause the rest; warm up the next one so swiping feels instant
+// Autoplay the reel in view, pause the rest; warm up the next two so swiping feels instant.
+// If the reel you land on is still not playable after ~2.5 s, jump to the next one that IS ready
+// (a slow connection never leaves you staring at a spinner).
+let rlSlowTimer = null;
+function rlReady(v) { return v && v.readyState >= 3; }
+function rlSkipIfSlow(item) {
+    clearTimeout(rlSlowTimer);
+    const v = item.querySelector('video');
+    if (!v || rlReady(v)) return;
+    rlSlowTimer = setTimeout(() => {
+        const top = item.getBoundingClientRect().top;
+        if (rlReady(v) || Math.abs(top) > 40) return;      // loaded meanwhile, or the user already moved on
+        let n = item.nextElementSibling;
+        for (let i = 0; i < 3 && n; i++, n = n.nextElementSibling) {
+            const nv = n.querySelector('video');
+            if (rlReady(nv)) { n.scrollIntoView({ behavior: 'smooth' }); return; }
+        }
+        // nothing ready yet: keep waiting, but check again shortly
+        rlSkipIfSlow(item);
+    }, 2500);
+}
+window.rlVideoError = (v) => {
+    const item = v.closest('.rl-item'); if (!item || !v.getAttribute('src')) return;   // ignore the 'error' a deliberately unloaded video can raise
+    item.classList.remove('buffering');
+    const code = v.error ? v.error.code : 0;
+    if (!navigator.onLine) {                          // offline is never a reason to drop a reel: retry when the connection returns
+        item.classList.add('buffering');
+        window.addEventListener('online', () => { const src = v.dataset.src; v.removeAttribute('src'); v.src = src; }, { once: true });
+        return;
+    }
+    if (code === 2 && !item.dataset.retry) {          // network blip: try once more before giving up
+        item.dataset.retry = 1; item.classList.add('buffering');
+        setTimeout(() => { const src = v.dataset.src; v.removeAttribute('src'); v.src = src; }, 1500);
+        return;
+    }
+    const atTop = Math.abs(item.getBoundingClientRect().top) < 10, nxt = item.nextElementSibling;
+    if (atTop && nxt && nxt.classList.contains('rl-item')) nxt.scrollIntoView({ behavior: 'smooth' });
+    if (code !== 2) setTimeout(() => { if (item.parentNode) item.remove(); }, 600);   // deleted / undecodable video: drop it (a mere network failure keeps it)
+};
+
+// Memory/CPU diet: only the reels within ~2 screens of the viewport hold a loaded video; the rest are unloaded.
+// Phones only have a few hardware video decoders, so this is what keeps long sessions smooth.
+let rlNearObserver = null;
+const rlLoad = (v) => { if (v && !v.getAttribute('src') && v.dataset.src) { v.src = v.dataset.src; } };
+const rlUnload = (v) => { if (v && v.getAttribute('src')) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); v.load(); v.closest('.rl-item').classList.remove('buffering', 'paused'); const b = v.closest('.rl-item').querySelector('.rl-bar i'); if (b) b.style.transform = 'scaleX(0)'; } };
 function observeShorts() {
     if (shortsObserver) shortsObserver.disconnect();
+    if (rlNearObserver) rlNearObserver.disconnect();
+    const root = document.getElementById('shortsFeed');
+    rlNearObserver = new IntersectionObserver((entries) => {
+        entries.forEach(e => { const v = e.target.querySelector('video'); e.isIntersecting ? rlLoad(v) : rlUnload(v); });
+    }, { root, rootMargin: '200% 0px 200% 0px' });
     shortsObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             const video = entry.target.querySelector('video');
             if (!video) return;
             if (entry.isIntersecting) {
+                rlLoad(video);
                 video.muted = shortsMuted;
                 video.play().catch(() => {});
-                const nx = entry.target.nextElementSibling && entry.target.nextElementSibling.querySelector('video');
-                if (nx) nx.preload = 'auto';
+                let nx = entry.target.nextElementSibling;
+                for (let i = 0; i < 2 && nx; i++, nx = nx.nextElementSibling) { const nv = nx.querySelector('video'); if (nv) { rlLoad(nv); nv.preload = 'auto'; } }
                 const pv = entry.target.previousElementSibling && entry.target.previousElementSibling.querySelector('video');
                 if (pv) pv.currentTime = 0;
+                rlSkipIfSlow(entry.target);
             } else {
                 video.pause();
             }
         });
-    }, { threshold: 0.6 });
-    document.querySelectorAll('.short-item').forEach(item => shortsObserver.observe(item));
+    }, { root, threshold: 0.6 });
+    document.querySelectorAll('.short-item').forEach(item => { shortsObserver.observe(item); rlNearObserver.observe(item); });
 }
 
-document.getElementById('shortsFeed').addEventListener('scroll', function() {
-    if (this.scrollTop + this.clientHeight >= this.scrollHeight - 200) {
-        if (!isLoadingShorts && hasMoreShorts) {
-            shortsPage++;
-            loadShorts(false);
-        }
-    }
-});
+let rlScrollTick = false;
+document.getElementById('shortsFeed').addEventListener('scroll', function () {
+    if (rlScrollTick) return; rlScrollTick = true;
+    requestAnimationFrame(() => {
+        rlScrollTick = false;
+        if (this.scrollTop + this.clientHeight * 3 >= this.scrollHeight && !isLoadingShorts && hasMoreShorts) { shortsPage++; loadShorts(false); }   // fetch the next batch ~2 reels early
+    });
+}, { passive: true });
 
 // Opens the main Reels page starting at one specific reel (used by profile grid + deep links)
 window.openShortById = async (videoId) => {
@@ -249,7 +302,7 @@ window.openShortById = async (videoId) => {
         const feed = document.getElementById('shortsFeed');
         if (video && video.id) {
             feed.innerHTML = renderShortItem(video);
-            shortsPage = 1; hasMoreShorts = true;
+            shortsPage = 1; hasMoreShorts = true; shortsLoaded = [String(video.id)]; shortsCursor = null;
             document.getElementById('shortsEmptyState').classList.add('hidden');
             if (!shortsActive) switchTab('shorts');
             feed.scrollTop = 0;
@@ -333,46 +386,69 @@ window.deleteVideoDirect = (videoId) => {
     });
 };
 
-// Video upload (Add Short)
-let selectedVideoBase64 = null;
-document.getElementById('videoUploadInput').addEventListener('change', function(e) {
+// New Reel uploader: preview of the chosen clip, caption counter and a REAL upload progress bar
+let selectedVideoFile = null;
+const vuEl = (id) => document.getElementById(id);
+function vuFmtTime(sec) { sec = Math.round(sec || 0); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+function vuReset() {
+    selectedVideoFile = null;
+    const pv = vuEl('vuPreview'); try { pv.pause(); } catch (e) {} if (pv.src) URL.revokeObjectURL(pv.src); pv.removeAttribute('src'); pv.classList.add('hidden');
+    vuEl('vuEmpty').classList.remove('hidden'); vuEl('vuMeta').classList.add('hidden'); vuEl('vuChange').classList.add('hidden'); vuEl('pickVideoBtn').classList.remove('has');
+    vuEl('vuProgress').classList.add('hidden'); vuEl('vuBar').style.width = '0%';
+    vuEl('videoCaptionText').value = ''; vuEl('vuCount').textContent = '0/300'; vuEl('videoFileName').textContent = '';
+    vuEl('submitVideoBtn').disabled = true; vuEl('submitVideoBtn').textContent = 'Share'; vuEl('videoUploadInput').value = '';
+}
+vuEl('videoUploadInput').addEventListener('change', function (e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
-        tg.showAlert("Video must be under 15MB.");
-        this.value = '';
-        return;
-    }
-    document.getElementById('videoFileName').innerText = file.name;
-    const reader = new FileReader();
-    reader.onload = (ev) => { selectedVideoBase64 = ev.target.result; };
-    reader.readAsDataURL(file);
+    if (file.size > 15 * 1024 * 1024) { tg.showAlert("Video must be under 15 MB."); this.value = ''; return; }
+    selectedVideoFile = file;
+    const pv = vuEl('vuPreview'); if (pv.src) URL.revokeObjectURL(pv.src);
+    pv.src = URL.createObjectURL(file);
+    pv.onloadedmetadata = () => { vuEl('vuMeta').textContent = vuFmtTime(pv.duration) + ' · ' + (file.size / 1048576).toFixed(1) + ' MB'; };
+    pv.classList.remove('hidden'); pv.play().catch(() => {});
+    vuEl('vuEmpty').classList.add('hidden'); vuEl('vuMeta').classList.remove('hidden'); vuEl('vuChange').classList.remove('hidden'); vuEl('pickVideoBtn').classList.add('has');
+    vuEl('videoFileName').textContent = file.name;
+    vuEl('submitVideoBtn').disabled = false;
 });
+vuEl('videoCaptionText').addEventListener('input', (e) => { vuEl('vuCount').textContent = e.target.value.length + '/300'; });
 
-document.getElementById('submitVideoBtn').addEventListener('click', async () => {
-    if (!selectedVideoBase64) return tg.showAlert("Choose a video first.");
-    const btn = document.getElementById('submitVideoBtn');
-    btn.innerText = "Uploading..."; btn.disabled = true;
+const fileToDataUrl = (file) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
+function postJsonWithProgress(url, body, onProgress) {
+    return new Promise((ok, no) => {
+        const x = new XMLHttpRequest();
+        x.open('POST', url); x.setRequestHeader('Content-Type', 'application/json');
+        x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+        x.onload = () => { try { ok(JSON.parse(x.responseText)); } catch (e) { ok({ error: 'Server error' }); } };
+        x.onerror = () => no(new Error('network'));
+        x.send(body);
+    });
+}
+
+vuEl('submitVideoBtn').addEventListener('click', async () => {
+    if (!selectedVideoFile) return tg.showAlert("Choose a video first.");
+    const btn = vuEl('submitVideoBtn');
+    btn.disabled = true; btn.textContent = 'Preparing…';
+    vuEl('vuProgress').classList.remove('hidden');
     try {
-        const res = await fetch('/api/createVideo', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tgAuth(), caption: document.getElementById('videoCaptionText').value, videoBase64: selectedVideoBase64 })
+        const videoBase64 = await fileToDataUrl(selectedVideoFile);        // read only now, so choosing a clip costs no memory
+        const data = await postJsonWithProgress('/api/createVideo', JSON.stringify({ initData: tgAuth(), caption: vuEl('videoCaptionText').value, videoBase64 }), (f) => {
+            const pct = Math.round(f * 100);
+            vuEl('vuBar').style.width = pct + '%'; vuEl('vuPct').textContent = pct + '%';
+            btn.textContent = f >= 1 ? 'Processing…' : pct + '%';
         });
-        const data = await res.json();
         if (data && data.success) {
-            tg.showAlert("Short uploaded!");
-            closeModal('videoUploadModal');
-            document.getElementById('videoCaptionText').value = '';
-            document.getElementById('videoFileName').innerText = '';
-            selectedVideoBase64 = null;
-            loadShorts(true);
+            try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+            closeModal('videoUploadModal'); vuReset();
+            tg.showAlert("Your reel is live!");
+            if (typeof shortsActive !== 'undefined' && shortsActive) loadShorts(true);
         } else {
-            tg.showAlert(`Upload failed: ${data.error || 'Server error'}`);
+            tg.showAlert(`Upload failed: ${(data && data.error) || 'Server error'}`);
+            btn.disabled = false; btn.textContent = 'Share'; vuEl('vuProgress').classList.add('hidden');
         }
-    } catch(e) {
+    } catch (e) {
         tg.showAlert("Upload failed: network error.");
-    } finally {
-        btn.innerText = "Upload"; btn.disabled = false;
+        btn.disabled = false; btn.textContent = 'Share'; vuEl('vuProgress').classList.add('hidden');
     }
 });
 

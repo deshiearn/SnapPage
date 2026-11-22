@@ -101,7 +101,7 @@ function formatCaptionBase(text, level, entities) {
 // Dynamic Post Previews uploads
 document.getElementById('imageUpload').addEventListener('change', function(e) {
     const files = Array.from(e.target.files);
-    const maxImgs = ((currentUser && currentUser.level) || 1) >= 3 ? 8 : 4;
+    const maxImgs = maxPhotosForMe();
     if (imagesArray.length + files.length > maxImgs) return tg.showAlert(`Your level allows up to ${maxImgs} photos per post.` + (maxImgs < 8 ? ' Reach Level 3 for 8!' : ''));
     
     files.forEach(file => {
@@ -143,17 +143,40 @@ function renderLivePreview() {
     document.getElementById('postLivePreview').innerHTML = buildPostCardHtml(draftPost()).replace('fade-in', '');
 }
 
+const maxPhotosForMe = () => ((currentUser && currentUser.level) || 1) >= 3 ? 8 : 4;
 function renderPreviews() {
     if (typeof syncPostMB === 'function') syncPostMB();
     const c = document.getElementById('imgPreviewContainer');
-    c.innerHTML = '';
-    imagesArray.forEach((src, idx) => {
-        c.innerHTML += `<div class="relative min-w-[80px] h-20 rounded-lg overflow-hidden border">
-            <img src="${src}" class="w-full h-full object-cover">
-            <button onclick="removeImg(${idx})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"><i class="fas fa-times"></i></button>
-        </div>`;
-    });
+    const max = maxPhotosForMe();
+    c.innerHTML = imagesArray.map((src, idx) => `<div class="cmp-th"><img src="${src}" alt=""><button onclick="removeImg(${idx})" aria-label="Remove"><i class="fas fa-times"></i></button></div>`).join('')
+        + (imagesArray.length && imagesArray.length < max ? `<button class="cmp-add" onclick="document.getElementById('imageUpload').click()" aria-label="Add photo"><i class="fas fa-plus"></i></button>` : '');
+    const badge = document.getElementById('cmpPhotoBadge'); if (badge) badge.textContent = imagesArray.length + '/' + max;
+    updateComposerMeta();
 }
+function updateComposerMeta() {
+    const ta = document.getElementById('postText'); if (!ta) return;
+    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 260) + 'px';        // grows with the text
+    const n = ta.value.length, cnt = document.getElementById('cmpCount');
+    cnt.textContent = n + '/1000'; cnt.classList.toggle('warn', n > 900);
+    const u = currentUser || {};
+    document.getElementById('cmpAvatar').src = u.photo_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.name || 'U');
+    document.getElementById('cmpName').textContent = u.name || 'You';
+    document.getElementById('cmpMeta').innerHTML = '<i class="fas fa-earth-americas"></i> Public · Level ' + (u.level || 1);
+    const go = document.getElementById('submitPostBtn'); if (go) { go.disabled = !postReady(); go.textContent = editModePostId ? 'Save' : 'Post'; }
+}
+window.cmpInsert = (ch) => {
+    const ta = document.getElementById('postText'), a = ta.selectionStart || ta.value.length, b = ta.selectionEnd || ta.value.length;
+    const pre = ta.value.slice(0, a), needSpace = pre && !/\s$/.test(pre);
+    ta.value = pre + (needSpace ? ' ' : '') + ch + ta.value.slice(b);
+    ta.focus(); const pos = pre.length + (needSpace ? 1 : 0) + ch.length; ta.setSelectionRange(pos, pos);
+    ta.dispatchEvent(new Event('input'));
+};
+const CMP_EMOJIS = ['😀','😂','🥰','😍','😎','🤩','🥳','😢','😡','🙏','👍','👏','🔥','❤️','💯','🎉','✨','🌟','🌸','☕','🍕','⚽','🎵','🇧🇩'];
+window.cmpToggleEmoji = () => {
+    const box = document.getElementById('cmpEmojis');
+    if (!box.innerHTML) box.innerHTML = CMP_EMOJIS.map(e => `<button onclick="cmpInsert('${e}')">${e}</button>`).join('');
+    box.classList.toggle('hidden');
+};
 window.removeImg = (idx) => { imagesArray.splice(idx, 1); renderPreviews(); }
 
 // Create / Edit Post Submission
@@ -162,7 +185,10 @@ const postReady = () => !!(document.getElementById('postText').value.trim() || i
 function syncPostMB() {
     renderLivePreview(); if (window.MB) MB.update('postModal', { active: postReady(), text: editModePostId ? 'Save' : 'Post' }); }
 window.MB_SCREENS.postModal = () => MB.show('postModal', { text: editModePostId ? 'Save' : 'Post', active: postReady(), onClick: () => submitPost(), inPage: postBtn });
-document.getElementById('postText').addEventListener('input', syncPostMB);
+document.getElementById('postText').addEventListener('input', () => {
+    syncPostMB(); updateComposerMeta();
+    if (!editModePostId) { try { localStorage.setItem('snap_draft', document.getElementById('postText').value); } catch (e) {} }   // autosave unsent text
+});
 
 postBtn.addEventListener('click', () => submitPost());
 
@@ -186,6 +212,7 @@ async function submitPost() {
 
     // Reset + close the composer immediately
     document.getElementById('postText').value = '';
+    try { localStorage.removeItem('snap_draft'); } catch (e) {}
     imagesArray = []; editModePostId = null;
     renderPreviews();
     closeModal('postModal');

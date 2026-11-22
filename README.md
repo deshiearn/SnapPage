@@ -155,3 +155,12 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 - Phone/Telegram **Back** now steps back instead of closing the app: it clears an active search, and from the Me tab returns to Home. The app only closes from the plain Home feed.
 - Dark mode: search result cards and sponsored (ad) cards now follow the theme (text was unreadable).
 - Founder profile: aurora background, twinkling sparkles, floating crown, rotating golden ring with a pulse, staggered entrance. All profiles get a staggered entrance for stats/buttons. Animations are transform/opacity only, off in Lite mode and with "reduce motion".
+
+## Capacity, ranking, admin System tab, composers (Nov 2026)
+- **sql/15_profile_sync_system.sql** (run it): Telegram name/@username/photo auto-sync on app open (every 6 h, hand-edited name/photo never overwritten), `db_stats()` for exact DB size in Admin → System, and feed indexes.
+- **Feed + Reels ranking** ("For You"): engagement ÷ age^1.15, ×1.7 followed authors, ×0.15 already-seen, author diversity, fresh-post boost; stateless pagination (`exclude` + `cursor`). Seen items are remembered on the device (`snap_seen`).
+- **Reels**: only reels within ~2 screens keep a loaded video (smooth on low-end phones); next two are pre-buffered; a slow reel (>2.5 s) is skipped for the next one that is ready; broken videos are dropped, offline never drops anything.
+- **Admin panel** now uses the same built CSS/icons as the app (no runtime Tailwind CDN; Chart.js loads only on the dashboard), light + dark. New **System** tab: RAM, DB size, req/min, content counts, capacity guide, post/video retention limits, "Test upload to storage channel", "Clean up & free memory". Defaults: 20 000 posts / 1 500 reels kept.
+- Uploads: friendly error reasons (bot not admin, channel not found, rate limit…), one automatic retry, max 3 simultaneous uploads, 28 MB request cap (protects the 512 MB instance).
+- Fonts are cache-busted by content hash, so newly added icons can never be missing because of a stale cached font.
+- **Create Post** and **New Reel** sheets redesigned (author row, auto-growing text, photo grid, emoji strip, hashtag/mention, counters, draft autosave; reel preview, real upload progress bar).

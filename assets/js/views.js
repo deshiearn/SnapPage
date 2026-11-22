@@ -3,6 +3,16 @@
 // A post/video counts as "viewed" once it has been on screen for ~1.2s. Ids are batched and sent every 5s
 // (and when the app is hidden), at most once per item per session, never for your own content.
 const seenViews = new Set();
+// Persistent "already seen" memory (last 400 items) — the server pushes these down in the ranking so feeds stay fresh
+const SEEN_KEY = 'snap_seen';
+let seenStore = [];
+try { seenStore = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]'); } catch (e) {}
+window.getSeenIds = (prefix) => seenStore.filter(k => k[0] === prefix).map(k => k.slice(1));
+function rememberSeen(key) {
+    if (seenStore.includes(key)) return;
+    seenStore.push(key); if (seenStore.length > 400) seenStore = seenStore.slice(-400);
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify(seenStore)); } catch (e) {}
+}
 const pendingViews = { posts: new Set(), videos: new Set() };
 const viewTimers = new WeakMap();
 
@@ -15,7 +25,7 @@ const viewObserver = new IntersectionObserver((entries) => {
                 const postId = el.dataset.viewPost, videoId = el.dataset.videoId;
                 const key = postId ? 'p' + postId : 'v' + videoId;
                 if (seenViews.has(key)) return;
-                seenViews.add(key);
+                seenViews.add(key); rememberSeen(key);
                 (postId ? pendingViews.posts : pendingViews.videos).add(postId || videoId);
             }, 1200));
         } else if (viewTimers.has(el)) {

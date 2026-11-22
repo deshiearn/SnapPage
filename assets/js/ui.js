@@ -101,11 +101,7 @@ window.openModal = (id) => {
         // NOTE: this must NOT reset the title/editModePostId here — triggerEditPost()
         // sets those up *before* calling openModal(), and doing it here would silently
         // flip an edit back into "Create Post" mode. See openNewPostModal() for that reset.
-        // Everyone can post photos + text now (no level gate)
-        const addPhotosBtn = document.getElementById('addPhotosBtn');
-        addPhotosBtn.disabled = false;
-        addPhotosBtn.classList.remove('opacity-40');
-        addPhotosBtn.innerHTML = '<i class="fas fa-image"></i> Add Photos (Max 4)';
+        renderPreviews();   // refresh counters / tiles
     }
 };
 
@@ -117,6 +113,7 @@ window.openNewPostModal = () => {
     renderPreviews();
     openModal('postModal');
     document.getElementById('postModalTitle').innerText = "Create Post";
+    try { const d = localStorage.getItem('snap_draft'); if (d) { document.getElementById('postText').value = d; renderPreviews(); } } catch (e) {}   // unsent text comes back
 };
 
 window.closeModal = (id) => {
