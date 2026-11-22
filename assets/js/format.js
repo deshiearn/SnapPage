@@ -117,7 +117,7 @@ document.getElementById('imageUpload').addEventListener('change', function(e) {
                 imagesArray.push(c.toDataURL('image/jpeg', 0.85));
                 renderPreviews();
             };
-            img.onerror = () => { imagesArray.push(ev.target.result); renderPreviews(); };
+            img.onerror = () => { tg.showAlert('This photo format is not supported. Please pick a JPG or PNG image.'); };
             img.src = ev.target.result;
         };
         reader.readAsDataURL(file);

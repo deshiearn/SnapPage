@@ -563,3 +563,41 @@ body.lite .fd-orb{display:none}
 #shortsFeed{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .dark-mode textarea.cmp-text{background:transparent!important;color:inherit!important}
 .dark-mode .tgi-sheet,.dark-mode .tgi-card,.dark-mode .tgi-nav{color:var(--app-text)}
+
+/* ===== Comments (Telegram-style thread) ===== */
+.cm-sheet{padding:0!important;overflow:hidden}
+.cm-grab{width:36px;height:5px;border-radius:9px;background:rgba(120,120,128,.35);margin:8px auto 0}
+.cm-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 12px 10px;border-bottom:.5px solid var(--app-sep2,rgba(60,60,67,.29))}
+.cm-nav h3{font-weight:700;font-size:16px}.cm-nav h3 em{font-style:normal;font-weight:500;color:var(--app-hint,#8e8e93);margin-left:2px}
+.cm-close{width:30px;height:30px;border-radius:50%;background:rgba(120,120,128,.16);display:flex;align-items:center;justify-content:center;font-size:13px;margin-left:auto}
+.cm-list{flex:1;overflow-y:auto;padding:6px 14px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cm-empty{text-align:center;padding:48px 20px;color:var(--app-hint,#8e8e93)}.cm-empty i{font-size:34px;opacity:.45;margin-bottom:8px;display:block}
+.cm-item{display:flex;gap:10px;padding:9px 0;position:relative;animation:cmIn .22s ease}
+.cm-item.cm-reply{margin-left:44px;padding:6px 0}
+.cm-item.pending{opacity:.55}
+@keyframes cmIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.cm-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;object-fit:cover;color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center}
+.cm-reply .cm-av{width:28px;height:28px;font-size:12px}
+.cm-main{flex:1;min-width:0}
+.cm-name{font-size:13px;font-weight:700}.cm-name .fa-check-circle{color:#3b82f6;font-size:11px}
+.cm-text{font-size:14.5px;line-height:1.38;white-space:pre-wrap;word-break:break-word;margin-top:1px}
+.cm-meta{display:flex;gap:14px;font-size:12px;color:var(--app-hint,#8e8e93);margin-top:3px;font-weight:600}
+.cm-meta button{font-weight:600;color:inherit}.cm-meta button:active{opacity:.5}
+.cm-like{display:flex;flex-direction:column;align-items:center;gap:1px;width:34px;padding-top:4px;color:var(--app-hint,#8e8e93);font-size:15px}
+.cm-like small{font-size:11px;font-weight:600}.cm-like.on{color:#ff3b30}.cm-like.pop i{animation:likePop .3s ease}
+@keyframes likePop{50%{transform:scale(1.4)}}
+.cm-more{display:flex;align-items:center;gap:8px;margin:0 0 2px 46px;font-size:12px;font-weight:600;color:var(--app-hint,#8e8e93)}.cm-more::before{content:"";width:24px;height:1px;background:currentColor;opacity:.5}
+.cm-replies.hidden{display:none}
+.cm-reply-bar{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;padding:7px 16px;background:var(--app-accent-tint,rgba(0,122,255,.12));color:var(--app-link,#007aff)}
+.cm-suggest{display:flex;gap:6px;overflow-x:auto;padding:8px 12px 2px;scrollbar-width:none;border-top:.5px solid var(--app-sep2,rgba(60,60,67,.29))}.cm-suggest::-webkit-scrollbar{display:none}
+.cm-suggest button{flex-shrink:0;font-size:22px;line-height:1;padding:5px 8px;border-radius:12px;transition:transform .1s}.cm-suggest button:active{transform:scale(.85)}
+.cm-suggest .cm-phrase{font-size:13px;font-weight:600;padding:7px 12px;border-radius:99px;background:rgba(120,120,128,.14)}
+.cm-input-row{display:flex;align-items:center;gap:9px;padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 10px)}
+.cm-me{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;background:rgba(120,120,128,.25)}
+.cm-input-row input{flex:1;min-width:0;height:40px;border-radius:99px;padding:0 16px;font-size:16px;background:rgba(120,120,128,.12)!important;color:inherit!important;border:0!important;outline:0}
+.cm-send{width:36px;height:36px;border-radius:50%;background:var(--app-accent,#007aff);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;transition:opacity .15s,transform .12s}
+.cm-send:disabled{opacity:.3}.cm-send:active:not(:disabled){transform:scale(.9)}
+/* ===== Notifications (Telegram-style list) ===== */
+.nt-sheet{padding:0!important;overflow:hidden}.nt-sheet .tgi-nav{border-radius:14px 14px 0 0}
+.nt-list{flex:1;overflow-y:auto;padding:0;background:var(--app-surface,#fff);-webkit-overflow-scrolling:touch}
+.nt-sheet .notif-row{border-radius:0;margin:0;padding:11px 16px;border-bottom:.5px solid var(--app-sep2,rgba(60,60,67,.18))}
