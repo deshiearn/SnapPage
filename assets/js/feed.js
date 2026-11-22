@@ -1,5 +1,6 @@
 'use strict';
 // Load Posts Feed with Pagination and Infinite Scroll (10 posts at a time)
+let feedLoaded = [], feedCursor = null;   // ranked-feed pagination state (see /api/getPosts)
 async function loadPosts(page = 1, clearFeed = true) {
     if (isLoadingFeed) return;
     isLoadingFeed = true;
@@ -9,6 +10,7 @@ async function loadPosts(page = 1, clearFeed = true) {
         feed.innerHTML = '<div class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>';
         currentPage = 1;
         hasMorePosts = true;
+        feedLoaded = []; feedCursor = null;
     } else {
         const scrollLoading = document.createElement('div');
         scrollLoading.id = 'feed-scroll-loading';
@@ -21,9 +23,10 @@ async function loadPosts(page = 1, clearFeed = true) {
         const res = await fetch('/api/getPosts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tgAuth(), page, limit: 10, feed: feedMode })
+            body: JSON.stringify({ initData: tgAuth(), page, limit: 10, feed: feedMode, ranked: true, exclude: feedLoaded.slice(-300), cursor: feedCursor || undefined, seen: getSeenIds('p').slice(-300) })
         });
         const posts = await res.json();
+        if (Array.isArray(posts)) posts.forEach(p => { feedLoaded.push(String(p.id)); if (p._older) feedCursor = p.created_at; });
 
         const indicator = document.getElementById('feed-scroll-loading');
         if (indicator) indicator.remove();
