@@ -138,6 +138,7 @@ document.getElementById('homeSearchInput').addEventListener('input', function() 
     clearTimeout(homeSearchTimeout);
     const val = this.value.trim();
     document.getElementById('homeSearchClearBtn').classList.toggle('hidden', !val);
+    syncBackButton();
     if (!val) { clearHomeSearch(); return; }
     homeSearchTimeout = setTimeout(() => performHomeSearch(val), 350);
 });
@@ -180,6 +181,7 @@ async function performHomeSearch(query) {
 window.clearHomeSearch = () => {
     document.getElementById('homeSearchInput').value = '';
     document.getElementById('homeSearchClearBtn').classList.add('hidden');
+    syncBackButton();
     loadPosts(1, true);
 };
 

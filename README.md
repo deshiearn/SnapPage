@@ -150,3 +150,8 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 - **Reels**: full-screen, Following / For You tabs, back + sound + upload in the top bar, action rail on the right (avatar with +Follow, like/reactions, comment, share, more), author + caption bottom-left, scrubbable progress bar, double-tap to like (heart burst), auto-plays the next reel when one ends, next video is pre-loaded. Portrait videos fill the screen, landscape ones fit.
 - **Referral page** now uses the same grouped-card style as the Me page (level hero, copy/share, network stats, perks, history).
 - Emojis inside posts are plain static text (no animation) for a calmer, lighter feed.
+
+## Back button, dark-mode fixes, founder profile
+- Phone/Telegram **Back** now steps back instead of closing the app: it clears an active search, and from the Me tab returns to Home. The app only closes from the plain Home feed.
+- Dark mode: search result cards and sponsored (ad) cards now follow the theme (text was unreadable).
+- Founder profile: aurora background, twinkling sparkles, floating crown, rotating golden ring with a pulse, staggered entrance. All profiles get a staggered entrance for stats/buttons. Animations are transform/opacity only, off in Lite mode and with "reduce motion".

@@ -1,12 +1,20 @@
 'use strict';
 // Switch Tabs (FIXED: Clicking Home nav icon triggers a clean page 1 reload refresh)
 let shortsActive = false;
+let currentTab = 'home';
+
+// Phone/Telegram Back must never close the app while you're deeper than the Home feed:
+// an active search or any tab other than Home gets its own "step back".
+window.homeSearchActive = () => { const i = document.getElementById('homeSearchInput'); return !!(i && i.value.trim()); };
+window.baseBackNeeded = () => !shortsActive && (currentTab !== 'home' || homeSearchActive());
+window.syncBackButton = () => { if (openModalsStack.length > 0 || baseBackNeeded()) tg.BackButton.show(); else tg.BackButton.hide(); };
 window.switchTab = (tab) => {
     if (tab === 'shorts') {
         enterShorts();
         return;
     }
     if (shortsActive) leaveShortsUI();
+    currentTab = tab;
 
     ['home', 'settings'].forEach(t => {
         const element = document.getElementById(`tab-${t}`);
@@ -57,7 +65,7 @@ function leaveShortsUI() {
     document.getElementById('bottomNav').classList.remove('hidden');
     document.querySelectorAll('#shortsFeed video').forEach(v => v.pause());
     openModalsStack = openModalsStack.filter(m => m !== '__shorts__');
-    if (openModalsStack.length === 0) tg.BackButton.hide();
+    syncBackButton();
 }
 
 window.exitShorts = () => {
@@ -119,9 +127,7 @@ window.closeModal = (id) => {
         mbClose(id);
 
         // If all modals are closed, hide Telegram's Native BackButton
-        if (openModalsStack.length === 0) {
-            tg.BackButton.hide();
-        }
+        syncBackButton();
     }
 };
 
@@ -152,7 +158,7 @@ window.closeSheet = (bg, sheet) => {
     setTimeout(() => document.getElementById(bg).classList.add('hidden'), 300);
     openModalsStack = openModalsStack.filter(m => m !== bg);
     mbClose(bg);
-    if (openModalsStack.length === 0) tg.BackButton.hide();
+    syncBackButton();
 }
 window.openLightbox = (src) => { document.getElementById('lightboxImg').src = src; openModal('lightbox'); }
 
@@ -169,7 +175,12 @@ tg.BackButton.onClick(() => {
         } else {
             closeModal(lastModal);
         }
+    } else if (homeSearchActive()) {
+        clearHomeSearch();
+    } else if (currentTab !== 'home') {
+        switchTab('home');
     }
+    syncBackButton();
 });
 
 // Caption URL restriction logic based on level
