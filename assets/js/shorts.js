@@ -8,26 +8,33 @@ let shortsObserver = null;
 // sound button is a real user gesture, so we can safely unmute from then on.
 let shortsMuted = true;
 
+let shortsMode = 'foryou';   // 'foryou' | 'following'
+
 async function loadShorts(reset = false) {
     if (isLoadingShorts) return;
     isLoadingShorts = true;
     const feed = document.getElementById('shortsFeed');
     if (reset) { feed.innerHTML = ''; shortsPage = 1; hasMoreShorts = true; }
+    const empty = document.getElementById('shortsEmptyState');
 
     try {
         const res = await fetch('/api/getShorts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ page: shortsPage, limit: 5 })
+            body: JSON.stringify({ page: shortsPage, limit: 5, initData: tgAuth(), following: shortsMode === 'following' })
         });
         const videos = await res.json();
 
         if (!videos || videos.length === 0) {
             hasMoreShorts = false;
-            if (reset) document.getElementById('shortsEmptyState').classList.remove('hidden');
+            if (reset) {
+                document.getElementById('shortsEmptyMsg').textContent = shortsMode === 'following'
+                    ? 'Follow people to see their reels here.' : 'No Shorts yet — be the first to upload!';
+                empty.classList.remove('hidden');
+            }
             return;
         }
-        document.getElementById('shortsEmptyState').classList.add('hidden');
+        empty.classList.add('hidden');
         if (videos.length < 5) hasMoreShorts = false;
 
         videos.forEach(v => {
@@ -42,107 +49,114 @@ async function loadShorts(reset = false) {
     }
 }
 
+window.setShortsMode = (mode) => {
+    if (mode === shortsMode) { refreshShorts(); return; }      // tapping the active tab = refresh
+    shortsMode = mode;
+    document.querySelectorAll('.rl-tab').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+    document.getElementById('shortsEntryLoading').classList.remove('hidden');
+    loadShorts(true);
+};
+
 function renderShortItem(v) {
     const myReaction = currentUser && v.reactions ? (v.reactions[currentUser.tg_id] || '') : '';
     const shortLikeCount = (v.likes_count || 0) + Object.keys(v.reactions || {}).length;
     const hasLiked = v.likes_users && currentUser && v.likes_users.includes(currentUser.tg_id);
-    const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle verified-badge" style="color:#3b82f6"></i>' : '';
+    const verifiedIcon = v.author_verified ? ' <i class="fas fa-check-circle" style="color:#3b82f6"></i>' : '';
     const captionHtml = animateEmojis(formatCaption(v.caption, v.author_level || 1, v.entities));
-    const plainLength = (v.caption || '').length;
+    const mine = currentUser && (String(v.author_id) === String(currentUser.tg_id) || (currentUser.channels || []).some(c => String(c.id) === String(v.author_id)));
+    const showFollow = !mine && !v.is_following && v.type !== 'channel';
+    const avatar = v.author_photo || 'https://ui-avatars.com/api/?name=U';
     return `
-    <div class="short-item fade-in w-full h-full snap-start relative flex items-center justify-center bg-black" style="scroll-snap-align: start;" data-video-id="${v.id}">
-        <video class="w-full h-full object-contain" src="${v.stream_url}" loop muted playsinline preload="auto"
-            onwaiting="this.closest('.short-item').querySelector('.short-loading').classList.remove('hidden')"
-            onplaying="this.closest('.short-item').querySelector('.short-loading').classList.add('hidden')"
-            oncanplay="this.closest('.short-item').querySelector('.short-loading').classList.add('hidden')"
-            onpause="this.closest('.short-item').querySelector('.short-pause-indicator').classList.remove('hidden')"
-            onplay="this.closest('.short-item').querySelector('.short-pause-indicator').classList.add('hidden')"></video>
+    <div class="short-item rl-item" data-video-id="${v.id}" data-author="${v.author_id}">
+        <video class="rl-video" src="${v.stream_url}" playsinline muted preload="metadata" poster=""
+            onloadedmetadata="this.classList.toggle('rl-cover', this.videoHeight >= this.videoWidth * 1.2)"
+            onwaiting="this.closest('.rl-item').classList.add('buffering')"
+            onplaying="this.closest('.rl-item').classList.remove('buffering', 'paused')"
+            oncanplay="this.closest('.rl-item').classList.remove('buffering')"
+            onpause="if(!this.ended)this.closest('.rl-item').classList.add('paused')"
+            ontimeupdate="rlProgress(this)" onended="rlEnded(this)"></video>
+        <div class="rl-shade"></div>
 
-        <div class="short-loading hidden absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="w-10 h-10 border-4 border-white/30 border-t-white rounded-full" style="animation: spin 0.8s linear infinite;"></div>
-        </div>
+        <div class="rl-spin"></div>
+        <div class="rl-pause"><i class="fas fa-play"></i></div>
+        <div class="rl-tap" onclick="handleShortTap(event, '${v.id}')"></div>
 
-        <div class="short-pause-indicator hidden absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="bg-black/40 rounded-full w-16 h-16 flex items-center justify-center">
-                <i class="fas fa-pause text-white text-3xl"></i>
+        <div class="rl-rail">
+            <div class="rl-avwrap" onclick="openProfile('${v.author_id}')">
+                <img src="${avatar}" class="rl-av" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=U'">
+                ${showFollow ? `<button class="rl-plus" onclick="event.stopPropagation();rlFollow(this,'${v.author_id}')" aria-label="Follow"><i class="fas fa-plus"></i></button>` : ''}
             </div>
+            <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn rl-btn">
+                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i>
+                <span class="like-count">${shortLikeCount}</span>
+                <span class="rl-react-row" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
+            </button>
+            <button onclick="openComments('${v.id}', 'video')" class="rl-btn"><i class="far fa-comment-dots"></i><span>Comment</span></button>
+            <button onclick="shareVideoDirectly('${v.id}')" class="rl-btn"><i class="far fa-paper-plane"></i><span>Share</span></button>
+            <button onclick="openShortOptions('${v.id}', '${v.author_id}', '${v.type}')" class="rl-btn" aria-label="More"><i class="fas fa-ellipsis"></i></button>
         </div>
 
-        <!-- Tap zones: middle tap toggles play/pause; double-tap left/right seeks -5s/+5s -->
-        <div class="absolute inset-0" onclick="handleShortTap(event, '${v.id}')">
-            <div class="short-seek-left absolute left-0 top-0 h-full w-1/2 flex items-center justify-center gap-1 opacity-0 pointer-events-none transition-opacity duration-300">
-                <i class="fas fa-backward text-white text-2xl"></i><span class="text-white text-xs font-bold">5s</span>
-            </div>
-            <div class="short-seek-right absolute right-0 top-0 h-full w-1/2 flex items-center justify-center gap-1 opacity-0 pointer-events-none transition-opacity duration-300">
-                <i class="fas fa-forward text-white text-2xl"></i><span class="text-white text-xs font-bold">5s</span>
-            </div>
+        <div class="rl-info">
+            <div class="rl-author" onclick="openProfile('${v.author_id}')"><b>${escapeHtml(v.author_name || 'User')}${verifiedIcon}</b></div>
+            <p class="rl-cap caption-clamp" data-full="${escapeHtml(v.caption || '').replace(/"/g, '&quot;')}">${captionHtml}</p>
+            <button onclick="toggleCaption(this)" class="hidden see-more-btn rl-more">more</button>
         </div>
 
-        <div class="absolute top-4 left-4 right-16 flex items-center gap-2 cursor-pointer" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);" onclick="openProfile('${v.author_id}')">
-            <img src="${v.author_photo}" class="w-9 h-9 rounded-full border-2 border-white object-cover">
-            <span class="text-white text-sm font-bold drop-shadow">${v.author_name}${verifiedIcon}</span>
-        </div>
-
-        <div class="absolute right-3 bottom-40 flex flex-col items-center gap-5 text-white">
-            <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn flex flex-col items-center gap-1">
-                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'} text-2xl"></i>
-                <span class="text-xs like-count">${shortLikeCount}</span>
-                <span class="text-sm leading-none" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
-            </button>
-            <button onclick="openComments('${v.id}', 'video')" class="flex flex-col items-center gap-1">
-                <i class="fas fa-comment text-2xl"></i>
-                <span class="text-xs">Comment</span>
-            </button>
-            <button onclick="shareVideoDirectly('${v.id}')" class="flex flex-col items-center gap-1">
-                <i class="fas fa-share text-2xl"></i>
-                <span class="text-xs">Share</span>
-            </button>
-            <button onclick="openShortOptions('${v.id}', '${v.author_id}', '${v.type}')">
-                <i class="fas fa-ellipsis-v text-2xl"></i>
-            </button>
-        </div>
-
-        <div class="absolute left-3 right-20 bottom-24 text-white pointer-events-none">
-            <div class="pointer-events-auto inline-block">
-                <p class="text-sm caption-clamp" data-full="${escapeHtml(v.caption || '').replace(/"/g, '&quot;')}">${captionHtml}</p>
-                <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-gray-300 mt-1">See more</button>
-            </div>
-        </div>
+        <div class="rl-bar" ontouchstart="rlScrub(event,this)" ontouchmove="rlScrub(event,this)" onpointerdown="rlScrub(event,this)"><i></i></div>
     </div>`;
 }
 
-// Double-tap left/right to seek -5s/+5s; a single tap in the middle toggles play/pause
-let shortTapState = {};
-window.handleShortTap = (e, videoId) => {
-    const container = e.currentTarget.closest('.short-item');
-    const video = container.querySelector('video');
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX;
-    const isRight = (x - rect.left) > rect.width / 2;
-    const now = Date.now();
-    const key = videoId + (isRight ? '_r' : '_l');
-    const last = shortTapState[key] || 0;
+// ----- progress bar / scrubbing / autoplay next -----
+window.rlProgress = (v) => {
+    const bar = v.closest('.rl-item').querySelector('.rl-bar i');
+    if (bar && v.duration) bar.style.width = (v.currentTime / v.duration * 100) + '%';
+};
+window.rlScrub = (e, el) => {
+    e.stopPropagation();
+    const v = el.closest('.rl-item').querySelector('video');
+    const pt = e.touches ? e.touches[0] : e;
+    const r = el.getBoundingClientRect();
+    if (v.duration) v.currentTime = Math.max(0, Math.min(1, (pt.clientX - r.left) / r.width)) * v.duration;
+};
+window.rlEnded = (v) => {
+    // keep people watching: roll straight on to the next reel, or replay if this is the last one
+    const item = v.closest('.rl-item'), next = item.nextElementSibling;
+    if (next && next.classList.contains('rl-item')) next.scrollIntoView({ behavior: 'smooth' });
+    else { v.currentTime = 0; v.play().catch(() => {}); }
+};
+window.rlFollow = async (btn, authorId) => {
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/toggleFollow', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), targetId: authorId }) });
+        const d = await res.json();
+        if (d && d.success) {
+            if (!d.following) { await fetch('/api/toggleFollow', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), targetId: authorId }) }); }   // was already following — undo the toggle
+            document.querySelectorAll(`.rl-item[data-author="${authorId}"] .rl-plus`).forEach(b => { b.classList.add('done'); b.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => b.remove(), 900); });
+            try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+        } else tg.showAlert((d && d.error) || 'Could not follow');
+    } catch (e) { btn.disabled = false; }
+};
 
-    if (now - last < 350) {
-        shortTapState[key] = 0;
-        if (video) {
-            video.currentTime = isRight
-                ? Math.min(video.duration || (video.currentTime + 5), video.currentTime + 5)
-                : Math.max(0, video.currentTime - 5);
-        }
-        const indicator = container.querySelector(isRight ? '.short-seek-right' : '.short-seek-left');
-        if (indicator) {
-            indicator.classList.remove('opacity-0');
-            setTimeout(() => indicator.classList.add('opacity-0'), 400);
-        }
-    } else {
-        shortTapState[key] = now;
-        setTimeout(() => {
-            if (shortTapState[key] === now && video) {
-                if (video.paused) video.play().catch(() => {}); else video.pause();
-            }
-        }, 300);
+// Single tap = play/pause · double tap anywhere = like with a heart burst
+let rlLast = { t: 0, id: '' };
+window.handleShortTap = (e, videoId) => {
+    const item = e.currentTarget.closest('.short-item'), video = item.querySelector('video');
+    const now = Date.now();
+    if (rlLast.id === videoId && now - rlLast.t < 300) {
+        rlLast = { t: 0, id: '' };
+        const r = item.getBoundingClientRect();
+        const h = document.createElement('i');
+        h.className = 'fas fa-heart rl-burst'; h.style.left = (e.clientX - r.left) + 'px'; h.style.top = (e.clientY - r.top) + 'px';
+        item.appendChild(h); setTimeout(() => h.remove(), 800);
+        const btn = item.querySelector('.react-btn'), ic = btn && btn.querySelector('i');
+        const liked = btn && (btn.querySelector('.react-emoji:not(.hidden)') || (ic && ic.classList.contains('fas')));
+        if (btn && !liked) likeVideo(btn, videoId);
+        return;
     }
+    rlLast = { t: now, id: videoId };
+    setTimeout(() => {
+        if (rlLast.id === videoId && rlLast.t === now && video) { if (video.paused) video.play().catch(() => {}); else video.pause(); }
+    }, 300);
 };
 
 window.toggleCaption = (btn) => {
@@ -170,11 +184,8 @@ window.refreshCaptionOverflows = (root) => {
 window.addEventListener('resize', () => refreshCaptionOverflows());
 
 // Wrap emoji in animated spans (text nodes only, never inside tags)
-function animateEmojis(html) {
-    if (!html) return html;
-    const re = /(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*)/gu;
-    return html.split(/(<[^>]*>)/).map(part => part.startsWith('<') ? part : part.replace(re, '<span class="emoji-pop">$1</span>')).join('');
-}
+// Emojis in posts are shown as plain, static text (no per-emoji animation — lighter and calmer)
+function animateEmojis(html) { return html; }
 
 window.handleImgSliderScroll = (el) => {
     const idx = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1));
@@ -187,7 +198,7 @@ window.toggleShortsSound = () => {
     shortsMuted = !shortsMuted;
     document.querySelectorAll('#shortsFeed video').forEach(v => { v.muted = shortsMuted; });
     const icon = document.getElementById('shortsSoundIcon');
-    if (icon) icon.className = shortsMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    if (icon) icon.className = shortsMuted ? 'fas fa-volume-xmark' : 'fas fa-volume-high';
 };
 
 // Reloads the Shorts feed from the top with fresh videos
@@ -199,7 +210,7 @@ window.refreshShorts = async () => {
     if (icon) icon.classList.remove('fa-spin');
 };
 
-// Autoplay the Short in view, pause the rest — classic TikTok scroll behavior
+// Autoplay the reel in view, pause the rest; warm up the next one so swiping feels instant
 function observeShorts() {
     if (shortsObserver) shortsObserver.disconnect();
     shortsObserver = new IntersectionObserver((entries) => {
@@ -207,8 +218,12 @@ function observeShorts() {
             const video = entry.target.querySelector('video');
             if (!video) return;
             if (entry.isIntersecting) {
-                video.muted = shortsMuted; // respect the current sound preference every time a video (re)starts
+                video.muted = shortsMuted;
                 video.play().catch(() => {});
+                const nx = entry.target.nextElementSibling && entry.target.nextElementSibling.querySelector('video');
+                if (nx) nx.preload = 'auto';
+                const pv = entry.target.previousElementSibling && entry.target.previousElementSibling.querySelector('video');
+                if (pv) pv.currentTime = 0;
             } else {
                 video.pause();
             }
@@ -229,7 +244,7 @@ document.getElementById('shortsFeed').addEventListener('scroll', function() {
 // Opens the main Reels page starting at one specific reel (used by profile grid + deep links)
 window.openShortById = async (videoId) => {
     try {
-        const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId }) });
+        const res = await fetch('/api/getVideoById', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ videoId, initData: tgAuth() }) });
         const video = await res.json();
         const feed = document.getElementById('shortsFeed');
         if (video && video.id) {
@@ -360,3 +375,5 @@ document.getElementById('submitVideoBtn').addEventListener('click', async () => 
         btn.innerText = "Upload"; btn.disabled = false;
     }
 });
+
+window.goBackFromShorts = () => { if (typeof exitShorts === 'function') exitShorts(); else switchTab('home'); };

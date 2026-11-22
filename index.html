@@ -78,26 +78,27 @@
     <div id="tab-shorts" class="hidden fixed inset-0 bg-black z-30">
         <div id="shortsFeed" class="w-full h-full overflow-y-scroll snap-y snap-mandatory" style="scroll-snap-type: y mandatory;"></div>
 
-        <div class="fixed right-4 z-40 flex flex-col gap-3" style="top: calc(var(--top-inset, env(safe-area-inset-top, 24px)) + 60px);">
-            <button onclick="toggleShortsSound()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
-                <i class="fas fa-volume-mute" id="shortsSoundIcon"></i>
-            </button>
-            <button onclick="refreshShorts()" class="text-white bg-black/40 w-9 h-9 rounded-full flex items-center justify-center">
-                <i class="fas fa-rotate-right" id="shortsRefreshIcon"></i>
-            </button>
+        <div class="rl-top">
+            <button onclick="goBackFromShorts()" class="rl-ic" aria-label="Back"><i class="fas fa-chevron-left"></i></button>
+            <div class="rl-tabs">
+                <button class="rl-tab" data-mode="following" onclick="setShortsMode('following')">Following</button>
+                <button class="rl-tab on" data-mode="foryou" onclick="setShortsMode('foryou')">For You</button>
+            </div>
+            <div class="rl-top-r">
+                <button onclick="toggleShortsSound()" class="rl-ic" aria-label="Sound"><i class="fas fa-volume-xmark" id="shortsSoundIcon"></i></button>
+                <button onclick="openModal('videoUploadModal')" class="rl-ic" aria-label="Upload"><i class="fas fa-plus"></i></button>
+            </div>
         </div>
-        <button onclick="openModal('videoUploadModal')" class="fixed bottom-6 right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl">
-            <i class="fas fa-plus"></i>
-        </button>
+        <i id="shortsRefreshIcon" class="hidden fas fa-rotate-right"></i>
 
-        <div id="shortsEmptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-white gap-2">
-            <i class="fas fa-video-slash text-4xl text-gray-500"></i>
-            <p class="text-gray-400 text-sm">No Shorts yet — be the first to upload!</p>
+        <div id="shortsEmptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-white gap-3 px-8 text-center">
+            <i class="fas fa-clapperboard text-5xl opacity-40"></i>
+            <p id="shortsEmptyMsg" class="text-sm opacity-70">No Shorts yet — be the first to upload!</p>
         </div>
 
         <div id="shortsEntryLoading" class="hidden absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black">
             <div class="w-10 h-10 border-4 border-white/20 border-t-white rounded-full" style="animation: spin 0.8s linear infinite;"></div>
-            <p class="text-gray-400 text-xs">Loading Shorts...</p>
+            <p class="text-gray-400 text-xs">Loading Reels…</p>
         </div>
     </div>
 
@@ -351,55 +352,51 @@
 
     <!-- REFER SYSTEM BOTTOM SHEET -->
     <div id="referModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="referSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl overflow-hidden">
-            <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="font-bold text-lg"><i class="fas fa-gift text-pink-500"></i> Referral Center</h3>
-                <button onclick="closeSheet('referModalBg', 'referSheet')"><i class="fas fa-times text-xl"></i></button>
+        <div id="referSheet" class="bg-white w-full rounded-t-3xl bottom-sheet h-[88vh] flex flex-col shadow-2xl overflow-hidden rf-sheet">
+            <div class="rf-bar"><span class="rf-grab"></span></div>
+            <div class="rf-head">
+                <button onclick="closeSheet('referModalBg', 'referSheet')" class="rf-x" aria-label="Close"><i class="fas fa-times"></i></button>
+                <h3>Invite & Level Up</h3>
+                <span style="width:32px"></span>
             </div>
-            <div class="space-y-4 flex-1 overflow-y-auto pr-1">
-                <div class="refer-hero rounded-2xl p-4 shadow-lg">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-[11px] opacity-80 font-semibold tracking-wide">YOUR LEVEL</p>
-                            <p id="referLevelLabel" class="text-2xl font-extrabold">Level 1</p>
-                        </div>
-                        <i class="fas fa-crown text-3xl opacity-90 icon-pop"></i>
+            <div class="rf-scroll">
+                <div class="refer-hero rf-hero">
+                    <div class="rf-hero-top">
+                        <span class="rf-crown"><i class="fas fa-crown"></i></span>
+                        <div><p class="rf-kicker">YOUR LEVEL</p><p id="referLevelLabel" class="rf-level">Level 1</p></div>
                     </div>
-                    <div class="mt-3 h-2 rounded-full bg-white/25 overflow-hidden"><div id="referProgressBar" class="h-full bg-white rounded-full transition-all duration-700" style="width:0%"></div></div>
-                    <p id="referProgressLabel" class="text-[11px] mt-1.5 opacity-90"></p>
+                    <div class="rf-track"><div id="referProgressBar" class="rf-fill" style="width:0%"></div></div>
+                    <p id="referProgressLabel" class="rf-hint"></p>
                 </div>
-                <div class="p-4 bg-gray-50 rounded-xl border">
-                    <label class="text-[11px] text-gray-500 font-bold block mb-1 tracking-wide"><i class="fas fa-link"></i> YOUR REFERRAL LINK</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="referInputLink" readonly class="flex-1 bg-white border rounded-lg px-3 py-2 text-xs outline-none text-gray-900" value="">
-                        <button onclick="copyReferLinkDirect()" class="bg-blue-600 text-white px-4 rounded-lg flex items-center gap-1 text-sm font-semibold">
-                            <i class="fas fa-copy"></i> Copy
-                        </button>
+
+                <p class="rf-sec">Your invite link</p>
+                <div class="tgme-group rf-card">
+                    <div class="rf-link"><i class="fas fa-link"></i><input type="text" id="referInputLink" readonly value=""></div>
+                    <div class="rf-actions">
+                        <button onclick="copyReferLinkDirect()" class="rf-btn rf-btn-soft"><i class="fas fa-copy"></i> Copy</button>
+                        <button onclick="shareReferLink()" class="rf-btn rf-btn-main"><i class="fas fa-paper-plane"></i> Share</button>
                     </div>
                 </div>
-                <div>
-                    <h4 class="font-bold text-sm mb-2 text-gray-700"><i class="fas fa-users text-blue-500"></i> Your Network</h4>
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
-                            <div class="text-xs text-blue-600 font-bold">Lvl 1</div>
-                            <div id="lvl1Count" class="text-xl font-bold text-gray-800">0</div>
-                        </div>
-                        <div class="bg-purple-50 p-3 rounded-lg border border-purple-100 text-center">
-                            <div class="text-xs text-purple-600 font-bold">Lvl 2</div>
-                            <div id="lvl2Count" class="text-xl font-bold text-gray-800">0</div>
-                        </div>
-                        <div class="bg-pink-50 p-3 rounded-lg border border-pink-100 text-center">
-                            <div class="text-xs text-pink-600 font-bold">Lvl 3</div>
-                            <div id="lvl3Count" class="text-xl font-bold text-gray-800">0</div>
-                        </div>
-                    </div>
+
+                <p class="rf-sec">Your network</p>
+                <div class="rf-stats">
+                    <div class="rf-stat"><b id="lvl1Count">0</b><span>Direct</span></div>
+                    <div class="rf-stat"><b id="lvl2Count">0</b><span>2nd tier</span></div>
+                    <div class="rf-stat"><b id="lvl3Count">0</b><span>3rd tier</span></div>
                 </div>
-                <div>
-                    <h4 class="font-bold text-sm mb-2 text-gray-700">Referral History</h4>
-                    <div id="referHistoryList" class="space-y-2">
-                        <p class="text-xs text-gray-400 text-center py-4">No refer stats yet.</p>
-                    </div>
+
+                <p class="rf-sec">Perks you unlock</p>
+                <div class="tgme-group rf-card">
+                    <div class="rf-perk"><span class="tg-ic" style="background:#3b82f6"><i class="fas fa-seedling"></i></span><span class="rf-pt">Level 1<small>4 photos per post · 3 stories</small></span></div>
+                    <div class="rf-perk"><span class="tg-ic" style="background:#8b5cf6"><i class="fas fa-face-smile-beam"></i></span><span class="rf-pt">Level 2 · 2 invites<small>Reactions 🎉 🥰 · 5 stories</small></span></div>
+                    <div class="rf-perk"><span class="tg-ic" style="background:#f59e0b"><i class="fas fa-gem"></i></span><span class="rf-pt">Level 3 · 3 invites<small>Reactions 💎 🤯 · 8 photos · 8 stories</small></span></div>
                 </div>
+
+                <p class="rf-sec">Referral history</p>
+                <div id="referHistoryList" class="tgme-group rf-card rf-hist">
+                    <p class="rf-empty">No refer stats yet.</p>
+                </div>
+                <div style="height:96px"></div>
             </div>
         </div>
     </div>

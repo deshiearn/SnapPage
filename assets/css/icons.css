@@ -11,14 +11,19 @@
 .fa-backward::before{content:"\f04a"}
 .fa-bell::before{content:"\f0f3"}
 .fa-camera::before{content:"\f030"}
+.fa-check::before{content:"\f00c"}
 .fa-check-circle::before{content:"\f058"}
 .fa-check-square::before{content:"\f14a"}
+.fa-chevron-left::before{content:"\f053"}
 .fa-chevron-right::before{content:"\f054"}
+.fa-clapperboard::before{content:"\e131"}
 .fa-cog::before{content:"\f013"}
 .fa-comment::before{content:"\f075"}
+.fa-comment-dots::before{content:"\f4ad"}
 .fa-copy::before{content:"\f0c5"}
 .fa-crown::before{content:"\f521"}
 .fa-download::before{content:"\f019"}
+.fa-ellipsis::before{content:"\f141"}
 .fa-ellipsis-v::before{content:"\f142"}
 .fa-eye::before{content:"\f06e"}
 .fa-face-smile-beam::before{content:"\f5b8"}
@@ -45,6 +50,7 @@
 .fa-robot::before{content:"\f544"}
 .fa-rotate-right::before{content:"\f2f9"}
 .fa-search::before{content:"\f002"}
+.fa-seedling::before{content:"\f4d8"}
 .fa-share::before{content:"\f064"}
 .fa-shield-alt::before{content:"\f3ed"}
 .fa-spinner::before{content:"\f110"}
@@ -62,5 +68,7 @@
 .fa-users::before{content:"\f0c0"}
 .fa-video::before{content:"\f03d"}
 .fa-video-slash::before{content:"\f4e2"}
+.fa-volume-high::before{content:"\f028"}
 .fa-volume-mute::before{content:"\f6a9"}
 .fa-volume-up::before{content:"\f028"}
+.fa-volume-xmark::before{content:"\f6a9"}
