@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=fe790678" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=4a7ef57b" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -199,7 +199,7 @@
                         <div><b id="cmpName">You</b><small id="cmpMeta"><i class="fas fa-earth-americas"></i> Public</small></div>
                     </div>
                     <textarea id="postText" maxlength="1000" rows="4" class="cmp-text" data-i18n-ph="whats_on_mind" placeholder="What's on your mind?"></textarea>
-                    <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+                    <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
                     <div id="imgPreviewContainer" class="cmp-grid"></div>
                 </div>
                 <p class="tgi-foot"><span>Add #hashtags so people can find your post.</span><span id="cmpCount" class="cmp-count">0/1000</span></p>
@@ -241,7 +241,7 @@
                     <span class="settings-avatar-cam"><i class="fas fa-camera"></i></span>
                 </button>
                 <span class="text-[11px] text-gray-400 mt-1" data-i18n="change_photo">Change photo</span>
-                <input type="file" id="epPhotoInput" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pickProfilePhoto(this)">
+                <input type="file" id="epPhotoInput" accept="image/*" class="hidden" onchange="pickProfilePhoto(this)">
             </div>
             <label class="text-[11px] font-bold text-gray-400 tracking-wide">NAME</label>
             <input id="epName" maxlength="40" class="w-full bg-gray-50 border rounded-xl px-3 py-2.5 mb-3 outline-none text-sm" placeholder="Your name">
@@ -262,7 +262,7 @@
                 <button id="submitVideoBtn" class="tgi-act" disabled>Share</button>
             </div>
             <div class="tgi-scroll">
-                <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" class="hidden">
+                <input type="file" id="videoUploadInput" accept="video/*" class="hidden">
                 <div class="tgi-card" style="padding:14px 0">
                     <button id="pickVideoBtn" onclick="document.getElementById('videoUploadInput').click()" class="vu-drop" aria-label="Choose video">
                         <video id="vuPreview" class="hidden" muted playsinline loop></video>
@@ -288,7 +288,7 @@
     </div>
 
     <!-- STORIES: hidden file picker, compose screen, full-screen viewer -->
-    <input type="file" id="storyFileInput" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" class="hidden">
+    <input type="file" id="storyFileInput" accept="image/*,video/*" class="hidden">
 
     <div id="storyCompose" class="hidden fixed inset-0 bg-black z-[130] flex flex-col">
         <div class="flex items-center justify-between p-4 text-white" style="padding-top: calc(var(--top-inset, env(safe-area-inset-top, 0px)) + 56px);">
@@ -350,33 +350,35 @@
 
     <!-- NOTIFICATIONS BOTTOM SHEET -->
     <div id="notifModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="notifSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet h-[80vh] flex flex-col shadow-2xl">
-            <div class="flex justify-between items-center mb-3 border-b pb-2">
-                <h3 class="font-bold" data-i18n="notifications_title">Notifications</h3>
-                <div class="flex items-center gap-4">
-                    <button onclick="clearAllNotifs()" class="text-xs font-bold text-red-500"><i class="fas fa-trash-alt"></i> Clear all</button>
-                    <button onclick="closeSheet('notifModalBg', 'notifSheet')"><i class="fas fa-times text-xl"></i></button>
-                </div>
+        <div id="notifSheet" class="bottom-sheet tgi-sheet nt-sheet flex flex-col shadow-2xl" style="height:80vh">
+            <div class="tgi-nav">
+                <button class="tgi-cancel" onclick="clearAllNotifs()" style="color:var(--app-danger,#ff3b30)">Clear</button>
+                <h3 data-i18n="notifications_title">Notifications</h3>
+                <button class="tgi-act" onclick="closeSheet('notifModalBg', 'notifSheet')">Done</button>
             </div>
-            <div id="notifList" class="flex-1 overflow-y-auto space-y-1.5"></div>
+            <div id="notifList" class="nt-list"></div>
         </div>
     </div>
 
     <!-- COMMENTS BOTTOM SHEET -->
     <div id="commentModalBg" class="hidden fixed inset-0 blur-bg z-50 flex items-end">
-        <div id="commentSheet" class="bg-white w-full rounded-t-3xl p-5 bottom-sheet flex flex-col shadow-2xl" style="height:min(75vh, calc(var(--tg-viewport-stable-height, 100vh) - 24px))">
-            <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="font-bold" data-i18n="comments_title">Comments</h3>
-                <button onclick="closeComment()"><i class="fas fa-times text-xl"></i></button>
+        <div id="commentSheet" class="bg-white w-full rounded-t-3xl bottom-sheet cm-sheet flex flex-col shadow-2xl" style="height:min(80vh, calc(var(--tg-viewport-stable-height, 100vh) - 24px))">
+            <div class="cm-grab"></div>
+            <div class="cm-nav">
+                <span style="min-width:44px"></span>
+                <h3><span data-i18n="comments_title">Comments</span> <em id="cmCount"></em></h3>
+                <button onclick="closeComment()" class="cm-close" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
-            <div id="commentList" class="flex-1 overflow-y-auto space-y-3 mb-3 animate-none"></div>
-            <div id="replyBar" class="hidden flex items-center justify-between text-xs bg-blue-50 text-blue-600 rounded-lg px-3 py-1.5 mb-2">
+            <div id="commentList" class="cm-list"></div>
+            <div id="replyBar" class="hidden cm-reply-bar">
                 <span>Replying to <b id="replyBarName"></b></span>
-                <button onclick="cancelReply()" class="text-blue-400"><i class="fas fa-times"></i></button>
+                <button onclick="cancelReply()" aria-label="Cancel reply"><i class="fas fa-times"></i></button>
             </div>
-            <div id="commentInputRow" class="flex gap-2">
-                <input type="text" id="commentInput" enterkeyhint="send" autocomplete="off" class="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-gray-900" style="font-size:16px" data-i18n-ph="write_comment" placeholder="Write a comment...">
-                <button id="sendCommentBtn" class="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center"><i class="fas fa-paper-plane"></i></button>
+            <div id="cmSuggest" class="cm-suggest"></div>
+            <div id="commentInputRow" class="cm-input-row">
+                <img id="cmMeAv" class="cm-me" src="" alt="">
+                <input type="text" id="commentInput" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" maxlength="1000" data-i18n-ph="write_comment" placeholder="Write a comment...">
+                <button id="sendCommentBtn" class="cm-send" disabled aria-label="Send"><i class="fas fa-arrow-up"></i></button>
             </div>
         </div>
     </div>

@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const { Readable } = require('stream');
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
@@ -165,7 +166,18 @@ function tgImageUrl(fileId) {
     return `/api/tgImage/${fileId}`;
 }
 
-let lastUploadErr = '';
+let lastUploadErr = '', lastUploadAlert = 0;
+// Tells the admins (once an hour) that photo uploads are failing and why, so it never fails silently
+async function alertAdminUploadProblem(reason) {
+    if (Date.now() - lastUploadAlert < 3600 * 1000) return;
+    lastUploadAlert = Date.now();
+    try {
+        const ids = new Set([String(FOUNDER_ID)]);
+        const { data } = await supabase.from('users').select('tg_id').eq('is_admin', true).limit(5);
+        (data || []).forEach(u => ids.add(String(u.tg_id)));
+        for (const id of ids) if (/^\d+$/.test(id)) bot.telegram.sendMessage(id, `⚠️ SnapPages: photo uploads are failing.\n\n${reason}\n\nFix: Admin panel → Settings → Storage Channel, then Admin → System → "Test photo upload".`).catch(() => {});
+    } catch (e) { /* best effort */ }
+}
 function friendlyTgErr(e) {
     const m = String((e && (e.description || e.message)) || e);
     if (/chat not found/i.test(m)) return "Storage channel not found — Admin: re-save it in Admin panel → Settings → Storage Channel.";
@@ -189,6 +201,7 @@ async function uploadImageToTelegram(base64Str) {
     if (!STORAGE_CHANNEL_ID) {
         console.error("uploadImageToTelegram: no storage channel configured (Admin panel → Storage Channel).");
         lastUploadErr = "Storage channel is not set. Admin: Admin panel → Settings → Storage Channel.";
+        alertAdminUploadProblem(lastUploadErr);
         return null;
     }
     try {
@@ -202,6 +215,7 @@ async function uploadImageToTelegram(base64Str) {
         const sizes = sentMsg.photo;
         if (!sizes || sizes.length === 0) {
             console.error("uploadImageToTelegram: sendPhoto succeeded but returned no photo sizes.");
+            lastUploadErr = "Telegram accepted the upload but returned no photo (is the file a valid image?).";
             return null;
         }
         const fileId = sizes[sizes.length - 1].file_id; // largest resolution
@@ -209,6 +223,7 @@ async function uploadImageToTelegram(base64Str) {
     } catch (e) {
         console.error("uploadImageToTelegram failed:", e.message || e);
         lastUploadErr = friendlyTgErr(e);
+        if (!/rate-limiting|timed out/.test(lastUploadErr)) alertAdminUploadProblem(lastUploadErr);
         return null;
     }
 }
@@ -1613,7 +1628,6 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
         }]);
 
         if (error) throw error;
-        await enforcePostCap();
 
         const response = { success: true };
         if (Math.random() < 0.05) enforcePostCap();   // cheap probabilistic check; housekeeping also runs every 6 h
@@ -2062,7 +2076,12 @@ app.post('/api/getComments', async (req, res) => {
             const fallback = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true }).limit(200);
             data = fallback.data;
         }
-        res.json(data || []);
+        const rows = data || [];
+        try {      // live name + photo for each commenter (one cached batch lookup)
+            const metas = await getUserMetaBatch([...new Set(rows.map(c => String(c.author_id)))]);
+            rows.forEach(c => { const m = metas[String(c.author_id)]; if (m) { c.author_photo = m.photo_url || ''; if (m.name) c.author_name = m.name; c.author_verified = !!m.is_verified || String(c.author_id) === FOUNDER_ID; } });
+        } catch (e) { /* names/photos are cosmetic */ }
+        res.json(rows);
     } catch (e) {
         console.error("getComments crashed:", e);
         res.json([]);
@@ -2147,7 +2166,7 @@ app.post('/api/addComment', async (req, res) => {
             }
         } catch (e) { console.error('comment notifications failed:', e.message || e); }
 
-        res.json({ success: true });
+        res.json({ success: true, id: newCommentId });
     } catch (e) {
         const msg = e.message || String(e);
         if (msg.includes('invalid input syntax for type uuid')) {
@@ -2287,30 +2306,47 @@ async function getCachedFileLink(fileId) {
     return url;
 }
 
+// Files are streamed THROUGH the server. A redirect to Telegram's file URL would hand every viewer the bot token
+// (https://api.telegram.org/file/bot<TOKEN>/...), which is full control of the bot.
+async function proxyTelegramFile(req, res, fileId, kind) {
+    try {
+        let up;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const url = await getCachedFileLink(fileId);
+            const headers = {}; if (req.headers.range) headers.Range = req.headers.range;
+            up = await fetch(url, { headers });
+            if (up.ok) break;
+            fileLinkCache.delete(fileId);          // stale link: resolve a fresh one and try again
+        }
+        if (!up || !up.ok) return res.status(404).send('File not found');
+        res.status(up.status);
+        for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified']) { const v = up.headers.get(h); if (v) res.set(h, v); }
+        if (!res.get('Content-Type') || res.get('Content-Type') === 'application/octet-stream') res.set('Content-Type', kind === 'image' ? 'image/jpeg' : 'video/mp4');
+        if (!res.get('Accept-Ranges')) res.set('Accept-Ranges', 'bytes');
+        res.set('Cache-Control', kind === 'image' ? 'public, max-age=31536000, immutable' : 'public, max-age=86400');   // a file_id never changes
+        const body = Readable.fromWeb(up.body);
+        req.on('close', () => body.destroy());
+        body.on('error', () => res.end());
+        body.pipe(res);
+    } catch (e) { if (!res.headersSent) res.status(404).send('File not found'); else res.end(); }
+}
+app.get('/api/tgImage/:fileId', (req, res) => proxyTelegramFile(req, res, req.params.fileId, 'image'));
+app.get('/api/tgVideo/:fileId', (req, res) => proxyTelegramFile(req, res, req.params.fileId, 'video'));
+
+const videoFileIds = new Map();   // video id -> file_id (so Range requests don't hit the DB every time)
 app.get('/api/videoStream/:id', async (req, res) => {
     try {
-        const { data: video } = await supabase.from('videos').select('file_id').eq('id', req.params.id).maybeSingle();
-        if (!video) return res.status(404).send("Video not found");
-        res.redirect(await getCachedFileLink(video.file_id));
+        let fid = videoFileIds.get(req.params.id);
+        if (!fid) {
+            const { data: video } = await supabase.from('videos').select('file_id').eq('id', req.params.id).maybeSingle();
+            if (!video) return res.status(404).send("Video not found");
+            fid = video.file_id; videoFileIds.set(req.params.id, fid);
+            if (videoFileIds.size > 2000) videoFileIds.delete(videoFileIds.keys().next().value);
+        }
+        proxyTelegramFile(req, res, fid, 'video');
     } catch (e) {
         res.status(500).send("Could not resolve video stream");
     }
-});
-
-// Same idea as videoStream, but for images (profile photos, channel avatars, post/channel
-// photos) — replaces the old ImgBB-hosted URLs entirely.
-app.get('/api/tgImage/:fileId', async (req, res) => {
-    try {
-        res.set('Cache-Control', 'public, max-age=3000');
-        res.redirect(await getCachedFileLink(req.params.fileId));
-    } catch (e) {
-        res.status(404).send("Image not found");
-    }
-});
-
-app.get('/api/tgVideo/:fileId', async (req, res) => {
-    try { res.set('Cache-Control', 'public, max-age=3000'); res.redirect(await getCachedFileLink(req.params.fileId)); }
-    catch (e) { res.status(404).send('Video not found'); }
 });
 
 // Upload a new video (users only — channels are captured automatically via channel_post)

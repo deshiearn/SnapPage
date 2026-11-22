@@ -167,3 +167,9 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 
 ## Telegram-iOS style composers
 Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · title · bold action), grouped inset cards, coloured icon rows (Photos / Hashtag / Mention / Emoji), section headers and footers with counters, light + dark.
+
+## Comments, notifications, upload hardening, token safety
+- **Comments** rebuilt Telegram-style: avatars (live photo/name), time, heart on the right, collapsible replies, **instant posting** (shows immediately, rolls back with your text restored on failure), Enter to send, **smart emoji suggestions** (English + Bengali keywords) and **one-tap quick replies**, sheet lifts above the keyboard.
+- **Notifications** sheet uses the same Telegram-style list and nav bar.
+- **Security**: photos/videos are now streamed through the server (`/api/tgImage`, `/api/tgVideo`, `/api/videoStream`) instead of redirecting to Telegram's file URL, which exposed the bot token to every viewer. Images are cached for a year (immutable file ids). Note: media bandwidth now passes through Render (100 GB/month free).
+- **Photo upload**: gallery pickers use `image/*` / `video/*` (opens the gallery, not the file manager); unsupported formats give a clear message; if uploads fail the admins get a bot message with the exact reason (once an hour); duplicate cap query removed from post creation.

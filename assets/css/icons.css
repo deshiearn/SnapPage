@@ -1,5 +1,5 @@
 /* Slim Font Awesome: only the icons this app uses, self-hosted & subsetted */
-@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=fe790678) format("woff")}
+@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=4a7ef57b) format("woff")}
 @font-face{font-family:"FAR";font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/fa-regular.woff?h=744ac024) format("woff")}
 .fa,.fas,.fa-solid,.far,.fa-regular{display:inline-block;font-style:normal;font-variant:normal;line-height:1;text-rendering:auto;-webkit-font-smoothing:antialiased}
 .fa,.fas,.fa-solid{font-family:"FA";font-weight:900}
@@ -8,6 +8,7 @@
 @keyframes fa-spin{to{transform:rotate(360deg)}}
 .fa-adjust::before{content:"\f042"}
 .fa-arrow-left::before{content:"\f060"}
+.fa-arrow-up::before{content:"\f062"}
 .fa-arrows-rotate::before{content:"\f021"}
 .fa-at::before{content:"\40"}
 .fa-backward::before{content:"\f04a"}
