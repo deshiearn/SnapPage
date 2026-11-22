@@ -164,3 +164,6 @@ If the app outgrows the free plans, the upgrade path is: Render *Starter* (no sl
 - Uploads: friendly error reasons (bot not admin, channel not found, rate limit…), one automatic retry, max 3 simultaneous uploads, 28 MB request cap (protects the 512 MB instance).
 - Fonts are cache-busted by content hash, so newly added icons can never be missing because of a stale cached font.
 - **Create Post** and **New Reel** sheets redesigned (author row, auto-growing text, photo grid, emoji strip, hashtag/mention, counters, draft autosave; reel preview, real upload progress bar).
+
+## Telegram-iOS style composers
+Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · title · bold action), grouped inset cards, coloured icon rows (Photos / Hashtag / Mention / Emoji), section headers and footers with counters, light + dark.
