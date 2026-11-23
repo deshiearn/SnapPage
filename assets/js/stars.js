@@ -54,7 +54,7 @@ function sxBurst(anchor, n) {
 
 // ---------- Wallet ----------
 let sxTx = [], sxTxFilter = 'all';
-const SX_TX = { deposit: ['Bought Stars', '#34c759'], unlock: ['Unlocked content', '#ff9500'], earn: ['Content unlocked', '#007aff'], tip: ['Star reaction sent', '#af52de'], tip_in: ['Star reaction received', '#ff2d55'], admin: ['Adjustment', '#8e8e93'], payout: ['Withdrawal', '#8e8e93'] };
+const SX_TX = { deposit: ['Bought Stars', '#34c759'], unlock: ['Unlocked content', '#ff9500'], earn: ['Content unlocked', '#007aff'], tip: ['Star reaction sent', '#af52de'], tip_in: ['Star reaction received', '#ff2d55'], admin: ['Adjustment', '#8e8e93'], payout: ['Withdrawal', '#8e8e93'], payout_refund: ['Withdrawal returned', '#34c759'] };
 function sxRenderTx() {
     const list = sxTx.filter(x => sxTxFilter === 'all' || (sxTxFilter === 'in' ? x.amount > 0 : x.amount < 0));
     document.getElementById('sxHistory').innerHTML = list.length ? list.map(x => { const n = SX_TX[x.kind] || [x.kind, '#8e8e93']; return `<div class="tgi-row sx-tx"><span class="sx-txic" style="background:${n[1]}">${sxStar()}</span><span class="tgi-label">${n[0]}<small>${timeAgo(x.created_at)}</small></span><b class="${x.amount > 0 ? 'sx-pos' : 'sx-neg'}">${x.amount > 0 ? '+' : '\u2212'}${sxNum(Math.abs(x.amount))} ${sxStar('sx-inl')}</b></div>`; }).join('') : '<div class="sx-empty">No transactions</div>';
@@ -68,6 +68,41 @@ window.openWallet = async () => {
     if (!d || d.error) { tg.showAlert((d && d.error) || 'Could not load your wallet. Check your connection.'); document.getElementById('sxHistory').innerHTML = `<div class="sx-empty">${escapeHtml((d && d.error) || 'Could not load your wallet.')}</div>`; return; }
     document.getElementById('sxPending').innerHTML = (d.pending || []).map(p => `<div class="tgi-card"><button class="tgi-row" onclick="sxResume(${p.id})"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-hourglass-half"></i></span><span class="tgi-label">Unpaid invoice \u00b7 ${sxNum(p.stars)} Stars</span><span class="tgi-val">Check</span></button></div>`).join('');
     sxTx = d.txns || []; sxRenderTx();
+    const c = d.config || SX.cfg || {};
+    document.getElementById('sxTopBtn').classList.toggle('off', c.topup_on === false);
+    document.getElementById('sxPayBtn').classList.toggle('off', c.payout_on === false);
+    const ST = { pending: 'Pending', paid: 'Paid', rejected: 'Declined' };
+    const po = d.payouts || [];
+    document.getElementById('sxPayouts').innerHTML = po.length ? `<p class="tgi-head">Withdrawals</p><div class="tgi-card">${po.slice(0, 5).map(p => `<div class="tgi-row sx-tx"><span class="sx-txic" style="background:#8e8e93">${sxStar()}</span><span class="tgi-label">${sxNum(p.stars)} Stars${p.amount ? ` \u2192 ${p.amount} ${p.currency || ''}` : ''}<small>${timeAgo(p.created_at)}${p.admin_note ? ' \u00b7 ' + escapeHtml(p.admin_note) : ''}</small></span><span class="sx-st ${p.status}">${ST[p.status] || p.status}</span></div>`).join('')}</div>` : '';
+};
+window.sxTopUp = async () => { const c = await sxConfig(); if (c.topup_on === false) { sxHaptic('light'); return sxToast('Top Up is paused for now'); } openAddStars(); };
+
+// ---------- Payout (Withdraw) ----------
+window.sxOpenPayout = async () => {
+    const c = await sxConfig();
+    if (c.payout_on === false) { sxHaptic('light'); return sxToast('Withdrawals are paused for now'); }
+    document.getElementById('poBal').textContent = sxNum(SX.balance || 0);
+    document.getElementById('poAmt').value = ''; document.getElementById('poRecv').textContent = '\u2013';
+    document.getElementById('poNote').textContent = `Minimum ${sxNum(c.payout_min)} Stars \u00b7 ${sxNum(c.payout_per_unit)} Stars = 1 ${c.currency}. Requests are reviewed by the team, usually within 1\u20133 days. Stars are held until then.`;
+    try { document.getElementById('poDest').value = localStorage.getItem('sxDest') || ''; } catch (e) {}
+    openSheet('payoutBg', 'payoutSheet');
+    sxRefresh().then(() => { document.getElementById('poBal').textContent = sxNum(SX.balance || 0); });
+};
+window.sxPoCalc = () => { const c = SX.cfg || {}, n = parseInt(document.getElementById('poAmt').value) || 0; document.getElementById('poRecv').textContent = n > 0 ? `\u2248 ${(Math.floor(n / c.payout_per_unit * 100) / 100).toFixed(2)} ${c.currency}` : '\u2013'; };
+window.sxPoMax = () => { document.getElementById('poAmt').value = SX.balance || 0; sxPoCalc(); sxHaptic('light'); };
+window.sxDoPayout = async () => {
+    const c = SX.cfg || {}, stars = parseInt(document.getElementById('poAmt').value) || 0, dest = document.getElementById('poDest').value.trim();
+    if (stars < c.payout_min) return tg.showAlert(`Minimum withdrawal is ${sxNum(c.payout_min)} Stars.`);
+    if (stars > (SX.balance || 0)) return tg.showAlert('You do not have that many Stars.');
+    if (dest.length < 4) return tg.showAlert('Enter where we should send the payment.');
+    const go = document.getElementById('poGo'); go.disabled = true; go.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+    const d = await sxPost('/api/stars/payout', { stars, dest });
+    go.disabled = false; go.textContent = 'Withdraw';
+    if (!d.success) { if (d.balance !== undefined) { SX.balance = d.balance; sxPaintBalance(); } return tg.showAlert(d.error || 'Could not send the request.'); }
+    try { localStorage.setItem('sxDest', dest); } catch (e) {}
+    SX.balance = d.balance; sxPaintBalance(); sxHaptic('ok'); sxBurst(go, 18);
+    setTimeout(() => closeSheet('payoutBg', 'payoutSheet'), 400);
+    setTimeout(() => { sxToast(`${sxStar('sx-inl')} Withdrawal requested`); openWallet(); }, 600);
 };
 window.sxResume = async (id) => { const d = await sxPost('/api/stars/checkDeposit', { id }); if (d.status === 'paid') { sxPaid(); } else sxToast(d.status === 'expired' ? 'Invoice expired' : 'Not paid yet'); };
 
@@ -212,7 +247,7 @@ window.sxDoTip = async () => {
     go.disabled = false;
     if (d._status === 402) { closeSheet('tipBg', 'tipSheet'); SX.balance = d.balance; SX.target = t.amt; sxPaintBalance(); setTimeout(() => { sxToast('Not enough Stars'); openAddStars(); }, 320); return; }
     if (!d.success) { go.innerHTML = 'Try again'; return tg.showAlert(d.error === 'self' ? "You can't tip yourself." : (d.error || 'Could not send.')); }
-    SX.balance = d.balance; sxPaintBalance(); document.getElementById('tipBalNum').textContent = sxNum(d.balance); sxHaptic('ok'); sxBurst(go, 24);
+    SX.balance = d.balance; sxPaintBalance(); document.getElementById('tipBalNum').textContent = sxNum(d.balance); sxHaptic('ok'); sxBurst(go, 24); sxBumpTips(t.kind, t.id, t.amt);
     setTimeout(() => closeSheet('tipBg', 'tipSheet'), 450);
     setTimeout(() => sxToast(`${sxStar('sx-inl')} Sent ${sxNum(t.amt)} Stars`), 500);
 };
@@ -251,3 +286,19 @@ window.sxResetPaid = sxResetPaid;
 
 // Home "Premium" empty state + boot
 document.addEventListener('DOMContentLoaded', () => { setTimeout(() => { if (isRealTgUser && typeof currentUser !== 'undefined') sxRefresh().catch(() => {}); }, 2500); });
+
+// Star reactions always come first in a post's reaction row
+function sxBumpTips(kind, id, amt) {
+    document.querySelectorAll(`[data-react-row="${kind}:${id}"]`).forEach(row => {
+        const total = (Number(row.dataset.tips) || 0) + amt; row.dataset.tips = total;
+        if (kind === 'video') { if (!row.textContent.startsWith('⭐')) row.textContent = '⭐' + row.textContent; return; }
+        const chip = row.querySelector('.sx-tipchip');
+        if (chip) chip.querySelector('b').textContent = sxNum(total);
+        else row.insertAdjacentHTML('afterbegin', `<button class="react-chip sx-tipchip" onclick="sxChipTip(this,'${kind}','${id}')">${sxStar('sx-inl')}<b>${sxNum(total)}</b></button>`);
+    });
+}
+window.sxChipTip = (el, kind, id) => {
+    const own = kind === 'post' ? !el.closest('[data-view-post]') : false;
+    if (own) { sxToast('Stars from your supporters'); return sxHaptic('light'); }
+    sxOpenTip(kind, id, sxAuthorName(el));
+};

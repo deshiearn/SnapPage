@@ -184,3 +184,10 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 - **Security**: real media of paid items lives in `paid_assets` (never returned by feeds); paid videos stream only with a signed, per-user token; unlock/tip/deposit are atomic SQL functions (no double-spend, no double-credit).
 - **Deposits (xRocket)**: Admin → Stars → paste the xRocket Pay API key, currency and "Stars per 1 unit". The server creates an invoice, then re-reads it from xRocket (it never trusts webhook bodies) and credits Stars automatically (polling from the app + webhook hint + 1-minute safety net). API style can be `auto`, `v1` (Bearer) or `legacy` (Rocket-Pay-Key).
 - **SQL**: run `sql/16_stars_paid.sql` in Supabase.
+
+### Payout, Star reactions and maintenance (Stage F)
+
+- **Top Up / Withdraw** screens follow the Telegram iOS "Stars" design. Withdraw holds the Stars immediately and creates a request; Admin → Stars → *Payout requests* shows them with **Mark paid** (you send the money yourself) or **Reject + refund**.
+- **Star reactions** appear first in a post's reaction row (the ⭐ total), followed by the other reactions.
+- **Admin → Stars → Switches & maintenance**: turn Top Up or Payout on/off, and switch the whole app into **Maintenance mode** (users see a notice; admins keep working).
+- **SQL**: run `sql/17_stars_top_senders.sql` and `sql/18_stars_payouts.sql` after `16`.

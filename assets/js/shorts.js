@@ -92,7 +92,7 @@ function renderShortItem(v) {
             <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn rl-btn">
                 <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i>
                 <span class="like-count">${shortLikeCount}</span>
-                <span class="rl-react-row" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
+                <span class="rl-react-row" data-react-row="video:${v.id}" data-tips="${v.tip_total || 0}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false, v.tip_total)}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="rl-btn"><i class="far fa-comment-dots"></i><span>Comment</span></button>
             <button onclick="shareVideoDirectly('${v.id}')" class="rl-btn"><i class="far fa-paper-plane"></i><span>Share</span></button>

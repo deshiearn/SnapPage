@@ -726,3 +726,14 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .sx-check span{width:28px;height:28px;border-radius:50%;border:1.5px solid #c7c7cc;display:flex;align-items:center;justify-content:center;color:transparent;font-size:14px;transition:.15s}
 .sx-check span.on{background:var(--app-accent,#007aff);border-color:var(--app-accent,#007aff);color:#fff}
 #tipSheet .sx-cta{border-radius:12px;font-size:19px;padding:17px}
+
+/* maintenance overlay */
+.mt-overlay{position:fixed;inset:0;z-index:9999;background:var(--app-bg,#f2f2f7);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
+.mt-box{max-width:320px}.mt-box h2{font-size:24px;font-weight:700;margin:18px 0 8px;color:var(--app-text)}.mt-box p{font-size:16px;color:var(--app-hint,#8e8e93);line-height:1.4}
+.mt-box button{margin-top:22px;background:var(--app-accent,#007aff);color:#fff;font-weight:600;font-size:17px;padding:12px 28px;border-radius:12px}
+.mt-gear{position:relative;width:110px;height:90px;margin:0 auto;color:var(--app-accent,#007aff)}.mt-gear i{position:absolute;font-size:64px;left:6px;top:0;animation:mtSpin 6s linear infinite}.mt-gear .mt-g2{font-size:40px;left:60px;top:42px;color:#ff9500;animation:mtSpin 4s linear infinite reverse}
+@keyframes mtSpin{to{transform:rotate(360deg)}}
+.sx-tipchip{background:rgba(255,184,31,.18)!important;color:#b36b00!important}.sx-tipchip b{color:#b36b00!important}
+.sx-st{font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}.sx-st.pending{background:rgba(255,149,0,.15);color:#ff9500}.sx-st.paid{background:rgba(52,199,89,.15);color:#1fa34a}.sx-st.rejected{background:rgba(255,59,48,.14);color:#ff3b30}
+.sx-cta.off{background:rgba(120,120,128,.3);color:var(--app-hint,#8e8e93)}
+.sx-toast{white-space:nowrap;display:flex;align-items:center;gap:6px}

@@ -38,14 +38,16 @@ function reactionTotals(hearts, reactions) {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
-function buildReactionRowHtml(kind, id, hearts, reactions, hasHearted) {
+function buildReactionRowHtml(kind, id, hearts, reactions, hasHearted, tips) {
     const mine = currentUser && reactions ? reactions[currentUser.tg_id] : '';
     const chips = reactionTotals(hearts, reactions);
+    tips = Number(tips) || 0;
     if (kind === 'video') {
-        // compact stack for the Shorts side column
-        return chips.slice(0, 3).map(([e]) => e).join('');
+        // compact stack for the Shorts side column (Stars always first)
+        return (tips > 0 ? '⭐' : '') + chips.slice(0, tips > 0 ? 2 : 3).map(([e]) => e).join('');
     }
-    return chips.map(([e, n]) => {
+    const star = tips > 0 ? `<button class="react-chip sx-tipchip" onclick="sxChipTip(this,'${kind}','${id}')">${sxStar('sx-inl')}<b>${sxNum(tips)}</b></button>` : '';
+    return star + chips.map(([e, n]) => {
         const isMine = e === '❤️' ? hasHearted : e === mine;
         return `<button class="react-chip ${isMine ? 'mine' : ''}" onclick="chipReact('${kind}','${id}','${e}')"><span>${e}</span><b>${n}</b></button>`;
     }).join('');
@@ -55,7 +57,7 @@ function buildReactionRowHtml(kind, id, hearts, reactions, hasHearted) {
 function syncReactionUI(kind, id, data) {
     if (!data) return;
     document.querySelectorAll(`[data-react-row="${kind}:${id}"]`).forEach(row => {
-        row.innerHTML = buildReactionRowHtml(kind, id, data.hearts || 0, data.reactions || {}, !!data.hasLiked);
+        row.innerHTML = buildReactionRowHtml(kind, id, data.hearts || 0, data.reactions || {}, !!data.hasLiked, row.dataset.tips);
     });
     document.querySelectorAll(`[data-react="${kind}"][data-id="${id}"]`).forEach(btn => {
         const countEl = btn.querySelector('.like-count'); if (countEl) countEl.innerText = data.likesCount;

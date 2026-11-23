@@ -7,7 +7,9 @@ const viewerCtx = new AsyncLocalStorage();
 const DEFAULTS = {
     stars_enabled: 'true', xrocket_key: '', xrocket_base: 'https://pay.api.xrocket.exchange', xrocket_style: 'auto',
     xrocket_currency: 'USDT', stars_per_unit: '50', stars_fee_pct: '10', stars_min_price: '1', stars_max_price: '5000',
-    stars_packs: '50,100,250,500,1000,2500', stars_min_deposit: '10'
+    stars_packs: '50,100,250,500,1000,2500', stars_min_deposit: '10',
+    stars_topup_on: 'true', stars_payout_on: 'true', payout_per_unit: '100', payout_min: '500',
+    maintenance_on: 'false', maintenance_msg: 'We are making SnapPages better. Please come back in a little while.'
 };
 const SETTING_KEYS = Object.keys(DEFAULTS);
 
@@ -32,11 +34,32 @@ function register(ctx) {
         enabled: s.stars_enabled !== 'false', packs: s.stars_packs.split(',').map(x => parseInt(x)).filter(x => x > 0).slice(0, 8),
         per_unit: num(s.stars_per_unit, 50), currency: s.xrocket_currency, fee: num(s.stars_fee_pct, 10),
         min_price: parseInt(s.stars_min_price) || 1, max_price: parseInt(s.stars_max_price) || 5000,
-        min_deposit: parseInt(s.stars_min_deposit) || 10, deposits_ready: !!s.xrocket_key
+        min_deposit: parseInt(s.stars_min_deposit) || 10, deposits_ready: !!s.xrocket_key,
+        topup_on: s.stars_topup_on !== 'false', payout_on: s.stars_payout_on !== 'false',
+        payout_per_unit: num(s.payout_per_unit, 100), payout_min: parseInt(s.payout_min) || 500
     });
 
     // ---------- viewer context ----------
     app.use('/api', (req, res, next) => viewerCtx.run({ initData: req.body && req.body.initData }, next));
+    // ---------- maintenance mode (whole app). Admins keep working; /api/admin/*, /api/status and webhooks stay open ----------
+    const adminIds = new Map();   // id -> {v, exp}
+    async function isAdminId(id) {
+        if (!id) return false;
+        const hit = adminIds.get(id); if (hit && hit.exp > Date.now()) return hit.v;
+        const { data } = await supabase.from('users').select('is_admin').eq('tg_id', id).maybeSingle();
+        const v = !!(data && data.is_admin); adminIds.set(id, { v, exp: Date.now() + 60000 }); return v;
+    }
+    app.use('/api', async (req, res, next) => {
+        try {
+            if (req.path.startsWith('/admin') || req.path === '/status' || req.path === '/stars/webhook') return next();
+            const s = await getSettings();
+            if (s.maintenance_on !== 'true') return next();
+            if (await isAdminId(viewerId())) return next();
+            res.set('X-Maintenance', '1').status(503).json({ maintenance: true, error: 'Maintenance', message: s.maintenance_msg });
+        } catch (e) { next(); }
+    });
+    app.get('/api/status', async (req, res) => { const s = await getSettings(); res.set('Cache-Control', 'no-store').json({ maintenance: s.maintenance_on === 'true', message: s.maintenance_msg }); });
+
     const viewerId = () => {
         const c = viewerCtx.getStore(); if (!c || !c.initData) return null;
         if (c.id === undefined) { const u = validateTGData(c.initData); c.id = u ? String(u.id) : null; }
@@ -135,13 +158,14 @@ function register(ctx) {
     app.post('/api/stars/wallet', async (req, res) => {
         const uid = await walletUser(req, res); if (!uid) return;
         try {
-            const [bal, tx, dep] = await Promise.all([
+            const [bal, tx, dep, pay] = await Promise.all([
                 balanceOf(uid),
                 supabase.from('star_txns').select('id, kind, amount, content_type, content_id, note, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(40),
-                supabase.from('star_deposits').select('id, stars, status, created_at').eq('user_id', uid).eq('status', 'pending').order('created_at', { ascending: false }).limit(3)
+                supabase.from('star_deposits').select('id, stars, status, created_at').eq('user_id', uid).eq('status', 'pending').order('created_at', { ascending: false }).limit(3),
+                supabase.from('star_payouts').select('id, stars, amount, currency, status, admin_note, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(10)
             ]);
             if (tx.error || dep.error || bal.missing) { console.error('Stars schema check failed:', (tx.error || dep.error || {}).message); return res.status(500).json({ error: 'Stars are not set up yet. Admin: run sql/16_stars_paid.sql in Supabase.' }); }
-            res.json({ ...bal, txns: tx.data || [], pending: dep.data || [], config: publicConfig(await getSettings()) });
+            res.json({ ...bal, txns: tx.data || [], pending: dep.data || [], payouts: pay.data || [], config: publicConfig(await getSettings()) });
         } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
     });
 
@@ -191,6 +215,36 @@ function register(ctx) {
         } catch (e) { res.json([]); }
     });
 
+    // ---------- Payout (withdraw) ----------
+    app.post('/api/stars/payout', async (req, res) => {
+        const uid = await walletUser(req, res); if (!uid) return;
+        try {
+            const s = await getSettings(), cfg = publicConfig(s);
+            if (!cfg.payout_on) return res.status(503).json({ error: 'Withdrawals are paused for now. Please try again later.' });
+            const stars = parseInt(req.body.stars) || 0, dest = String(req.body.dest || '').trim().slice(0, 120);
+            if (stars < cfg.payout_min) return res.status(400).json({ error: `Minimum withdrawal is ${cfg.payout_min} Stars.` });
+            if (dest.length < 4) return res.status(400).json({ error: 'Enter where to send the payment (xRocket / wallet).' });
+            const amount = Math.floor((stars / cfg.payout_per_unit) * 100) / 100;
+            const { data, error } = await supabase.rpc('request_payout', { p_user: uid, p_stars: stars, p_amount: amount, p_currency: s.xrocket_currency, p_dest: dest });
+            if (error) throw error;
+            if (!data.ok) return res.status(data.error === 'insufficient' ? 402 : 400).json({ error: data.error === 'too_many' ? 'You already have 3 pending withdrawals.' : data.error, ...(await balanceOf(uid)) });
+            res.json({ success: true, id: data.id, balance: data.balance, amount, currency: s.xrocket_currency });
+        } catch (e) { res.status(500).json({ error: (/star_payouts|request_payout|schema cache/i.test(e.message || '') ? 'Withdrawals are not set up yet. Admin: run sql/18_stars_payouts.sql.' : (e.message || String(e))) }); }
+    });
+    app.post('/api/admin/stars/payouts', requireAdminUser, requireAdminPassword, async (req, res) => {
+        const { data, error } = await supabase.from('star_payouts').select('*').order('created_at', { ascending: false }).limit(40);
+        if (error) return res.status(500).json({ error: error.message });
+        const meta = await getUserMetaBatch([...new Set((data || []).map(p => p.user_id))]);
+        res.json((data || []).map(p => ({ ...p, name: (meta[p.user_id] && meta[p.user_id].name) || '' })));
+    });
+    app.post('/api/admin/stars/payoutResolve', requireAdminUser, requireAdminPassword, async (req, res) => {
+        const { data, error } = await supabase.rpc('resolve_payout', { p_id: parseInt(req.body.id) || 0, p_action: req.body.action, p_note: String(req.body.note || '').slice(0, 200) || null });
+        if (error) return res.status(500).json({ error: error.message });
+        if (!data.ok) return res.status(400).json({ error: data.error });
+        if (bot && isRealTgId(data.user)) bot.telegram.sendMessage(data.user, data.status === 'paid' ? `✅ Your withdrawal of ${data.stars} Stars was paid.` : `↩️ Your withdrawal of ${data.stars} Stars was declined and the Stars were returned to your wallet.${req.body.note ? '\n' + req.body.note : ''}`).catch(() => {});
+        res.json({ success: true });
+    });
+
     // ---------- xRocket client ----------
     // Two API generations exist. 'auto' tries the current one (Bearer token) and falls back to the legacy one (Rocket-Pay-Key).
     const trim = (u) => String(u || '').replace(/\/+$/, '');
@@ -224,6 +278,7 @@ function register(ctx) {
         const uid = await walletUser(req, res); if (!uid) return;
         try {
             const s = await getSettings(), cfg = publicConfig(s);
+            if (!cfg.topup_on) return res.status(503).json({ error: 'Top Up is paused for now. Please try again later.' });
             if (!cfg.enabled || !s.xrocket_key) return res.status(503).json({ error: 'Adding Stars is not available yet.' });
             const stars = parseInt(req.body.stars) || 0;
             if (stars < cfg.min_deposit || stars > 100000) return res.status(400).json({ error: `Choose between ${cfg.min_deposit} and 100000 Stars.` });
@@ -321,6 +376,10 @@ function register(ctx) {
                 if (k === 'xrocket_style' && !['auto', 'v1', 'legacy'].includes(v)) return res.status(400).json({ error: 'Bad API style' });
                 if (k === 'stars_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Stars per 1 unit must be > 0' });
                 if (k === 'stars_fee_pct' && !(num(v, -1) >= 0 && num(v, -1) <= 90)) return res.status(400).json({ error: 'Fee must be 0–90' });
+                if (['stars_topup_on', 'stars_payout_on', 'maintenance_on'].includes(k)) v = v === 'true' ? 'true' : 'false';
+                if (k === 'maintenance_msg') v = v.slice(0, 200);
+                if (k === 'payout_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Payout rate must be > 0' });
+                if (k === 'payout_min' && !(parseInt(v) >= 1)) return res.status(400).json({ error: 'Minimum payout must be >= 1' });
                 if (k === 'stars_packs' && !v.split(',').every(x => parseInt(x) > 0)) return res.status(400).json({ error: 'Packs: comma separated numbers' });
                 rows.push({ key: k, value: v });
             }
