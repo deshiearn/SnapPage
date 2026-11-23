@@ -156,6 +156,7 @@ async function requireAdminUser(req, res, next) {
 }
 
 // ================= Stars wallet / paid content (see stars.js) =================
+const starsSchemaErr = (e) => /price|preview_url|paid_assets|star_|stars_|unlocks|schema cache|does not exist/i.test(String((e && e.message) || e)) ? 'Stars are not set up yet. Admin: run sql/16_stars_paid.sql in Supabase → SQL Editor.' : null;
 const stars = require('./stars').register({ app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot });
 
 // ================= Telegram-native image hosting (replaces ImgBB) =================
@@ -1651,7 +1652,7 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
         }
         res.json(response);
     } catch (e) {
-        res.status(500).json({ error: e.message || e });
+        res.status(500).json({ error: (req.body.price && starsSchemaErr(e)) || e.message || e });
     }
 });
 
@@ -2425,7 +2426,7 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error("Video upload failed:", e);
-        if (!res.headersSent) return res.status(500).json({ error: friendlyTgErr(e) });
+        if (!res.headersSent) return res.status(500).json({ error: (req.body.price && starsSchemaErr(e)) || friendlyTgErr(e) });
         res.status(500).json({ error: e.message || e });
     }
 });
