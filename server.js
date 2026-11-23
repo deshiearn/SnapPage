@@ -188,15 +188,37 @@ function friendlyTgErr(e) {
     if (/not enough rights|administrator|forbidden|kicked|have no rights/i.test(m)) return 'The bot cannot post in the storage channel — make it an admin with "Post messages".';
     if (/too many requests|retry after/i.test(m)) return "Telegram is rate-limiting uploads — try again in a few seconds.";
     if (/too big|too large/i.test(m)) return "That file is too big for Telegram.";
-    if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(m)) return "The upload timed out — check your connection and retry.";
+    if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up|network:/i.test(m)) return "The upload to Telegram timed out. Please retry in a moment.";
     return 'Upload failed: ' + m.slice(0, 120);
 }
+// ---- Direct Telegram uploads (fetch + FormData) ----
+// Telegraf's multipart upload was timing out on Render; Node's own fetch (undici) handles the
+// IPv4/IPv6 fallback itself and we can put a hard timeout on it so nothing hangs for minutes.
+async function tgUpload(method, chatId, field, buffer, filename, mime, extra, timeoutMs) {
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    Object.entries(extra || {}).forEach(([k, v]) => { if (v !== undefined && v !== null) fd.append(k, String(v)); });
+    fd.append(field, new Blob([buffer], { type: mime }), filename);
+    let r;
+    try {
+        r = await fetch(`${process.env.TG_API_BASE || "https://api.telegram.org"}/bot${process.env.BOT_TOKEN}/${method}`, { method: 'POST', body: fd, signal: AbortSignal.timeout(timeoutMs || 40000) });
+    } catch (e) {
+        const err = new Error(e && e.name === 'TimeoutError' ? 'timeout: Telegram did not answer in time' : 'network: ' + (e && (e.cause && e.cause.code || e.message) || e));
+        throw err;
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) { const err = new Error(`${j.error_code || r.status}: ${j.description || 'Telegram error'}`); err.description = j.description; err.parameters = j.parameters; throw err; }
+    return j.result;
+}
+const tgSendPhoto = (chat, buf, name) => tgUpload('sendPhoto', chat, 'photo', buf, name || `img_${Date.now()}.jpg`, 'image/jpeg', {}, 30000);
+const tgSendVideo = (chat, buf, name, caption) => tgUpload('sendVideo', chat, 'video', buf, name, 'video/mp4', { caption, supports_streaming: 'true' }, 90000);
+
 async function tgRetry(fn) {            // one automatic retry for flood-wait / network blips
     try { return await fn(); }
     catch (e) {
         const wait = e && e.parameters && e.parameters.retry_after;
         if (wait && wait <= 5) { await new Promise(r => setTimeout(r, wait * 1000 + 200)); return fn(); }
-        if (/ETIMEDOUT|ECONNRESET|socket hang up/i.test(String(e && (e.message || e)))) { await new Promise(r => setTimeout(r, 600)); return fn(); }
+        if (/ETIMEDOUT|ECONNRESET|socket hang up|timeout|network:/i.test(String(e && (e.message || e)))) { await new Promise(r => setTimeout(r, 600)); return fn(); }
         throw e;
     }
 }
@@ -215,7 +237,7 @@ async function uploadImageToTelegram(base64Str) {
         }
         const buffer = Buffer.from(cleanBase64, 'base64');
 
-        const sentMsg = await tgRetry(() => bot.telegram.sendPhoto(STORAGE_CHANNEL_ID, { source: buffer, filename: `img_${Date.now()}.jpg` }));
+        const sentMsg = await tgRetry(() => tgSendPhoto(STORAGE_CHANNEL_ID, buffer));
         const sizes = sentMsg.photo;
         if (!sizes || sizes.length === 0) {
             console.error("uploadImageToTelegram: sendPhoto succeeded but returned no photo sizes.");
@@ -2396,11 +2418,7 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
         const { data: user } = await supabase.from('users').select('name').eq('tg_id', tgUser.id.toString()).maybeSingle();
         const authorName = user ? user.name : tgUser.first_name || "User";
 
-        const sentMsg = await tgRetry(() => bot.telegram.sendVideo(
-            STORAGE_CHANNEL_ID,
-            { source: buffer, filename: `snappages_${Date.now()}.mp4` },
-            { caption: `From: ${authorName} (${tgUser.id})` }
-        ));
+        const sentMsg = await tgRetry(() => tgSendVideo(STORAGE_CHANNEL_ID, buffer, `snappages_${Date.now()}.mp4`, `From: ${authorName} (${tgUser.id})`));
 
         const fileId = sentMsg.video ? sentMsg.video.file_id : null;
         if (!fileId) return res.status(500).json({ error: "Upload to storage channel failed" });
@@ -2945,13 +2963,17 @@ app.post('/api/admin/setLimits', requireAdminUser, requireAdminPassword, async (
 app.post('/api/admin/testStorage', requireAdminUser, requireAdminPassword, async (req, res) => {
     const id = await getStorageChannel(true);
     if (!id) return res.status(400).json({ error: "Storage channel is not set." });
-    const t0 = Date.now();
+    const steps = [];
+    const step = async (name, fn) => { const t = Date.now(); try { const v = await fn(); steps.push(`${name} ${Date.now() - t}ms ✓`); return v; } catch (e) { steps.push(`${name} ${Date.now() - t}ms ✗ ${String(e.description || e.message || e).slice(0, 100)}`); throw Object.assign(e, { steps }); } };
     try {
+        await step('Telegram reachable', () => fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/getMe`, { signal: AbortSignal.timeout(10000) }).then(r => r.json()).then(j => { if (!j.ok) throw new Error(j.description); }));
+        await step('Channel check', () => bot.telegram.getChat(id));
         const tiny = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-        const m = await tgRetry(() => bot.telegram.sendPhoto(id, { source: Buffer.from(tiny, 'base64'), filename: 'test.png' }));
+        const t0 = Date.now();
+        const m = await step('Photo upload', () => tgRetry(() => tgSendPhoto(id, Buffer.from(tiny, 'base64'), 'test.png')));
         bot.telegram.deleteMessage(id, m.message_id).catch(() => {});
-        res.json({ success: true, ms: Date.now() - t0 });
-    } catch (e) { res.status(400).json({ error: friendlyTgErr(e) }); }
+        res.json({ success: true, ms: Date.now() - t0, steps });
+    } catch (e) { res.status(400).json({ error: friendlyTgErr(e), steps: e.steps || steps }); }
 });
 app.post('/api/admin/runCleanup', requireAdminUser, requireAdminPassword, async (req, res) => {
     const before = process.memoryUsage().rss;
@@ -3104,7 +3126,7 @@ app.post('/api/createStory', uploadGate, async (req, res) => {
             if (!STORAGE) return res.status(500).json({ error: "Storage channel is not set. Admin: Admin panel → Storage Channel." });
             const buf = Buffer.from(video.includes(',') ? video.split(',')[1] : video, 'base64');
             if (buf.length > 12 * 1024 * 1024) return res.status(400).json({ error: "Story video is too large (max 12 MB)" });
-            const sent = await bot.telegram.sendVideo(STORAGE, { source: buf, filename: `story_${Date.now()}.mp4` }, { caption: `Story: ${user.name} (${me})` });
+            const sent = await tgRetry(() => tgSendVideo(STORAGE, buf, `story_${Date.now()}.mp4`, `Story: ${user.name} (${me})`));
             if (!sent.video) return res.status(500).json({ error: "Video upload failed" });
             row.video_url = `/api/tgVideo/${sent.video.file_id}`; row.media_type = 'video';
         } else {

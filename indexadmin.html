@@ -431,7 +431,7 @@
         window.testStorage = async () => {
             toolStatus.textContent = 'Testing…'; toolStatus.className = 'text-xs text-gray-500';
             const d = await adminFetch('/api/admin/testStorage', {});
-            toolStatus.textContent = d && d.success ? `✅ Upload works (${d.ms} ms)` : '❌ ' + ((d && d.error) || 'Failed'); toolStatus.className = 'text-xs ' + (d && d.success ? 'text-green-600' : 'text-red-500');
+            toolStatus.textContent = (d && d.success ? `✅ Upload works (${d.ms} ms)` : '❌ ' + ((d && d.error) || 'Failed')) + (d && d.steps ? '  [' + d.steps.join(' · ') + ']' : ''); toolStatus.className = 'text-xs ' + (d && d.success ? 'text-green-600' : 'text-red-500');
         };
         window.runCleanup = async () => {
             toolStatus.textContent = 'Cleaning…'; toolStatus.className = 'text-xs text-gray-500';
