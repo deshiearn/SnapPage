@@ -100,7 +100,7 @@ window.chipReact = (kind, id, emoji) => {
 
 window.pickStarReaction = () => {
     const btn = pickerTarget; hideReactionPicker();
-    if (btn) sxOpenTip(btn.dataset.react, btn.dataset.id);
+    if (btn) sxOpenTip(btn.dataset.react, btn.dataset.id, sxAuthorName(btn));
 };
 
 window.pickReaction = async (emoji) => {
