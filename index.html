@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=e1798e98" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=091cf9a8" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -218,7 +218,7 @@
 
                 <div class="tgi-card">
                     <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid post</span><label class="toggle-switch"><input type="checkbox" id="ppOn" onchange="paidToggle('pp')"><span class="toggle-slider"></span></label></div>
-                    <div id="ppBox" class="hidden sx-price"><span>Price</span><input id="ppAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('pp')"><b>Stars</b></div>
+                    <div id="ppBox" class="hidden"><div class="sx-price"><span>Price</span><input id="ppAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('pp')"><svg class="sx-star"><use href="#sxStar"/></svg></div><div class="sx-quick"><button onclick="paidSet('pp',10)">10</button><button onclick="paidSet('pp',50)">50</button><button onclick="paidSet('pp',100)">100</button><button onclick="paidSet('pp',250)">250</button><button onclick="paidSet('pp',500)">500</button></div></div>
                 </div>
                 <p class="tgi-foot"><span id="ppHint">Viewers pay Stars to unlock it. Shown in the Premium tab.</span></p>
 
@@ -294,7 +294,7 @@
 
                 <div class="tgi-card">
                     <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid reel</span><label class="toggle-switch"><input type="checkbox" id="vpOn" onchange="paidToggle('vp')"><span class="toggle-slider"></span></label></div>
-                    <div id="vpBox" class="hidden sx-price"><span>Price</span><input id="vpAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('vp')"><b>Stars</b></div>
+                    <div id="vpBox" class="hidden"><div class="sx-price"><span>Price</span><input id="vpAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('vp')"><svg class="sx-star"><use href="#sxStar"/></svg></div><div class="sx-quick"><button onclick="paidSet('vp',10)">10</button><button onclick="paidSet('vp',50)">50</button><button onclick="paidSet('vp',100)">100</button><button onclick="paidSet('vp',250)">250</button><button onclick="paidSet('vp',500)">500</button></div></div>
                 </div>
                 <p class="tgi-foot"><span id="vpHint">Viewers pay Stars to unlock it. Shown in the Premium tab.</span></p>
                 <p class="tgi-foot"><span>Short vertical clips get watched to the end.</span></p>
@@ -402,20 +402,25 @@
 
     <!-- STARS: shared star symbol + wallet / add / unlock / tip sheets -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-        <linearGradient id="sxGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd84d"/><stop offset="1" stop-color="#ff9500"/></linearGradient>
-        <symbol id="sxStar" viewBox="0 0 24 24"><path fill="url(#sxGrad)" d="M12 2.2l2.95 6.2 6.8.95-4.95 4.75 1.2 6.75L12 17.6l-6 3.25 1.2-6.75L2.25 9.35l6.8-.95z"/></symbol>
+        <linearGradient id="sxGrad" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#ffe45c"/><stop offset=".55" stop-color="#ffb81f"/><stop offset="1" stop-color="#f58f00"/></linearGradient>
+        <symbol id="sxStar" viewBox="0 0 24 24"><polygon points="12.00,3.10 14.65,8.76 20.84,9.53 16.28,13.79 17.47,19.92 12.00,16.90 6.53,19.92 7.72,13.79 3.16,9.53 9.35,8.76" fill="url(#sxGrad)" stroke="url(#sxGrad)" stroke-width="2.6" stroke-linejoin="round"/><polygon points="12.00,3.10 9.35,8.76 3.16,9.53 12,12.4" fill="#fff" fill-opacity=".28"/></symbol>
     </defs></svg>
 
     <div id="walletBg" class="hidden fixed inset-0 blur-bg z-[90] flex items-end justify-center">
-        <div id="walletSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:86vh">
-            <div class="tgi-nav"><span style="width:60px"></span><h3>My Stars</h3><button class="tgi-act" onclick="closeSheet('walletBg','walletSheet')">Done</button></div>
+        <div id="walletSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:90vh">
+            <div class="sx-nav"><button class="sx-x" onclick="closeSheet('walletBg','walletSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button><h3>Stars</h3><span style="width:30px"></span></div>
             <div class="tgi-scroll">
-                <div class="sx-hero"><div class="sx-bigstar"><svg class="sx-star"><use href="#sxStar"/></svg><i class="sx-sp s1"></i><i class="sx-sp s2"></i><i class="sx-sp s3"></i></div>
-                    <p class="sx-bal"><span id="sxBalance">0</span></p><p class="sx-sub">Stars balance</p>
-                    <div class="sx-actions"><button class="sx-btn" onclick="openAddStars()"><i class="fas fa-plus"></i> Add Stars</button><button class="sx-btn ghost" onclick="sxToast('Withdraw is coming soon')"><i class="fas fa-arrow-up-from-bracket"></i> Withdraw</button></div>
-                    <p class="sx-earn" id="sxEarned"></p></div>
+                <div class="sx-field"><i class="sx-dust"></i><div class="sx-bigstar"><svg class="sx-star"><use href="#sxStar"/></svg></div></div>
+                <div class="tgi-card sx-balcard">
+                    <p class="sx-lbl">Your balance</p>
+                    <p class="sx-bal"><svg class="sx-star"><use href="#sxStar"/></svg><span id="sxBalance">0</span></p>
+                    <button class="sx-cta" onclick="openAddStars()">Buy More Stars</button>
+                    <p class="sx-earn" id="sxEarned"></p>
+                </div>
+                <div class="tgi-card"><button class="tgi-row" onclick="sxToast('Withdraw is coming soon')"><span class="tg-ic" style="background:#8e8e93"><i class="fas fa-arrow-up-from-bracket"></i></span><span class="tgi-label">Withdraw Stars</span><span class="tgi-val">Soon</span><i class="fas fa-chevron-right tgme-chev"></i></button></div>
                 <div id="sxPending"></div>
-                <p class="tgi-head">History</p>
+                <p class="tgi-head">Stars history</p>
+                <div class="sx-seg" id="sxSeg"><button class="on" onclick="sxFilter('all')">All</button><button onclick="sxFilter('in')">Incoming</button><button onclick="sxFilter('out')">Outgoing</button></div>
                 <div id="sxHistory" class="tgi-card"></div>
                 <div style="height:calc(env(safe-area-inset-bottom,0px) + 24px)"></div>
             </div>
@@ -423,16 +428,16 @@
     </div>
 
     <div id="addStarsBg" class="hidden fixed inset-0 blur-bg z-[95] flex items-end justify-center">
-        <div id="addStarsSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:86vh">
-            <div class="tgi-nav"><span style="width:60px"></span><h3>Add Stars</h3><button class="tgi-act" onclick="closeAddStars()">Close</button></div>
+        <div id="addStarsSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:90vh">
+            <div class="sx-nav"><button class="sx-x" onclick="closeAddStars()" aria-label="Close"><i class="fas fa-xmark"></i></button><h3>Buy Stars</h3><span style="width:30px"></span></div>
             <div class="tgi-scroll" id="addStarsBody"></div>
         </div>
     </div>
 
     <div id="unlockBg" class="hidden fixed inset-0 blur-bg z-[96] flex items-end justify-center">
         <div id="unlockSheet" class="bottom-sheet sx-mini shadow-2xl">
-            <div class="sheet-handle"></div>
-            <div class="sx-rays"><div class="sx-bigstar sm"><svg class="sx-star"><use href="#sxStar"/></svg><i class="sx-sp s1"></i><i class="sx-sp s2"></i><i class="sx-sp s3"></i></div></div>
+            <button class="sx-x abs" onclick="closeSheet('unlockBg','unlockSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button>
+            <div class="sx-top"><i class="sx-dust"></i><div class="sx-bigstar sm"><svg class="sx-star"><use href="#sxStar"/></svg></div></div>
             <h3 id="unlockTitle" class="sx-h">Unlock</h3>
             <p id="unlockSub" class="sx-p"></p>
             <button id="unlockGo" class="sx-cta" onclick="sxDoUnlock()"></button>
@@ -442,12 +447,12 @@
 
     <div id="tipBg" class="hidden fixed inset-0 blur-bg z-[96] flex items-end justify-center">
         <div id="tipSheet" class="bottom-sheet sx-mini shadow-2xl">
-            <div class="sheet-handle"></div>
-            <div class="sx-rays"><div class="sx-bigstar sm"><svg class="sx-star"><use href="#sxStar"/></svg><i class="sx-sp s1"></i><i class="sx-sp s2"></i><i class="sx-sp s3"></i></div></div>
-            <h3 class="sx-h">Send Stars</h3>
-            <p class="sx-p">Show your support to the creator with a Star reaction.</p>
-            <div id="tipChips" class="sx-chips"></div>
-            <input id="tipAmt" type="number" inputmode="numeric" min="1" class="sx-input" placeholder="Custom amount">
+            <button class="sx-x abs" onclick="closeSheet('tipBg','tipSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button>
+            <h3 class="sx-h" style="margin-top:4px">Send Stars</h3>
+            <p class="sx-p">Support the creator with a Star reaction.</p>
+            <div class="sx-tipnum"><svg class="sx-star"><use href="#sxStar"/></svg><span id="tipNum">10</span></div>
+            <input id="tipRange" type="range" min="0" max="100" value="40" class="sx-range" oninput="sxSlide(this.value)">
+            <div class="sx-rangelbl"><span>1</span><span>2,500</span></div>
             <button id="tipGo" class="sx-cta" onclick="sxDoTip()"></button>
             <p id="tipBal" class="sx-small"></p>
         </div>
