@@ -14,7 +14,9 @@ function showReactionPicker(btn) {
     pickerTarget = btn;
     const p = document.getElementById('reactionPicker');
     const lv = (currentUser && currentUser.level) || 1;
-    p.innerHTML = REACTIONS.map((e, i) => {
+    const mine = btn.dataset.react === 'video' ? (btn.closest('.rl-item') && currentUser && String(btn.closest('.rl-item').dataset.author) === String(currentUser.tg_id)) : !btn.closest('[data-view-post]');
+    const starOpt = mine || typeof sxStar !== 'function' ? '' : `<button class="react-opt sx-react" onclick="pickStarReaction()" aria-label="Send Stars">${sxStar()}<small>Stars</small></button><i class="react-sep"></i>`;
+    p.innerHTML = starOpt + REACTIONS.map((e, i) => {
         const need = REACTION_LEVEL[e] || 1;
         return need > lv
             ? `<button class="react-opt locked" style="animation-delay:${i * 40}ms" onclick="tg.showAlert('Unlocks at Level ${need} — invite friends to level up!')">${e}<i class="fas fa-lock"></i></button>`
@@ -94,6 +96,11 @@ window.chipReact = (kind, id, emoji) => {
         return;
     }
     sendReaction(kind, id, emoji);
+};
+
+window.pickStarReaction = () => {
+    const btn = pickerTarget; hideReactionPicker();
+    if (btn) sxOpenTip(btn.dataset.react, btn.dataset.id);
 };
 
 window.pickReaction = async (emoji) => {

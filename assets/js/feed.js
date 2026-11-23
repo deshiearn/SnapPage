@@ -135,7 +135,6 @@ function buildPostCardHtml(post) {
                 </button>
                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> ${t('comment')}</button>
                 <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> ${t('share')}</button>
-                ${post.type !== 'channel' && !(currentUser && String(post.author_id) === String(currentUser.tg_id)) && !String(post.id).startsWith('tmp') ? `<button onclick="sxOpenTip('post','${post.id}')" class="sx-tipbtn flex items-center gap-1" aria-label="Send Stars">${sxStar('sx-inl')}</button>` : ''}
             </div>
         </div>`;
 }

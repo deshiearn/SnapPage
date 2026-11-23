@@ -680,3 +680,9 @@ body.lite .fd-orb{display:none}
 @keyframes sxFly{0%{transform:translate(0,0) scale(.2);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(var(--s));opacity:0}}
 body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .rl-tabs .rl-tab{padding-left:8px;padding-right:8px;font-size:14px}.rl-tabs{margin:0 4px}
+
+.react-opt.sx-react{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.react-opt.sx-react .sx-star{width:30px;height:30px;filter:drop-shadow(0 2px 6px rgba(245,154,0,.6));animation:sxFloat 2.4s ease-in-out infinite}
+.react-opt.sx-react small{font-size:9px;font-weight:700;color:#c77700;line-height:1;margin-top:1px}
+.react-sep{width:1px;align-self:stretch;margin:6px 4px;background:rgba(120,120,128,.3);flex-shrink:0}
+#reactionPicker{max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:none}#reactionPicker::-webkit-scrollbar{display:none}

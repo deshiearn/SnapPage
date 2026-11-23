@@ -95,7 +95,6 @@ function renderShortItem(v) {
                 <span class="rl-react-row" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="rl-btn"><i class="far fa-comment-dots"></i><span>Comment</span></button>
-            ${!mine && v.type !== 'channel' ? `<button onclick="sxOpenTip('video','${v.id}')" class="rl-btn rl-star" aria-label="Send Stars">${sxStar()}<span>Stars</span></button>` : ''}
             <button onclick="shareVideoDirectly('${v.id}')" class="rl-btn"><i class="far fa-paper-plane"></i><span>Share</span></button>
             <button onclick="openShortOptions('${v.id}', '${v.author_id}', '${v.type}')" class="rl-btn" aria-label="More"><i class="fas fa-ellipsis"></i></button>
         </div>
