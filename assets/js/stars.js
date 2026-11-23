@@ -48,15 +48,20 @@ function sxBurst(anchor, n) {
 }
 
 // ---------- Wallet ----------
+let sxTx = [], sxTxFilter = 'all';
+const SX_TX = { deposit: ['Bought Stars', '#34c759'], unlock: ['Unlocked content', '#ff9500'], earn: ['Content unlocked', '#007aff'], tip: ['Star reaction sent', '#af52de'], tip_in: ['Star reaction received', '#ff2d55'], admin: ['Adjustment', '#8e8e93'], payout: ['Withdrawal', '#8e8e93'] };
+function sxRenderTx() {
+    const list = sxTx.filter(x => sxTxFilter === 'all' || (sxTxFilter === 'in' ? x.amount > 0 : x.amount < 0));
+    document.getElementById('sxHistory').innerHTML = list.length ? list.map(x => { const n = SX_TX[x.kind] || [x.kind, '#8e8e93']; return `<div class="tgi-row sx-tx"><span class="sx-txic" style="background:${n[1]}">${sxStar()}</span><span class="tgi-label">${n[0]}<small>${timeAgo(x.created_at)}</small></span><b class="${x.amount > 0 ? 'sx-pos' : 'sx-neg'}">${x.amount > 0 ? '+' : '\u2212'}${sxNum(Math.abs(x.amount))} ${sxStar('sx-inl')}</b></div>`; }).join('') : '<div class="sx-empty">No transactions</div>';
+}
+window.sxFilter = (k) => { sxTxFilter = k; document.querySelectorAll('#sxSeg button').forEach((b, i) => b.classList.toggle('on', ['all', 'in', 'out'][i] === k)); sxRenderTx(); sxHaptic('light'); };
 window.openWallet = async () => {
     if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to use Stars.');
     openSheet('walletBg', 'walletSheet');
     sxPaintBalance();
     const d = await sxRefresh(); if (!d) return;
-    document.getElementById('sxPending').innerHTML = (d.pending || []).map(p => `<div class="tgi-card"><button class="tgi-row" onclick="sxResume(${p.id})"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-hourglass-half"></i></span><span class="tgi-label">Unpaid invoice · ${sxNum(p.stars)} Stars</span><span class="tgi-val">Check</span></button></div>`).join('');
-    const names = { deposit: ['Added Stars', '#34c759'], unlock: ['Unlocked content', '#ff9500'], earn: ['Someone unlocked yours', '#007aff'], tip: ['Sent Stars', '#af52de'], tip_in: ['Received Stars', '#ff2d55'], admin: ['Adjustment', '#8e8e93'], payout: ['Withdrawal', '#8e8e93'] };
-    const h = document.getElementById('sxHistory');
-    h.innerHTML = (d.txns || []).length ? d.txns.map(x => { const n = names[x.kind] || [x.kind, '#8e8e93']; return `<div class="tgi-row sx-tx"><span class="tg-ic" style="background:${n[1]}">${sxStar()}</span><span class="tgi-label">${n[0]}<small>${timeAgo(x.created_at)}</small></span><b class="${x.amount > 0 ? 'sx-pos' : 'sx-neg'}">${x.amount > 0 ? '+' : ''}${sxNum(x.amount)}</b></div>`; }).join('') : '<div class="sx-empty">No activity yet</div>';
+    document.getElementById('sxPending').innerHTML = (d.pending || []).map(p => `<div class="tgi-card"><button class="tgi-row" onclick="sxResume(${p.id})"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-hourglass-half"></i></span><span class="tgi-label">Unpaid invoice \u00b7 ${sxNum(p.stars)} Stars</span><span class="tgi-val">Check</span></button></div>`).join('');
+    sxTx = d.txns || []; sxRenderTx();
 };
 window.sxResume = async (id) => { const d = await sxPost('/api/stars/checkDeposit', { id }); if (d.status === 'paid') { sxPaid(); } else sxToast(d.status === 'expired' ? 'Invoice expired' : 'Not paid yet'); };
 
@@ -65,18 +70,23 @@ window.openAddStars = async () => {
     const cfg = await sxConfig();
     const need = SX.target && SX.balance !== null ? Math.max(0, SX.target - SX.balance) : 0;
     const body = document.getElementById('addStarsBody');
-    if (!cfg.deposits_ready) { body.innerHTML = '<div class="sx-empty" style="padding:40px 24px"><i class="fas fa-clock" style="font-size:34px;opacity:.5"></i><p style="margin-top:10px;font-weight:700">Adding Stars is coming soon</p></div>'; }
+    if (!cfg.deposits_ready) { body.innerHTML = '<div class="sx-wait"><div class="sx-bigstar sm">' + sxStar() + '</div><p class="sx-h">Coming soon</p><p class="sx-p">Buying Stars will be available shortly.</p></div>'; }
     else {
         const packs = (cfg.packs || []).slice();
-        if (need > 0 && !packs.includes(need) && need >= cfg.min_deposit) packs.unshift(need);
-        body.innerHTML = `<div class="sx-hero small"><div class="sx-bigstar sm">${sxStar()}<i class="sx-sp s1"></i><i class="sx-sp s2"></i></div><p class="sx-sub">Choose how many Stars to add</p>${need ? `<p class="sx-need">You need ${sxNum(need)} more Stars</p>` : ''}</div>
-        <div class="tgi-card">${packs.map(n => `<button class="tgi-row sx-pack" onclick="sxBuy(${n})"><span class="sx-stack">${sxStar()}${n >= 100 ? sxStar() : ''}${n >= 500 ? sxStar() : ''}</span><span class="tgi-label"><b>${sxNum(n)}</b> Stars</span><span class="sx-price-tag">${(n / cfg.per_unit).toFixed(2)} ${cfg.currency}</span></button>`).join('')}</div>
+        if (need >= cfg.min_deposit && !packs.includes(need)) packs.unshift(need);
+        const row = (n) => `<button class="tgi-row sx-pack" onclick="sxBuy(${n})"><span class="sx-stack">${sxStar()}${n >= 100 ? sxStar() : ''}${n >= 500 ? sxStar() : ''}</span><span class="tgi-label"><b>${sxNum(n)}</b></span><span class="sx-price-tag">${(n / cfg.per_unit).toFixed(2)} ${cfg.currency}</span></button>`;
+        body.innerHTML = `<div class="sx-field"><i class="sx-dust"></i><div class="sx-bigstar">${sxStar()}</div></div>
+        <h3 class="sx-h" style="margin-top:0">Get More Stars</h3>
+        <p class="sx-p">${need ? `You need <b>${sxNum(need)}</b> more Stars to continue.` : 'Choose the amount of Stars you would like to buy.'}</p>
+        <div class="tgi-card" id="sxPacks">${packs.slice(0, 3).map(row).join('')}${packs.length > 3 ? `<button class="tgi-row sx-more" onclick="sxMorePacks()"><span class="tgi-label" style="color:var(--app-link,#007aff);text-align:center">Show More Options <i class="fas fa-chevron-down" style="font-size:11px"></i></span></button>` : ''}</div>
         <p class="tgi-head">Custom amount</p>
-        <div class="tgi-card sx-custom"><input id="sxCustom" type="number" inputmode="numeric" min="${cfg.min_deposit}" placeholder="Min ${cfg.min_deposit}"><button onclick="sxBuy(parseInt(document.getElementById('sxCustom').value)||0)">Buy</button></div>
-        <p class="tgi-foot"><span>You pay with crypto through xRocket in Telegram. Stars are added automatically.</span></p>`;
+        <div class="tgi-card sx-custom"><input id="sxCustom" type="number" inputmode="numeric" min="${cfg.min_deposit}" placeholder="Minimum ${cfg.min_deposit}"><button onclick="sxBuy(parseInt(document.getElementById('sxCustom').value)||0)">Buy</button></div>
+        <p class="tgi-foot"><span>Pay with crypto through xRocket in Telegram. Stars are added automatically.</span></p>`;
+        SX.packRows = packs.map(row);
     }
     openSheet('addStarsBg', 'addStarsSheet');
 };
+window.sxMorePacks = () => { document.getElementById('sxPacks').innerHTML = SX.packRows.join(''); sxHaptic('light'); };
 window.closeAddStars = () => { clearInterval(SX.poll); SX.poll = null; closeSheet('addStarsBg', 'addStarsSheet'); };
 window.sxBuy = async (stars) => {
     const cfg = await sxConfig();
@@ -109,12 +119,12 @@ function sxFindItem(kind, id) { return document.querySelector(kind === 'video' ?
 window.sxAskUnlock = async (kind, id, price) => {
     if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to unlock paid content.');
     SX.target = price; SX.unlock = { kind, id, price };
-    document.getElementById('unlockTitle').textContent = kind === 'video' ? 'Unlock Reel' : 'Unlock Post';
-    document.getElementById('unlockSub').textContent = kind === 'video' ? 'Watch this paid reel by unlocking it with Stars.' : 'See the photos in this paid post by unlocking it with Stars.';
+    document.getElementById('unlockTitle').textContent = kind === 'video' ? 'Unlock Paid Reel' : 'Unlock Paid Post';
+    document.getElementById('unlockSub').textContent = kind === 'video' ? 'Pay with Stars to watch this reel. You will be able to watch it any time.' : 'Pay with Stars to see the photos in this post. You will be able to see them any time.';
     const go = document.getElementById('unlockGo'); go.innerHTML = `Unlock for ${sxStar('sx-inl')} ${sxNum(price)}`; go.disabled = false;
-    document.getElementById('unlockBal').textContent = SX.balance === null ? '' : `Your balance: ${sxNum(SX.balance)} Stars`;
+    document.getElementById('unlockBal').textContent = SX.balance === null ? '' : `Your balance is ${sxNum(SX.balance)} Stars`;
     openSheet('unlockBg', 'unlockSheet'); sxHaptic('light');
-    sxRefresh().then(() => { document.getElementById('unlockBal').textContent = `Your balance: ${sxNum(SX.balance)} Stars`; });
+    sxRefresh().then(() => { document.getElementById('unlockBal').textContent = `Your balance is ${sxNum(SX.balance)} Stars`; });
 };
 window.sxDoUnlock = async () => {
     const u = SX.unlock; if (!u) return;
@@ -147,30 +157,33 @@ function sxReveal(kind, id, d) {
 // ---------- locked media UIs ----------
 function sxLockedPostHtml(post) {
     const prev = post.preview_url ? `<img src="${post.preview_url}" class="sx-prev" alt="">` : '<div class="sx-prev sx-noprev"></div>';
-    return `<div class="mb-3 sx-lockbox" onclick="sxAskUnlock('post','${post.id}',${post.price})">${prev}
-        <div class="sx-lockc"><span class="sx-lockic">${sxStar()}</span><b>Paid post</b><small>Unlock to view the photos</small>
-        <span class="sx-unlockbtn">Unlock for ${sxStar('sx-inl')} ${sxNum(post.price)}</span></div></div>`;
+    return `<div class="mb-3 sx-lockbox" onclick="sxAskUnlock('post','${post.id}',${post.price})">${prev}<i class="sx-dust"></i>
+        <span class="sx-tag">${sxStar('sx-inl')} Paid</span>
+        <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(post.price)}</span></div>`;
 }
 function sxLockedReelHtml(v) {
-    return `<div class="sx-lock" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}
-        <div class="sx-lockc"><span class="sx-lockic">${sxStar()}</span><b>Premium reel</b><small>Unlock to watch</small>
-        <span class="sx-unlockbtn">Unlock for ${sxStar('sx-inl')} ${sxNum(v.price)}</span></div></div>`;
+    return `<div class="sx-lock" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}<i class="sx-dust"></i>
+        <div class="sx-lockc"><span class="sx-tag" style="position:static">${sxStar('sx-inl')} Paid reel</span>
+        <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</span></div></div>`;
 }
 const sxPriceBadge = (price) => price > 0 ? `<span class="sx-pbadge">${sxStar('sx-inl')} ${sxNum(price)}</span>` : '';
 
 // ---------- Tips (Star reactions) ----------
+const sxSliderAmt = (v) => { let a = Math.round(Math.exp(Math.log(2500) * v / 100)); if (a > 1000) a = Math.round(a / 100) * 100; else if (a > 100) a = Math.round(a / 10) * 10; else if (a > 20) a = Math.round(a / 5) * 5; return Math.max(1, Math.min(2500, a)); };
 window.sxOpenTip = async (kind, id) => {
     if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to send Stars.');
     SX.tip = { kind, id, amt: 10 };
-    const chips = [1, 5, 10, 50, 100, 500];
-    document.getElementById('tipChips').innerHTML = chips.map(n => `<button class="sx-chip ${n === 10 ? 'on' : ''}" data-n="${n}" onclick="sxPickTip(${n})">${sxStar('sx-inl')} ${n}</button>`).join('');
-    document.getElementById('tipAmt').value = ''; sxPickTip(10);
-    document.getElementById('tipBal').textContent = SX.balance === null ? '' : `Your balance: ${sxNum(SX.balance)} Stars`;
+    document.getElementById('tipRange').value = 29; sxSlide(29);
+    document.getElementById('tipBal').textContent = SX.balance === null ? '' : `Your balance is ${sxNum(SX.balance)} Stars`;
     openSheet('tipBg', 'tipSheet'); sxHaptic('light');
-    sxRefresh().then(() => { document.getElementById('tipBal').textContent = `Your balance: ${sxNum(SX.balance)} Stars`; });
+    sxRefresh().then(() => { document.getElementById('tipBal').textContent = `Your balance is ${sxNum(SX.balance)} Stars`; });
 };
-window.sxPickTip = (n) => { SX.tip.amt = n; document.querySelectorAll('#tipChips .sx-chip').forEach(c => c.classList.toggle('on', Number(c.dataset.n) === n)); document.getElementById('tipGo').innerHTML = `Send ${sxStar('sx-inl')} ${sxNum(n)}`; sxHaptic('light'); };
-document.addEventListener('input', (e) => { if (e.target && e.target.id === 'tipAmt') { const n = parseInt(e.target.value) || 0; if (n > 0) { SX.tip.amt = n; document.querySelectorAll('#tipChips .sx-chip').forEach(c => c.classList.remove('on')); document.getElementById('tipGo').innerHTML = `Send ${sxStar('sx-inl')} ${sxNum(n)}`; } } });
+window.sxSlide = (v) => {
+    const a = sxSliderAmt(Number(v)); if (SX.tip && SX.tip.amt !== a) sxHaptic('light');
+    if (SX.tip) SX.tip.amt = a;
+    document.getElementById('tipNum').textContent = sxNum(a);
+    document.getElementById('tipGo').innerHTML = `Send ${sxStar('sx-inl')} ${sxNum(a)}`;
+};
 window.sxDoTip = async () => {
     const t = SX.tip; if (!t || !(t.amt > 0)) return;
     const go = document.getElementById('tipGo'); go.disabled = true; go.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
@@ -192,7 +205,8 @@ window.paidToggle = async (p) => {
     if (on) { const cfg = await sxConfig(); const a = document.getElementById(p + 'Amt'); a.min = cfg.min_price; a.max = cfg.max_price; document.getElementById(p + 'Hint').textContent = `Viewers pay Stars to unlock it (${cfg.min_price}–${cfg.max_price}). You keep ${100 - Math.round(cfg.fee)}%.`; paidAmt(p); } else SXP[p] = 0;
     sxHaptic('light');
 };
-window.paidAmt = (p) => { const n = parseInt(document.getElementById(p + 'Amt').value) || 0; SXP[p] = n; };
+window.paidAmt = (p) => { const n = parseInt(document.getElementById(p + 'Amt').value) || 0; SXP[p] = n; const fee = (SX.cfg && SX.cfg.fee) || 10; const h = document.getElementById(p + 'Hint'); if (n > 0 && h) h.textContent = `Viewers pay ${sxNum(n)} Stars to unlock. You earn ${sxNum(n - Math.floor(n * fee / 100))} Stars each time.`; };
+window.paidSet = (p, n) => { document.getElementById(p + 'Amt').value = n; paidAmt(p); sxHaptic('light'); };
 function sxResetPaid(p) { const c = document.getElementById(p + 'On'); if (c) { c.checked = false; document.getElementById(p + 'Box').classList.add('hidden'); } SXP[p] = 0; }
 // Tiny preview that gets blurred with CSS (never the real photo)
 function sxTiny(src, isVideo) {
