@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=091cf9a8" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=108c0133" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -403,21 +403,19 @@
     <!-- STARS: shared star symbol + wallet / add / unlock / tip sheets -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
         <linearGradient id="sxGrad" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#ffe45c"/><stop offset=".55" stop-color="#ffb81f"/><stop offset="1" stop-color="#f58f00"/></linearGradient>
-        <symbol id="sxStar" viewBox="0 0 24 24"><polygon points="12.00,2.40 14.88,8.64 21.70,9.45 16.66,14.11 18.00,20.85 12.00,17.50 6.00,20.85 7.34,14.11 2.30,9.45 9.12,8.64" fill="#f59a00" stroke="#f59a00" stroke-width="2.4" stroke-linejoin="round"/><polygon points="12.00,2.40 14.88,8.64 21.70,9.45 16.66,14.11 18.00,20.85 12.00,17.50 6.00,20.85 7.34,14.11 2.30,9.45 9.12,8.64" fill="#ffc21a" stroke="#ffc21a" stroke-width="1.2" stroke-linejoin="round"/><polygon points="12.00,12.60 12.00,2.40 14.88,8.64" fill="#fdd74f" stroke="#fdd74f" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 14.88,8.64 21.70,9.45" fill="#f7b42d" stroke="#f7b42d" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 21.70,9.45 16.66,14.11" fill="#f4a21c" stroke="#f4a21c" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 16.66,14.11 18.00,20.85" fill="#f08802" stroke="#f08802" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 18.00,20.85 12.00,17.50" fill="#f08701" stroke="#f08701" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 12.00,17.50 6.00,20.85" fill="#f4a11a" stroke="#f4a11a" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 6.00,20.85 7.34,14.11" fill="#f7b22b" stroke="#f7b22b" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 7.34,14.11 2.30,9.45" fill="#fdd64e" stroke="#fdd64e" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 2.30,9.45 9.12,8.64" fill="#fee058" stroke="#fee058" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,12.60 9.12,8.64 12.00,2.40" fill="#fee059" stroke="#fee059" stroke-width=".35" stroke-linejoin="round"/><polygon points="12.00,3.60 9.72,8.64 14.28,8.74" fill="#fff" fill-opacity=".35"/></symbol>
+        <linearGradient id="sxFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe066"/><stop offset=".6" stop-color="#ffc233"/><stop offset="1" stop-color="#ffa91f"/></linearGradient><symbol id="sxStar" viewBox="0 0 24 24"><polygon points="12.00,2.40 14.76,8.60 21.51,9.31 16.47,13.85 17.88,20.49 12.00,17.10 6.12,20.49 7.53,13.85 2.49,9.31 9.24,8.60" fill="url(#sxFill)" stroke="#f08c10" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.4 10.6c3.4.9 6-.2 8.2-2.3" fill="none" stroke="#f08c10" stroke-width="1.1" stroke-linecap="round" opacity=".9"/><path d="M7.2 8.4l2.4-.4" fill="none" stroke="#fff6c4" stroke-width="1" stroke-linecap="round" opacity=".8"/></symbol>
     </defs></svg>
 
     <div id="walletBg" class="hidden fixed inset-0 blur-bg z-[90] flex items-end justify-center">
-        <div id="walletSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:90vh">
-            <div class="sx-nav"><button class="sx-x" onclick="closeSheet('walletBg','walletSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button><h3>Stars</h3><span style="width:30px"></span></div>
+        <div id="walletSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:92vh">
+            <div class="sx-nav"><button class="sx-back" onclick="closeSheet('walletBg','walletSheet')"><i class="fas fa-chevron-left"></i> Back</button><h3>Telegram Stars</h3><span style="width:60px"></span></div>
             <div class="tgi-scroll">
-                <div class="sx-field"><i class="sx-dust"></i><div class="sx-bigstar"><svg class="sx-star"><use href="#sxStar"/></svg></div></div>
                 <div class="tgi-card sx-balcard">
-                    <p class="sx-lbl">Your balance</p>
                     <p class="sx-bal"><svg class="sx-star"><use href="#sxStar"/></svg><span id="sxBalance">0</span></p>
-                    <button class="sx-cta" onclick="openAddStars()">Buy More Stars</button>
+                    <p class="sx-lbl">your balance</p>
+                    <div class="sx-btnrow"><button class="sx-cta" onclick="openAddStars()"><i class="fas fa-circle-plus"></i> Top Up</button><button class="sx-cta" onclick="sxToast('Withdraw is coming soon')"><i class="fas fa-circle-minus"></i> Withdraw</button></div>
                     <p class="sx-earn" id="sxEarned"></p>
                 </div>
-                <div class="tgi-card"><button class="tgi-row" onclick="sxToast('Withdraw is coming soon')"><span class="tg-ic" style="background:#8e8e93"><i class="fas fa-arrow-up-from-bracket"></i></span><span class="tgi-label">Withdraw Stars</span><span class="tgi-val">Soon</span><i class="fas fa-chevron-right tgme-chev"></i></button></div>
                 <div id="sxPending"></div>
                 <p class="tgi-head">Stars history</p>
                 <div class="sx-seg" id="sxSeg"><button class="on" onclick="sxFilter('all')">All</button><button onclick="sxFilter('in')">Incoming</button><button onclick="sxFilter('out')">Outgoing</button></div>
