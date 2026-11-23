@@ -23,7 +23,7 @@ async function loadPosts(page = 1, clearFeed = true) {
         const res = await fetch('/api/getPosts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tgAuth(), page, limit: 10, feed: feedMode, ranked: true, exclude: feedLoaded.slice(-300), cursor: feedCursor || undefined, seen: getSeenIds('p').slice(-300) })
+            body: JSON.stringify(feedMode === 'premium' ? { initData: tgAuth(), page, limit: 10, premium: true } : { initData: tgAuth(), page, limit: 10, feed: feedMode, ranked: true, exclude: feedLoaded.slice(-300), cursor: feedCursor || undefined, seen: getSeenIds('p').slice(-300) })
         });
         const posts = await res.json();
         if (Array.isArray(posts)) posts.forEach(p => { feedLoaded.push(String(p.id)); if (p._older) feedCursor = p.created_at; });
@@ -34,7 +34,9 @@ async function loadPosts(page = 1, clearFeed = true) {
         if (!posts || posts.length === 0) {
             hasMorePosts = false;
             if (clearFeed) {
-                feed.innerHTML = feedMode === 'following'
+                feed.innerHTML = feedMode === 'premium'
+                    ? '<div class="text-center text-gray-400 py-12 px-6"><svg class="sx-star" style="width:46px;height:46px;opacity:.7"><use href="#sxStar"/></svg><p class="font-bold mt-2">No Premium posts yet</p><p class="text-xs mt-1">Paid posts and videos from creators show up here. Create one with the Paid post switch.</p></div>'
+                    : feedMode === 'following'
                     ? '<div class="text-center text-gray-400 py-12 px-6"><i class="fas fa-user-plus text-4xl mb-3 opacity-60"></i><p class="font-bold">Your Following feed is empty</p><p class="text-xs mt-1">Tap a name or photo on any post and press Follow to see their posts here.</p></div>'
                     : '<div class="text-center text-gray-400 py-10">No posts on feed.</div>';
             }
@@ -65,6 +67,19 @@ async function loadPosts(page = 1, clearFeed = true) {
     }
 }
 
+// Image slider markup (also used when a paid post gets unlocked in place)
+function postImagesHtml(imageUrls) {
+    if (!(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "")) return '';
+    const valid = imageUrls.filter(Boolean);
+    let imgHtml = `<div class="mb-3"><div class="flex img-slider gap-1 rounded-lg overflow-x-auto" onscroll="handleImgSliderScroll(this)">`;
+    valid.forEach(url => {
+        imgHtml += `<div class="img-snap w-full flex-shrink-0 img-skeleton rounded-lg overflow-hidden" style="min-height:180px"><img src="${url}" loading="lazy" onload="this.classList.add('loaded');this.parentElement.classList.remove('img-skeleton');this.parentElement.style.minHeight=0" onclick="openLightbox('${url}')" class="post-img w-full h-auto cursor-pointer" style="max-height:75vh;object-fit:contain"></div>`;
+    });
+    imgHtml += `</div>`;
+    if (valid.length > 1) imgHtml += `<div class="flex justify-center gap-1.5 mt-2">${valid.map((_, i) => `<span class="img-dot ${i === 0 ? 'active' : ''}"></span>`).join('')}</div>`;
+    return imgHtml + `</div>`;
+}
+
 // Builds one post card's HTML — used by the main feed and by shared deep links
 function buildPostCardHtml(post) {
     // FIXED: Fallback parser to cleanly convert raw PostgreSQL string arrays into JavaScript arrays
@@ -81,17 +96,8 @@ function buildPostCardHtml(post) {
         }
     }
 
-    let imgHtml = '';
-    if(imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && imageUrls[0] !== "") {
-        const valid = imageUrls.filter(Boolean);
-        imgHtml = `<div class="mb-3"><div class="flex img-slider gap-1 rounded-lg overflow-x-auto" onscroll="handleImgSliderScroll(this)">`;
-        valid.forEach(url => {
-            imgHtml += `<div class="img-snap w-full flex-shrink-0 img-skeleton rounded-lg overflow-hidden" style="min-height:180px"><img src="${url}" loading="lazy" onload="this.classList.add('loaded');this.parentElement.classList.remove('img-skeleton');this.parentElement.style.minHeight=0" onclick="openLightbox('${url}')" class="post-img w-full h-auto cursor-pointer" style="max-height:75vh;object-fit:contain"></div>`;
-        });
-        imgHtml += `</div>`;
-        if (valid.length > 1) imgHtml += `<div class="flex justify-center gap-1.5 mt-2">${valid.map((_, i) => `<span class="img-dot ${i === 0 ? 'active' : ''}"></span>`).join('')}</div>`;
-        imgHtml += `</div>`;
-    }
+    const price = post.price || 0;
+    let imgHtml = price > 0 && post.locked ? sxLockedPostHtml(post) : postImagesHtml(imageUrls);
 
     const isRich = post.rich && post.rich.blocks && post.rich.blocks.length;
     const captionHtml = animateEmojis(formatCaption(post.text, post.author_level || 1, post.entities));
@@ -107,13 +113,13 @@ function buildPostCardHtml(post) {
         : `<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">Level ${post.author_level || 1} [User]</span>`;
 
     return `
-        <div class="post-card bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in" ${(currentUser && String(post.author_id) === String(currentUser.tg_id)) ? '' : `data-view-post="${post.id}"`}>
+        <div class="post-card bg-white p-4 rounded-xl shadow-sm border mb-4 fade-in" data-pid="${post.id}" ${(currentUser && String(post.author_id) === String(currentUser.tg_id)) ? '' : `data-view-post="${post.id}"`}>
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfile('${post.author_id}')">
                     <img src="${post.author_photo}" class="w-10 h-10 rounded-full object-cover">
                     <div>
                         <h3 class="font-bold text-sm text-gray-900">${post.author_name}${verifiedIcon}</h3>
-                        ${labelBadge}${pinnedBadge}<span class="text-[10px] text-gray-400 ml-1.5"><i class="fas fa-eye"></i> ${post.views || 0}</span>
+                        ${labelBadge}${pinnedBadge}${sxPriceBadge(price)}<span class="text-[10px] text-gray-400 ml-1.5"><i class="fas fa-eye"></i> ${post.views || 0}</span>
                     </div>
                 </div>
                 <button onclick="openPostOptions('${post.id}', '${post.author_id}', '${post.type}')" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-v"></i></button>
@@ -129,6 +135,7 @@ function buildPostCardHtml(post) {
                 </button>
                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> ${t('comment')}</button>
                 <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> ${t('share')}</button>
+                ${post.type !== 'channel' && !(currentUser && String(post.author_id) === String(currentUser.tg_id)) && !String(post.id).startsWith('tmp') ? `<button onclick="sxOpenTip('post','${post.id}')" class="sx-tipbtn flex items-center gap-1" aria-label="Send Stars">${sxStar('sx-inl')}</button>` : ''}
             </div>
         </div>`;
 }
@@ -149,6 +156,7 @@ window.setFeedMode = (mode) => {
     feedMode = mode;
     document.getElementById('feedTabAll').classList.toggle('active', mode === 'all');
     document.getElementById('feedTabFollowing').classList.toggle('active', mode === 'following');
+    document.getElementById('feedTabPremium').classList.toggle('active', mode === 'premium');
     try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
     loadPosts(1, true);
 };

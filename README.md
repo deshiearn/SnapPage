@@ -173,3 +173,14 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 - **Notifications** sheet uses the same Telegram-style list and nav bar.
 - **Security**: photos/videos are now streamed through the server (`/api/tgImage`, `/api/tgVideo`, `/api/videoStream`) instead of redirecting to Telegram's file URL, which exposed the bot token to every viewer. Images are cached for a year (immutable file ids). Note: media bandwidth now passes through Render (100 GB/month free).
 - **Photo upload**: gallery pickers use `image/*` / `video/*` (opens the gallery, not the file manager); unsupported formats give a clear message; if uploads fail the admins get a bot message with the exact reason (once an hour); duplicate cap query removed from post creation.
+
+
+## Stars & paid content (Stage E)
+
+- **Paid posts / paid reels**: in the composer switch on *Paid post* (or *Paid reel*) and set a price in Stars. Viewers see a blurred preview and unlock with Stars; the creator receives the price minus a platform fee (default 10 %, editable in Admin → Stars).
+- **Premium tab** next to *Following* on Home and next to *For You* in Reels: only paid items. Paid items also appear (locked) in normal feeds.
+- **Star reactions (tips)**: the ⭐ button on posts/reels sends Stars to the creator.
+- **My Stars** (Me page): balance, history, *Add Stars* (xRocket) and *Withdraw* (coming soon).
+- **Security**: real media of paid items lives in `paid_assets` (never returned by feeds); paid videos stream only with a signed, per-user token; unlock/tip/deposit are atomic SQL functions (no double-spend, no double-credit).
+- **Deposits (xRocket)**: Admin → Stars → paste the xRocket Pay API key, currency and "Stars per 1 unit". The server creates an invoice, then re-reads it from xRocket (it never trusts webhook bodies) and credits Stars automatically (polling from the app + webhook hint + 1-minute safety net). API style can be `auto`, `v1` (Bearer) or `legacy` (Rocket-Pay-Key).
+- **SQL**: run `sql/16_stars_paid.sql` in Supabase.

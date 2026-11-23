@@ -199,6 +199,8 @@ async function submitPost() {
     if (!text.trim() && imagesArray.length === 0) return;
     const images = imagesArray.slice();
     const editId = editModePostId;
+    const paid = editId ? {} : await paidPostFields(images);   // price + tiny blurred preview, captured before the composer resets
+    sxResetPaid('pp');
     const tempId = 'tmp' + Date.now();
 
     if (!editId) {
@@ -222,7 +224,7 @@ async function submitPost() {
         const url = editId ? '/api/editPost' : '/api/createPost';
         const payload = editId
             ? { initData: tgAuth(), postId: editId, text, imageUrls: images }
-            : { initData: tgAuth(), text, imagesBase64: images };
+            : { initData: tgAuth(), text, imagesBase64: images, ...paid };
         const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
         const data = await res.json();
         if (!(data && data.success)) throw new Error((data && data.error) || (editId ? 'Update failed' : 'Creation failed'));
