@@ -1,5 +1,5 @@
 /* Slim Font Awesome: only the icons this app uses, self-hosted & subsetted */
-@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=108c0133) format("woff")}
+@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=97473305) format("woff")}
 @font-face{font-family:"FAR";font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/fa-regular.woff?h=744ac024) format("woff")}
 .fa,.fas,.fa-solid,.far,.fa-regular{display:inline-block;font-style:normal;font-variant:normal;line-height:1;text-rendering:auto;-webkit-font-smoothing:antialiased}
 .fa,.fas,.fa-solid{font-family:"FA";font-weight:900}
@@ -85,6 +85,7 @@
 .fa-trash-alt::before{content:"\f2ed"}
 .fa-user::before{content:"\f007"}
 .fa-user-plus::before{content:"\f234"}
+.fa-user-secret::before{content:"\f21b"}
 .fa-user-shield::before{content:"\f505"}
 .fa-user-slash::before{content:"\f506"}
 .fa-users::before{content:"\f0c0"}

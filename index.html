@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=108c0133" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=97473305" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -444,15 +444,25 @@
     </div>
 
     <div id="tipBg" class="hidden fixed inset-0 blur-bg z-[96] flex items-end justify-center">
-        <div id="tipSheet" class="bottom-sheet sx-mini shadow-2xl">
-            <button class="sx-x abs" onclick="closeSheet('tipBg','tipSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button>
-            <h3 class="sx-h" style="margin-top:4px">Send Stars</h3>
-            <p class="sx-p">Support the creator with a Star reaction.</p>
-            <div class="sx-tipnum"><svg class="sx-star"><use href="#sxStar"/></svg><span id="tipNum">10</span></div>
-            <input id="tipRange" type="range" min="0" max="100" value="40" class="sx-range" oninput="sxSlide(this.value)">
-            <div class="sx-rangelbl"><span>1</span><span>2,500</span></div>
+        <div id="tipSheet" class="bottom-sheet sx-mini sx-tip shadow-2xl">
+            <div class="sx-tiphead">
+                <div class="sx-tipbal"><small>Balance</small><b><svg class="sx-star"><use href="#sxStar"/></svg> <span id="tipBalNum">0</span></b></div>
+                <h3>React With Stars</h3>
+                <button class="sx-x" onclick="closeSheet('tipBg','tipSheet')" aria-label="Close"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="sx-slwrap" id="tipWrap">
+                <div class="sx-bubble" id="tipBubble"><i class="sx-dust"></i><svg class="sx-star"><use href="#sxStar"/></svg><span id="tipNum">10</span></div>
+                <div class="sx-track"><i class="sx-fill" id="tipFill"><i class="sx-dust"></i></i></div>
+                <input id="tipRange" type="range" min="0" max="100" value="29" class="sx-range2" oninput="sxSlide(this.value)">
+            </div>
+            <p class="sx-choose" id="tipChoose"></p>
+            <div id="tipTop" class="hidden">
+                <div class="sx-topline"><i></i><span>Top Senders</span><i></i></div>
+                <div class="sx-tops" id="tipTops"></div>
+            </div>
+            <label class="sx-check" onclick="sxToggleShow()"><span id="tipShow" class="on"><i class="fas fa-check"></i></span> Show me in Top Senders</label>
             <button id="tipGo" class="sx-cta" onclick="sxDoTip()"></button>
-            <p id="tipBal" class="sx-small"></p>
+            <p class="sx-small">By sending Stars you agree to the <span style="color:var(--app-link,#007aff)">Terms of Service</span>.</p>
         </div>
     </div>
 

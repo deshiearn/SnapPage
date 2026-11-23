@@ -694,3 +694,35 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .sx-lbl{font-size:20px;color:var(--app-hint,#8e8e93);margin-bottom:16px}
 .sx-btnrow{display:flex;gap:10px}.sx-btnrow .sx-cta{flex:1;font-size:19px;padding:15px 8px;border-radius:14px;gap:8px}.sx-btnrow .sx-cta i{font-size:20px}
 .sx-sheet .tgi-scroll{padding-top:6px}
+
+/* React With Stars (Telegram iOS) */
+.sx-tip{background:var(--app-surface,#fff);padding-top:14px}
+.sx-tiphead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.sx-tiphead h3{font-size:17px;font-weight:600;margin-top:6px;color:var(--app-text)}
+.sx-tipbal{width:96px}.sx-tipbal small{display:block;font-size:15px;color:var(--app-text)}.sx-tipbal b{font-size:20px;font-weight:500;display:flex;align-items:center;gap:4px;color:var(--app-text)}.sx-tipbal .sx-star{width:20px;height:20px}
+.sx-tiphead .sx-x{width:38px;height:38px;font-size:16px}
+.sx-slwrap{position:relative;margin:58px 0 20px;--p:.29;--tw:30px}
+.sx-track{height:50px;border-radius:25px;background:rgba(120,120,128,.12);overflow:hidden}
+.sx-fill{display:block;height:100%;width:calc(var(--tw)/2 + (100% - var(--tw)) * var(--p));background:linear-gradient(90deg,#ffb000,#ffd33d);border-radius:25px;position:relative;overflow:hidden}
+.sx-fill .sx-dust{opacity:.8;-webkit-mask-image:none;mask-image:none;background-size:23px 19px,31px 27px,17px 23px}
+.sx-range2{-webkit-appearance:none;appearance:none;position:absolute;left:0;right:0;top:0;height:50px;width:100%;margin:0;background:transparent;opacity:1}
+.sx-range2::-webkit-slider-runnable-track{height:50px;background:transparent}
+.sx-range2::-webkit-slider-thumb{-webkit-appearance:none;width:44px;height:44px;border-radius:50%;background:#fff;margin-top:3px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.sx-range2::-moz-range-track{height:50px;background:transparent}.sx-range2::-moz-range-thumb{width:44px;height:44px;border:0;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.sx-slwrap{--tw:44px}
+.sx-bubble{position:absolute;bottom:62px;left:calc(var(--tw)/2 + (100% - var(--tw)) * var(--p));transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 18px;border-radius:26px;background:linear-gradient(135deg,#ffb000,#ffc933);color:#fff;font-size:34px;font-weight:700;white-space:nowrap;box-shadow:0 6px 16px rgba(245,154,0,.35);z-index:2;pointer-events:none}
+.sx-bubble:after{content:"";position:absolute;left:50%;bottom:-8px;width:18px;height:18px;background:#ffb800;transform:translateX(-50%) rotate(45deg);border-radius:3px;z-index:-1}
+.sx-bubble .sx-star{width:34px;height:34px;filter:brightness(1.7) saturate(.2)}
+.sx-bubble .sx-dust{inset:-14px;opacity:.9;-webkit-mask-image:none;mask-image:none;z-index:-1}
+.sx-choose{text-align:center;font-size:17px;line-height:1.35;margin:0 8px 16px;color:var(--app-text)}
+.sx-topline{display:flex;align-items:center;gap:12px;margin:8px 0 14px}.sx-topline i{flex:1;height:.5px;background:var(--app-sep,rgba(120,120,128,.3))}
+.sx-topline span{background:linear-gradient(135deg,#ffb000,#ffc933);color:#fff;font-weight:600;font-size:17px;padding:8px 18px;border-radius:99px}
+.sx-tops{display:flex;justify-content:center;gap:26px;margin-bottom:14px}
+.sx-ts{display:flex;flex-direction:column;align-items:center;gap:6px;width:86px}.sx-tsn{font-size:15px;color:var(--app-text);max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-tsav{position:relative;width:60px;height:60px;border-radius:50%;background:#c7c7cc;display:flex;align-items:center;justify-content:center;color:#fff;font-size:30px}
+.sx-tsav img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.sx-tsav em{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:2px;background:linear-gradient(135deg,#ffb000,#ffc933);color:#fff;font-style:normal;font-size:12px;font-weight:700;padding:1px 7px;border-radius:99px;border:2px solid var(--app-surface,#fff)}.sx-tsav em .sx-star{width:11px;height:11px;filter:brightness(1.8) saturate(.1)}
+.sx-check{display:flex;align-items:center;justify-content:center;gap:12px;font-size:18px;padding:14px 0 16px;border-top:.5px solid var(--app-sep,rgba(120,120,128,.3));margin-top:6px;color:var(--app-text);cursor:pointer}
+.sx-check span{width:28px;height:28px;border-radius:50%;border:1.5px solid #c7c7cc;display:flex;align-items:center;justify-content:center;color:transparent;font-size:14px;transition:.15s}
+.sx-check span.on{background:var(--app-accent,#007aff);border-color:var(--app-accent,#007aff);color:#fff}
+#tipSheet .sx-cta{border-radius:12px;font-size:19px;padding:17px}

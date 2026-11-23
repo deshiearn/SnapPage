@@ -12,7 +12,7 @@ const DEFAULTS = {
 const SETTING_KEYS = Object.keys(DEFAULTS);
 
 function register(ctx) {
-    const { app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot } = ctx;
+    const { app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot, getUserMetaBatch } = ctx;
     const STREAM_SECRET = 'SnapStream' + (process.env.BOT_TOKEN || '');
 
     // ---------- settings (cached 30 s) ----------
@@ -169,11 +169,26 @@ function register(ctx) {
         const type = req.body.type === 'video' ? 'video' : 'post', id = String(req.body.id || ''), amount = parseInt(req.body.amount) || 0;
         try {
             const s = await getSettings();
-            const { data, error } = await supabase.rpc('tip_stars', { p_user: uid, p_type: type, p_id: id, p_amount: amount, p_fee: Math.round(num(s.stars_fee_pct, 10)) });
+            const args = { p_user: uid, p_type: type, p_id: id, p_amount: amount, p_fee: Math.round(num(s.stars_fee_pct, 10)) };
+            let { data, error } = await supabase.rpc('tip_stars', { ...args, p_anon: req.body.show === false });
+            if (error && /p_anon|function|schema cache/i.test(error.message || '')) ({ data, error } = await supabase.rpc('tip_stars', args));   // sql/17 not run yet
             if (error) throw error;
             if (!data.ok) return res.status(data.error === 'insufficient' ? 402 : 400).json({ error: data.error, ...(await balanceOf(uid)) });
             res.json({ success: true, balance: data.balance });
         } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+    });
+
+    // Top Senders of one post/reel (people who chose "Show me in Top Senders")
+    app.post('/api/stars/topSenders', async (req, res) => {
+        const type = req.body.type === 'video' ? 'video' : 'post', id = String(req.body.id || '');
+        try {
+            const { data } = await supabase.from('star_txns').select('user_id, amount, note').eq('kind', 'tip').eq('content_type', type).eq('content_id', id).limit(500);
+            const agg = new Map();
+            (data || []).forEach(r => { const a = agg.get(r.user_id) || { id: r.user_id, stars: 0, anon: false }; a.stars += Math.abs(Number(r.amount)); if (r.note === 'anon') a.anon = true; agg.set(r.user_id, a); });
+            const top = [...agg.values()].sort((a, b) => b.stars - a.stars).slice(0, 3);
+            const meta = await getUserMetaBatch(top.filter(x => !x.anon).map(x => x.id));
+            res.json(top.map(x => x.anon ? { name: 'Anonymous', stars: x.stars, anon: true } : { name: (meta[x.id] && meta[x.id].name) || 'User', photo: (meta[x.id] && meta[x.id].photo_url) || '', stars: x.stars }));
+        } catch (e) { res.json([]); }
     });
 
     // ---------- xRocket client ----------

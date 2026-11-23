@@ -176,28 +176,43 @@ const sxPriceBadge = (price) => price > 0 ? `<span class="sx-pbadge">${sxStar('s
 
 // ---------- Tips (Star reactions) ----------
 const sxSliderAmt = (v) => { let a = Math.round(Math.exp(Math.log(2500) * v / 100)); if (a > 1000) a = Math.round(a / 100) * 100; else if (a > 100) a = Math.round(a / 10) * 10; else if (a > 20) a = Math.round(a / 5) * 5; return Math.max(1, Math.min(2500, a)); };
-window.sxOpenTip = async (kind, id) => {
+function sxAuthorName(btn) {
+    const it = btn.closest('.rl-item'); if (it) { const n = it.querySelector('.rl-author b'); return n ? n.textContent.trim() : ''; }
+    const c = btn.closest('.post-card'); const h = c && c.querySelector('h3'); return h ? h.childNodes[0].textContent.trim() : '';
+}
+window.sxOpenTip = async (kind, id, name) => {
     if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to send Stars.');
-    SX.tip = { kind, id, amt: 10 };
+    SX.tip = { kind, id, amt: 10, show: true };
+    document.getElementById('tipShow').classList.add('on');
     document.getElementById('tipRange').value = 29; sxSlide(29);
-    document.getElementById('tipBal').textContent = SX.balance === null ? '' : `Your balance is ${sxNum(SX.balance)} Stars`;
+    document.getElementById('tipChoose').innerHTML = `Choose how many stars you want to send${name ? ` to <b>${escapeHtml(name)}</b>` : ''} to support this ${kind === 'video' ? 'reel' : 'post'}.`;
+    document.getElementById('tipBalNum').textContent = SX.balance === null ? '–' : sxNum(SX.balance);
+    document.getElementById('tipTop').classList.add('hidden');
     openSheet('tipBg', 'tipSheet'); sxHaptic('light');
-    sxRefresh().then(() => { document.getElementById('tipBal').textContent = `Your balance is ${sxNum(SX.balance)} Stars`; });
+    sxRefresh().then(() => { document.getElementById('tipBalNum').textContent = sxNum(SX.balance); });
+    sxPost('/api/stars/topSenders', { type: kind, id }).then(list => {
+        if (!Array.isArray(list) || !list.length) return;
+        document.getElementById('tipTops').innerHTML = list.map(u => `<div class="sx-ts"><span class="sx-tsav">${u.anon ? '<i class="fas fa-user-secret"></i>' : `<img src="${u.photo || 'https://ui-avatars.com/api/?background=random&name=' + encodeURIComponent(u.name)}" onerror="this.src='https://ui-avatars.com/api/?name=U'" alt="">`}<em>${sxStar()}${sxNum(u.stars)}</em></span><span class="sx-tsn">${escapeHtml(u.name)}</span></div>`).join('');
+        document.getElementById('tipTop').classList.remove('hidden');
+    }).catch(() => {});
 };
+window.sxToggleShow = () => { SX.tip.show = !SX.tip.show; document.getElementById('tipShow').classList.toggle('on', SX.tip.show); sxHaptic('light'); };
 window.sxSlide = (v) => {
-    const a = sxSliderAmt(Number(v)); if (SX.tip && SX.tip.amt !== a) sxHaptic('light');
+    v = Number(v);
+    const a = sxSliderAmt(v); if (SX.tip && SX.tip.amt !== a) sxHaptic('light');
     if (SX.tip) SX.tip.amt = a;
     document.getElementById('tipNum').textContent = sxNum(a);
     document.getElementById('tipGo').innerHTML = `Send ${sxStar('sx-inl')} ${sxNum(a)}`;
+    const w = document.getElementById('tipWrap'); w.style.setProperty('--p', v / 100);
 };
 window.sxDoTip = async () => {
     const t = SX.tip; if (!t || !(t.amt > 0)) return;
     const go = document.getElementById('tipGo'); go.disabled = true; go.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
-    const d = await sxPost('/api/stars/tip', { type: t.kind, id: t.id, amount: t.amt });
+    const d = await sxPost('/api/stars/tip', { type: t.kind, id: t.id, amount: t.amt, show: t.show });
     go.disabled = false;
     if (d._status === 402) { closeSheet('tipBg', 'tipSheet'); SX.balance = d.balance; SX.target = t.amt; sxPaintBalance(); setTimeout(() => { sxToast('Not enough Stars'); openAddStars(); }, 320); return; }
     if (!d.success) { go.innerHTML = 'Try again'; return tg.showAlert(d.error === 'self' ? "You can't tip yourself." : (d.error || 'Could not send.')); }
-    SX.balance = d.balance; sxPaintBalance(); sxHaptic('ok'); sxBurst(go, 24);
+    SX.balance = d.balance; sxPaintBalance(); document.getElementById('tipBalNum').textContent = sxNum(d.balance); sxHaptic('ok'); sxBurst(go, 24);
     setTimeout(() => closeSheet('tipBg', 'tipSheet'), 450);
     setTimeout(() => sxToast(`${sxStar('sx-inl')} Sent ${sxNum(t.amt)} Stars`), 500);
 };

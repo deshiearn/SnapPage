@@ -157,7 +157,7 @@ async function requireAdminUser(req, res, next) {
 
 // ================= Stars wallet / paid content (see stars.js) =================
 const starsSchemaErr = (e) => /price|preview_url|paid_assets|star_|stars_|unlocks|schema cache|does not exist/i.test(String((e && e.message) || e)) ? 'Stars are not set up yet. Admin: run sql/16_stars_paid.sql in Supabase → SQL Editor.' : null;
-const stars = require('./stars').register({ app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot });
+const stars = require('./stars').register({ app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot, getUserMetaBatch });
 
 // ================= Telegram-native image hosting (replaces ImgBB) =================
 // ImgBB started rejecting every request from this deployment with "You have been forbidden
