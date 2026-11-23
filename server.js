@@ -1033,7 +1033,7 @@ async function getSupportLink() {
 app.get('/api/appStatus', async (req, res) => {
     const maintenance = await isMaintenanceMode();
     const supportLink = await getSupportLink();
-    res.json({ maintenance, supportLink });
+    res.json({ maintenance, supportLink, message: maintenance ? (await stars.getSettings()).maintenance_msg : '' });
 });
 
 // Browser visitors get a throw-away guest account (rate-limited per IP to protect the free tier)

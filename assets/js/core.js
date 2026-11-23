@@ -141,11 +141,9 @@ async function initApp() {
         const statusRes = await fetch('/api/appStatus');
         const status = await statusRes.json();
         if (status && status.maintenance) {
-            // Still resolve currentUser quietly so an admin can be let through later if needed;
-            // for now, all non-admin visitors are blocked.
-            document.getElementById('appLoadingScreen').classList.add('hidden');
-            document.getElementById('maintenanceOverlay').classList.remove('hidden');
-            return;
+            let isAdmin = false;     // admins can still open the app while maintenance is on
+            try { const ad = await (await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) || '' }) })).json(); isAdmin = !!ad.admin; } catch (e) {}
+            if (!isAdmin) { showMaintenance(status.message, status.supportLink); document.getElementById('appLoadingScreen').classList.add('hidden'); return; }
         }
     } catch (e) { /* if the status check fails, fail open so the app is still usable */ }
 

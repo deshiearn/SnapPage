@@ -404,7 +404,7 @@
             stCur.value = s.xrocket_currency; stPer.value = s.stars_per_unit; stBase.value = s.xrocket_base; stStyle.value = s.xrocket_style;
             stFee.value = s.stars_fee_pct; stMinDep.value = s.stars_min_deposit; stMinP.value = s.stars_min_price; stMaxP.value = s.stars_max_price;
             stPacks.value = s.stars_packs; stOn.checked = s.stars_enabled !== 'false'; stHook.textContent = d.webhook;
-            stTopOn.checked = s.stars_topup_on !== 'false'; stPayOn.checked = s.stars_payout_on !== 'false'; stMaint.checked = s.maintenance_on === 'true'; stMaintMsg.value = s.maintenance_msg; stPoRate.value = s.payout_per_unit; stPoMin.value = s.payout_min;
+            stTopOn.checked = s.stars_topup_on !== 'false'; stPayOn.checked = s.stars_payout_on !== 'false'; stMaint.checked = s.maintenance_mode === 'true'; stMaintMsg.value = s.maintenance_msg; stPoRate.value = s.payout_per_unit; stPoMin.value = s.payout_min;
             loadPayouts();
             stRecent.innerHTML = d.recent.map(r => `<div class="flex justify-between"><span>#${r.id} · ${r.user_id}</span><span>${r.stars} ⭐ · <b>${r.status}</b></span></div>`).join('') || '<span class="text-gray-400">None yet</span>';
         }
@@ -422,7 +422,7 @@
             loadPayouts(); loadStars();
         }
         async function saveStars() {
-            const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false', stars_topup_on: stTopOn.checked ? 'true' : 'false', stars_payout_on: stPayOn.checked ? 'true' : 'false', maintenance_on: stMaint.checked ? 'true' : 'false', maintenance_msg: stMaintMsg.value, payout_per_unit: stPoRate.value, payout_min: stPoMin.value } });
+            const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false', stars_topup_on: stTopOn.checked ? 'true' : 'false', stars_payout_on: stPayOn.checked ? 'true' : 'false', maintenance_mode: stMaint.checked ? 'true' : 'false', maintenance_msg: stMaintMsg.value, payout_per_unit: stPoRate.value, payout_min: stPoMin.value } });
             stStatus.textContent = d.success ? 'Saved ✓' : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
             if (d.success) { stKey.value = ''; loadStars(); }
         }
