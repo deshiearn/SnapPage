@@ -23,7 +23,12 @@ async function sxRefresh() {
     if (d && d.balance !== undefined) { SX.balance = d.balance; SX.earned = d.earned; SX.pending = d.pending || []; SX.cfg = d.config || SX.cfg; sxPaintBalance(); }
     return d;
 }
-function isRealTgUser() { return !!(currentUser && /^\d+$/.test(String(currentUser.tg_id))); }
+function isRealTgUser() {
+    if (window.IS_GUEST) return false;
+    let id = currentUser && (currentUser.tg_id || currentUser.id);
+    if (!id) { try { id = tg.initDataUnsafe.user.id; } catch (e) {} }
+    return /^\d+$/.test(String(id || ''));
+}
 function sxPaintBalance() {
     const m = document.getElementById('meStarsVal'); if (m) m.innerHTML = SX.balance === null ? '' : `${sxStar('sx-inl')} ${sxNum(SX.balance)}`;
     const b = document.getElementById('sxBalance'); if (b) sxCount(b, SX.balance || 0);
@@ -59,7 +64,8 @@ window.openWallet = async () => {
     if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to use Stars.');
     openSheet('walletBg', 'walletSheet');
     sxPaintBalance();
-    const d = await sxRefresh(); if (!d) return;
+    const d = await sxRefresh();
+    if (!d || d.error) { document.getElementById('sxHistory').innerHTML = `<div class="sx-empty">${escapeHtml((d && d.error) || 'Could not load your wallet.')}</div>`; return; }
     document.getElementById('sxPending').innerHTML = (d.pending || []).map(p => `<div class="tgi-card"><button class="tgi-row" onclick="sxResume(${p.id})"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-hourglass-half"></i></span><span class="tgi-label">Unpaid invoice \u00b7 ${sxNum(p.stars)} Stars</span><span class="tgi-val">Check</span></button></div>`).join('');
     sxTx = d.txns || []; sxRenderTx();
 };

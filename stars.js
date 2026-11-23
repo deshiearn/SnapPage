@@ -119,7 +119,8 @@ function register(ctx) {
         return String(u.id);
     }
     async function balanceOf(uid) {
-        const { data } = await supabase.from('users').select('stars_balance, stars_earned').eq('tg_id', uid).maybeSingle();
+        const { data, error } = await supabase.from('users').select('stars_balance, stars_earned').eq('tg_id', uid).maybeSingle();
+        if (error) return { balance: 0, earned: 0, missing: true };
         return { balance: Number(data && data.stars_balance) || 0, earned: Number(data && data.stars_earned) || 0 };
     }
 
@@ -133,6 +134,7 @@ function register(ctx) {
                 supabase.from('star_txns').select('id, kind, amount, content_type, content_id, note, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(40),
                 supabase.from('star_deposits').select('id, stars, status, created_at').eq('user_id', uid).eq('status', 'pending').order('created_at', { ascending: false }).limit(3)
             ]);
+            if (tx.error || dep.error || bal.missing) { console.error('Stars schema check failed:', (tx.error || dep.error || {}).message); return res.status(500).json({ error: 'Stars are not set up yet. Admin: run sql/16_stars_paid.sql in Supabase.' }); }
             res.json({ ...bal, txns: tx.data || [], pending: dep.data || [], config: publicConfig(await getSettings()) });
         } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
     });
