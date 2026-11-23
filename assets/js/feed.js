@@ -128,7 +128,7 @@ function buildPostCardHtml(post) {
             <button onclick="toggleCaption(this)" class="hidden see-more-btn text-xs font-bold text-blue-500 mb-3">${t('see_more')}</button>
             <div class="mb-3 see-more-spacer"></div>
             ${imgHtml}`}
-            <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked)}</div>
+            <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}" data-tips="${post.tip_total || 0}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked, post.tip_total)}</div>
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                 <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
                     <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> ${t('like')} (<span class="like-count">${likeCount}</span>)

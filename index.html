@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
 
     <!-- Start fetching the icon font and the loading sticker immediately -->
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=97473305" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=f3a2128c" as="font" type="font/woff" crossorigin>
     <link rel="preload" as="image" href="https://imghippo.nexpoint.click/7442919516/BQACAgUAAyEFAATk6e-_AAIR9GrIhAYAASHWyGztF1MrtZ-UuAroygAC9SIAAnE4QVYGw_dDFa2kqj0E.webp">
 </head>
 <body class="bg-gray-100 text-gray-900 pb-20 font-sans transition-colors">
@@ -413,9 +413,10 @@
                 <div class="tgi-card sx-balcard">
                     <p class="sx-bal"><svg class="sx-star"><use href="#sxStar"/></svg><span id="sxBalance">0</span></p>
                     <p class="sx-lbl">your balance</p>
-                    <div class="sx-btnrow"><button class="sx-cta" onclick="openAddStars()"><i class="fas fa-circle-plus"></i> Top Up</button><button class="sx-cta" onclick="sxToast('Withdraw is coming soon')"><i class="fas fa-circle-minus"></i> Withdraw</button></div>
+                    <div class="sx-btnrow"><button class="sx-cta" id="sxTopBtn" onclick="sxTopUp()"><i class="fas fa-circle-plus"></i> Top Up</button><button class="sx-cta" id="sxPayBtn" onclick="sxOpenPayout()"><i class="fas fa-circle-minus"></i> Withdraw</button></div>
                     <p class="sx-earn" id="sxEarned"></p>
                 </div>
+                <div id="sxPayouts"></div>
                 <div id="sxPending"></div>
                 <p class="tgi-head">Stars history</p>
                 <div class="sx-seg" id="sxSeg"><button class="on" onclick="sxFilter('all')">All</button><button onclick="sxFilter('in')">Incoming</button><button onclick="sxFilter('out')">Outgoing</button></div>
@@ -425,9 +426,32 @@
         </div>
     </div>
 
+    <div id="payoutBg" class="hidden fixed inset-0 blur-bg z-[95] flex items-end justify-center">
+        <div id="payoutSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:92vh">
+            <div class="sx-nav"><button class="sx-back" onclick="closeSheet('payoutBg','payoutSheet')"><i class="fas fa-chevron-left"></i> Back</button><h3>Withdraw Stars</h3><span style="width:60px"></span></div>
+            <div class="tgi-scroll">
+                <div class="tgi-card sx-balcard">
+                    <p class="sx-bal"><svg class="sx-star"><use href="#sxStar"/></svg><span id="poBal">0</span></p>
+                    <p class="sx-lbl" style="margin-bottom:0">available to withdraw</p>
+                </div>
+                <p class="tgi-head">Amount</p>
+                <div class="tgi-card">
+                    <div class="sx-price" style="border-top:0"><span>Stars</span><input id="poAmt" type="number" inputmode="numeric" placeholder="0" oninput="sxPoCalc()"><svg class="sx-star"><use href="#sxStar"/></svg></div>
+                    <div class="sx-price"><span>You receive</span><b id="poRecv" style="font-size:17px">–</b></div>
+                    <button class="tgi-row" onclick="sxPoMax()"><span class="tgi-label" style="color:var(--app-link,#007aff)">Withdraw all</span></button>
+                </div>
+                <p class="tgi-head">Send to</p>
+                <div class="tgi-card"><div class="sx-price" style="border-top:0"><input id="poDest" style="text-align:left;width:100%" placeholder="xRocket ID or wallet address" maxlength="120"></div></div>
+                <p class="tgi-foot"><span id="poNote">Requests are reviewed by the team, usually within 1–3 days.</span></p>
+                <div style="padding:6px 16px 0"><button id="poGo" class="sx-cta" onclick="sxDoPayout()">Withdraw</button></div>
+                <div style="height:calc(env(safe-area-inset-bottom,0px) + 24px)"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="addStarsBg" class="hidden fixed inset-0 blur-bg z-[95] flex items-end justify-center">
         <div id="addStarsSheet" class="bottom-sheet tgi-sheet sx-sheet flex flex-col shadow-2xl" style="height:90vh">
-            <div class="sx-nav"><button class="sx-x" onclick="closeAddStars()" aria-label="Close"><i class="fas fa-xmark"></i></button><h3>Buy Stars</h3><span style="width:30px"></span></div>
+            <div class="sx-nav"><button class="sx-back" onclick="closeAddStars()"><i class="fas fa-chevron-left"></i> Back</button><h3>Top Up</h3><span style="width:60px"></span></div>
             <div class="tgi-scroll" id="addStarsBody"></div>
         </div>
     </div>
@@ -536,6 +560,7 @@
         <img id="lightboxImg" class="max-w-full max-h-full object-contain">
     </div>
 
+    <script src="/assets/js/maint.js?v=__V__"></script>
     <script src="/assets/js/theme.js?v=__V__" defer></script>
     <script src="/assets/js/guest.js?v=__V__" defer></script>
     <script src="/assets/js/i18n.js?v=__V__" defer></script>
