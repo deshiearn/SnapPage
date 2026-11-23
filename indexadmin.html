@@ -125,6 +125,7 @@
 
             <!-- STARS TAB -->
             <div id="admin-tab-stars" class="admin-tab-content space-y-4">
+                <p id="stDb" class="text-xs font-bold"></p>
                 <div class="grid grid-cols-3 gap-2 text-center">
                     <div class="stat"><b id="stDep">–</b><span>Stars added</span></div>
                     <div class="stat"><b id="stUnl">–</b><span>unlocks</span></div>
@@ -381,6 +382,7 @@
         };
 
         async function loadStars() {
+            fetch('/api/stars/health').then(r => r.json()).then(h => { stDb.textContent = h.ready ? 'Database ready ✓' : 'Database NOT ready — run sql/16_stars_paid.sql in Supabase. ' + (h.errors || []).join(' | '); stDb.className = 'text-xs font-bold ' + (h.ready ? 'text-green-600' : 'text-red-600'); }).catch(() => {});
             const d = await adminFetch('/api/admin/stars/get', {});
             if (!d || d.error) { stStatus.textContent = (d && d.error) || ''; return; }
             const s = d.settings;

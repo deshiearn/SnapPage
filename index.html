@@ -125,7 +125,7 @@
 
             <div class="tgme-group">
                 <button onclick="openModal('channelModal')" class="tgme-row"><span class="tg-ic" style="background:#8b5cf6"><i class="fas fa-robot"></i></span><span class="tgme-label" data-i18n="channels">My Channels</span><i class="fas fa-chevron-right tgme-chev"></i></button>
-                <button onclick="openWallet()" class="tgme-row"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgme-label">My Stars</span><span class="tgi-val" id="meStarsVal">&nbsp;</span><i class="fas fa-chevron-right tgme-chev"></i></button>
+                <button onclick="if(window.openWallet)openWallet();else tg.showAlert('Stars did not load. Fully close and reopen the app.')" class="tgme-row"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgme-label">My Stars</span><span class="tgi-val" id="meStarsVal">&nbsp;</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <button onclick="openPerks()" class="tgme-row"><span class="tg-ic" style="background:#f59e0b"><i class="fas fa-gem"></i></span><span class="tgme-label">Level Perks</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <button onclick="openReferSheet()" class="tgme-row"><span class="tg-ic" style="background:#22c55e"><i class="fas fa-gift"></i></span><span class="tgme-label" data-i18n="invite">Invite & Level Up</span><i class="fas fa-chevron-right tgme-chev"></i></button>
                 <button id="adminPanelBtn" onclick="goToAdminPanel()" class="tgme-row hidden"><span class="tg-ic" style="background:#ef4444"><i class="fas fa-user-shield"></i></span><span class="tgme-label">Admin Panel</span><i class="fas fa-chevron-right tgme-chev"></i></button>
@@ -217,7 +217,7 @@
 
 
                 <div class="tgi-card">
-                    <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid post</span><label class="toggle-switch"><input type="checkbox" id="ppOn" onchange="paidToggle('pp')"><span class="toggle-slider"></span></label></div>
+                    <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid post</span><label class="toggle-switch"><input type="checkbox" id="ppOn" onchange="if(window.paidToggle)paidToggle('pp');else{this.checked=false;tg.showAlert('Stars did not load. Fully close and reopen the app.')}"><span class="toggle-slider"></span></label></div>
                     <div id="ppBox" class="hidden"><div class="sx-price"><span>Price</span><input id="ppAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('pp')"><svg class="sx-star"><use href="#sxStar"/></svg></div><div class="sx-quick"><button onclick="paidSet('pp',10)">10</button><button onclick="paidSet('pp',50)">50</button><button onclick="paidSet('pp',100)">100</button><button onclick="paidSet('pp',250)">250</button><button onclick="paidSet('pp',500)">500</button></div></div>
                 </div>
                 <p class="tgi-foot"><span id="ppHint">Viewers pay Stars to unlock it. Shown in the Premium tab.</span></p>
@@ -293,7 +293,7 @@
                 </div>
 
                 <div class="tgi-card">
-                    <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid reel</span><label class="toggle-switch"><input type="checkbox" id="vpOn" onchange="paidToggle('vp')"><span class="toggle-slider"></span></label></div>
+                    <div class="tgi-row" style="cursor:default"><span class="tg-ic" style="background:linear-gradient(135deg,#ffcf3f,#ff9f0a)"><svg class="sx-star" style="color:#fff"><use href="#sxStar"/></svg></span><span class="tgi-label">Paid reel</span><label class="toggle-switch"><input type="checkbox" id="vpOn" onchange="if(window.paidToggle)paidToggle('vp');else{this.checked=false;tg.showAlert('Stars did not load. Fully close and reopen the app.')}"><span class="toggle-slider"></span></label></div>
                     <div id="vpBox" class="hidden"><div class="sx-price"><span>Price</span><input id="vpAmt" type="number" inputmode="numeric" min="1" value="50" oninput="paidAmt('vp')"><svg class="sx-star"><use href="#sxStar"/></svg></div><div class="sx-quick"><button onclick="paidSet('vp',10)">10</button><button onclick="paidSet('vp',50)">50</button><button onclick="paidSet('vp',100)">100</button><button onclick="paidSet('vp',250)">250</button><button onclick="paidSet('vp',500)">500</button></div></div>
                 </div>
                 <p class="tgi-foot"><span id="vpHint">Viewers pay Stars to unlock it. Shown in the Premium tab.</span></p>

@@ -65,7 +65,7 @@ window.openWallet = async () => {
     openSheet('walletBg', 'walletSheet');
     sxPaintBalance();
     const d = await sxRefresh();
-    if (!d || d.error) { document.getElementById('sxHistory').innerHTML = `<div class="sx-empty">${escapeHtml((d && d.error) || 'Could not load your wallet.')}</div>`; return; }
+    if (!d || d.error) { tg.showAlert((d && d.error) || 'Could not load your wallet. Check your connection.'); document.getElementById('sxHistory').innerHTML = `<div class="sx-empty">${escapeHtml((d && d.error) || 'Could not load your wallet.')}</div>`; return; }
     document.getElementById('sxPending').innerHTML = (d.pending || []).map(p => `<div class="tgi-card"><button class="tgi-row" onclick="sxResume(${p.id})"><span class="tg-ic" style="background:#ff9500"><i class="fas fa-hourglass-half"></i></span><span class="tgi-label">Unpaid invoice \u00b7 ${sxNum(p.stars)} Stars</span><span class="tgi-val">Check</span></button></div>`).join('');
     sxTx = d.txns || []; sxRenderTx();
 };

@@ -137,3 +137,6 @@ begin
     insert into star_txns(user_id, kind, amount, note) values (d.user_id, 'deposit', d.stars, 'xRocket #' || coalesce(d.ext_id,''));
     return jsonb_build_object('ok', true, 'balance', bal, 'user', d.user_id, 'stars', d.stars);
 end $$;
+
+-- 8. Make the API see the new columns/functions immediately
+notify pgrst, 'reload schema';

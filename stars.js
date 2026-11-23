@@ -124,6 +124,12 @@ function register(ctx) {
         return { balance: Number(data && data.stars_balance) || 0, earned: Number(data && data.stars_earned) || 0 };
     }
 
+    app.get('/api/stars/health', async (req, res) => {
+        const chk = async (q) => { const { error } = await q; return error ? error.message : null; };
+        const errs = [await chk(supabase.from('users').select('stars_balance').limit(1)), await chk(supabase.from('posts').select('price, preview_url').limit(1)), await chk(supabase.from('videos').select('price').limit(1)),
+            await chk(supabase.from('paid_assets').select('content_id').limit(1)), await chk(supabase.from('unlocks').select('user_id').limit(1)), await chk(supabase.from('star_txns').select('id').limit(1)), await chk(supabase.from('star_deposits').select('id').limit(1))].filter(Boolean);
+        res.json({ ready: !errs.length, errors: errs.slice(0, 3) });
+    });
     app.get('/api/stars/config', async (req, res) => { res.set('Cache-Control', 'public, max-age=30'); res.json(publicConfig(await getSettings())); });
 
     app.post('/api/stars/wallet', async (req, res) => {
