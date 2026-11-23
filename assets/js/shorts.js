@@ -22,7 +22,7 @@ async function loadShorts(reset = false) {
         const res = await fetch('/api/getShorts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ page: shortsPage, limit: 5, initData: tgAuth(), following: shortsMode === 'following', ranked: true, exclude: shortsLoaded.slice(-300), cursor: shortsCursor || undefined, seen: getSeenIds('v').slice(-300) })
+            body: JSON.stringify(shortsMode === 'premium' ? { page: shortsPage, limit: 5, initData: tgAuth(), premium: true } : { page: shortsPage, limit: 5, initData: tgAuth(), following: shortsMode === 'following', ranked: true, exclude: shortsLoaded.slice(-300), cursor: shortsCursor || undefined, seen: getSeenIds('v').slice(-300) })
         });
         const videos = await res.json();
         if (Array.isArray(videos)) videos.forEach(v => { shortsLoaded.push(String(v.id)); if (v._older) shortsCursor = v.created_at; });
@@ -30,7 +30,7 @@ async function loadShorts(reset = false) {
         if (!videos || videos.length === 0) {
             hasMoreShorts = false;
             if (reset) {
-                document.getElementById('shortsEmptyMsg').textContent = shortsMode === 'following'
+                document.getElementById('shortsEmptyMsg').textContent = shortsMode === 'premium' ? 'No Premium reels yet.' : shortsMode === 'following'
                     ? 'Follow people to see their reels here.' : 'No Shorts yet — be the first to upload!';
                 empty.classList.remove('hidden');
             }
@@ -69,8 +69,8 @@ function renderShortItem(v) {
     const showFollow = !mine && !v.is_following && v.type !== 'channel';
     const avatar = v.author_photo || 'https://ui-avatars.com/api/?name=U';
     return `
-    <div class="short-item rl-item" data-video-id="${v.id}" data-author="${v.author_id}">
-        <video class="rl-video" data-src="${v.stream_url}" playsinline muted preload="none"
+    <div class="short-item rl-item ${v.price > 0 && v.locked ? 'sx-locked' : ''}" data-video-id="${v.id}" data-author="${v.author_id}" data-price="${v.price || 0}">
+        <video class="rl-video" data-src="${v.stream_url || ''}" playsinline muted preload="none"
             onloadedmetadata="this.classList.toggle('rl-cover', this.videoHeight >= this.videoWidth * 1.2)"
             onwaiting="this.closest('.rl-item').classList.add('buffering')"
             onplaying="this.closest('.rl-item').classList.remove('buffering', 'paused')"
@@ -83,6 +83,7 @@ function renderShortItem(v) {
         <div class="rl-pause"><i class="fas fa-play"></i></div>
         <div class="rl-tap" onclick="handleShortTap(event, '${v.id}')"></div>
 
+        ${v.price > 0 && v.locked ? sxLockedReelHtml(v) : ''}
         <div class="rl-rail">
             <div class="rl-avwrap" onclick="openProfile('${v.author_id}')">
                 <img src="${avatar}" class="rl-av" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=U'">
@@ -94,6 +95,7 @@ function renderShortItem(v) {
                 <span class="rl-react-row" data-react-row="video:${v.id}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false)}</span>
             </button>
             <button onclick="openComments('${v.id}', 'video')" class="rl-btn"><i class="far fa-comment-dots"></i><span>Comment</span></button>
+            ${!mine && v.type !== 'channel' ? `<button onclick="sxOpenTip('video','${v.id}')" class="rl-btn rl-star" aria-label="Send Stars">${sxStar()}<span>Stars</span></button>` : ''}
             <button onclick="shareVideoDirectly('${v.id}')" class="rl-btn"><i class="far fa-paper-plane"></i><span>Share</span></button>
             <button onclick="openShortOptions('${v.id}', '${v.author_id}', '${v.type}')" class="rl-btn" aria-label="More"><i class="fas fa-ellipsis"></i></button>
         </div>
@@ -431,15 +433,16 @@ vuEl('submitVideoBtn').addEventListener('click', async () => {
     btn.disabled = true; btn.textContent = 'Preparing…';
     vuEl('vuProgress').classList.remove('hidden');
     try {
+        const paid = await paidVideoFields();
         const videoBase64 = await fileToDataUrl(selectedVideoFile);        // read only now, so choosing a clip costs no memory
-        const data = await postJsonWithProgress('/api/createVideo', JSON.stringify({ initData: tgAuth(), caption: vuEl('videoCaptionText').value, videoBase64 }), (f) => {
+        const data = await postJsonWithProgress('/api/createVideo', JSON.stringify({ initData: tgAuth(), caption: vuEl('videoCaptionText').value, videoBase64, ...paid }), (f) => {
             const pct = Math.round(f * 100);
             vuEl('vuBar').style.width = pct + '%'; vuEl('vuPct').textContent = pct + '%';
             btn.textContent = f >= 1 ? 'Processing…' : pct + '%';
         });
         if (data && data.success) {
             try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
-            closeModal('videoUploadModal'); vuReset();
+            closeModal('videoUploadModal'); vuReset(); sxResetPaid('vp');
             tg.showAlert("Your reel is live!");
             if (typeof shortsActive !== 'undefined' && shortsActive) loadShorts(true);
         } else {

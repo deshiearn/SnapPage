@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/assets/css/icons.css?v=__V__">
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
     <link rel="stylesheet" href="/assets/css/admin.css?v=__V__">
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=4a7ef57b" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=e1798e98" as="font" type="font/woff" crossorigin>
 
 </head>
 <body class="bg-gray-100 text-gray-900 font-sans">
@@ -38,6 +38,7 @@
             <button class="admin-tab-btn" data-tab="manage" onclick="switchAdminTab('manage')">Manage</button>
             <button class="admin-tab-btn" data-tab="broadcast" onclick="switchAdminTab('broadcast')">Broadcast</button>
             <button class="admin-tab-btn" data-tab="ads" onclick="switchAdminTab('ads')">Ads</button>
+            <button class="admin-tab-btn" data-tab="stars" onclick="switchAdminTab('stars')">Stars</button>
             <button class="admin-tab-btn" data-tab="system" onclick="switchAdminTab('system')">System</button>
             <button class="admin-tab-btn" data-tab="settings" onclick="switchAdminTab('settings')">Settings</button>
         </div>
@@ -120,6 +121,48 @@
                     <p id="adStatus" class="text-xs"></p>
                 </div>
                 <div id="adList" class="space-y-2"></div>
+            </div>
+
+            <!-- STARS TAB -->
+            <div id="admin-tab-stars" class="admin-tab-content space-y-4">
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="stat"><b id="stDep">–</b><span>Stars added</span></div>
+                    <div class="stat"><b id="stUnl">–</b><span>unlocks</span></div>
+                    <div class="stat"><b id="stWal">–</b><span>in wallets</span></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border space-y-2">
+                    <h4 class="font-bold text-sm"><i class="fas fa-star text-yellow-500"></i> xRocket auto-deposit</h4>
+                    <label class="text-[11px] font-bold text-gray-400">API KEY <span id="stKeyState" class="text-gray-400"></span></label>
+                    <input id="stKey" type="password" autocomplete="off" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Paste xRocket Pay API key (blank = keep saved)">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="text-[11px] font-bold text-gray-400">CURRENCY</label><input id="stCur" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="USDT"></div>
+                        <div><label class="text-[11px] font-bold text-gray-400">STARS PER 1 UNIT</label><input id="stPer" type="number" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="50"></div>
+                    </div>
+                    <label class="text-[11px] font-bold text-gray-400">API BASE URL</label>
+                    <input id="stBase" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="https://pay.api.xrocket.exchange">
+                    <label class="text-[11px] font-bold text-gray-400">API STYLE</label>
+                    <select id="stStyle" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none"><option value="auto">Auto (try new, then legacy)</option><option value="v1">New (Bearer token)</option><option value="legacy">Legacy (Rocket-Pay-Key)</option></select>
+                    <p class="text-[11px] text-gray-400">Optional webhook URL for xRocket: <code id="stHook"></code></p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border space-y-2">
+                    <h4 class="font-bold text-sm"><i class="fas fa-sliders text-blue-500"></i> Rules</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="text-[11px] font-bold text-gray-400">PLATFORM FEE %</label><input id="stFee" type="number" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none"></div>
+                        <div><label class="text-[11px] font-bold text-gray-400">MIN DEPOSIT (STARS)</label><input id="stMinDep" type="number" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none"></div>
+                        <div><label class="text-[11px] font-bold text-gray-400">MIN PRICE</label><input id="stMinP" type="number" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none"></div>
+                        <div><label class="text-[11px] font-bold text-gray-400">MAX PRICE</label><input id="stMaxP" type="number" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none"></div>
+                    </div>
+                    <label class="text-[11px] font-bold text-gray-400">DEPOSIT PACKS (comma separated)</label>
+                    <input id="stPacks" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="50,100,250,500,1000,2500">
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="stOn"> Paid content &amp; deposits enabled</label>
+                    <div class="flex gap-2"><button onclick="saveStars()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Save</button><button onclick="testStars()" class="px-4 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Test key</button></div>
+                    <p id="stStatus" class="text-xs"></p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border space-y-2">
+                    <h4 class="font-bold text-sm"><i class="fas fa-gift text-pink-500"></i> Give / take Stars</h4>
+                    <div class="flex gap-2"><input id="stUid" class="flex-1 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Telegram ID"><input id="stAmt" type="number" class="w-24 bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="± Stars"><button onclick="grantStars()" class="px-4 bg-green-600 text-white rounded-lg text-sm font-bold">Apply</button></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border"><h4 class="font-bold text-sm mb-2">Recent deposits</h4><div id="stRecent" class="text-xs space-y-1"></div></div>
             </div>
 
             <!-- SYSTEM TAB -->
@@ -334,7 +377,34 @@
             if (tab === 'settings') loadAdminSettings();
             if (tab === 'ads') loadAds();
             if (tab === 'system') loadSystem();
+            if (tab === 'stars') loadStars();
         };
+
+        async function loadStars() {
+            const d = await adminFetch('/api/admin/stars/get', {});
+            if (!d || d.error) { stStatus.textContent = (d && d.error) || ''; return; }
+            const s = d.settings;
+            stDep.textContent = d.stats.deposited; stUnl.textContent = d.stats.unlocks; stWal.textContent = d.stats.in_wallets;
+            stKeyState.textContent = d.key_set ? '· saved ' + s.xrocket_key : '· not set';
+            stCur.value = s.xrocket_currency; stPer.value = s.stars_per_unit; stBase.value = s.xrocket_base; stStyle.value = s.xrocket_style;
+            stFee.value = s.stars_fee_pct; stMinDep.value = s.stars_min_deposit; stMinP.value = s.stars_min_price; stMaxP.value = s.stars_max_price;
+            stPacks.value = s.stars_packs; stOn.checked = s.stars_enabled !== 'false'; stHook.textContent = d.webhook;
+            stRecent.innerHTML = d.recent.map(r => `<div class="flex justify-between"><span>#${r.id} · ${r.user_id}</span><span>${r.stars} ⭐ · <b>${r.status}</b></span></div>`).join('') || '<span class="text-gray-400">None yet</span>';
+        }
+        async function saveStars() {
+            const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false' } });
+            stStatus.textContent = d.success ? 'Saved ✓' : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
+            if (d.success) { stKey.value = ''; loadStars(); }
+        }
+        async function testStars() {
+            stStatus.textContent = 'Testing…'; stStatus.className = 'text-xs text-gray-500';
+            const d = await adminFetch('/api/admin/stars/test', {});
+            stStatus.textContent = d.success ? `Key works ✓ (API: ${d.style})` : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
+        }
+        async function grantStars() {
+            const d = await adminFetch('/api/admin/stars/grant', { userId: stUid.value, amount: parseInt(stAmt.value) });
+            stStatus.textContent = d.success ? `Done. New balance: ${d.balance}` : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
+        }
 
         async function loadSystem() {
             const d = await adminFetch('/api/admin/system', {});

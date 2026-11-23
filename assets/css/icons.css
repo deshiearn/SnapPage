@@ -1,5 +1,5 @@
 /* Slim Font Awesome: only the icons this app uses, self-hosted & subsetted */
-@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=4a7ef57b) format("woff")}
+@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=e1798e98) format("woff")}
 @font-face{font-family:"FAR";font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/fa-regular.woff?h=744ac024) format("woff")}
 .fa,.fas,.fa-solid,.far,.fa-regular{display:inline-block;font-style:normal;font-variant:normal;line-height:1;text-rendering:auto;-webkit-font-smoothing:antialiased}
 .fa,.fas,.fa-solid{font-family:"FA";font-weight:900}
@@ -9,6 +9,7 @@
 .fa-adjust::before{content:"\f042"}
 .fa-arrow-left::before{content:"\f060"}
 .fa-arrow-up::before{content:"\f062"}
+.fa-arrow-up-from-bracket::before{content:"\e09a"}
 .fa-arrows-rotate::before{content:"\f021"}
 .fa-at::before{content:"\40"}
 .fa-backward::before{content:"\f04a"}
@@ -21,7 +22,9 @@
 .fa-check-square::before{content:"\f14a"}
 .fa-chevron-left::before{content:"\f053"}
 .fa-chevron-right::before{content:"\f054"}
+.fa-circle-notch::before{content:"\f1ce"}
 .fa-clapperboard::before{content:"\e131"}
+.fa-clock::before{content:"\f017"}
 .fa-cog::before{content:"\f013"}
 .fa-comment::before{content:"\f075"}
 .fa-comment-dots::before{content:"\f4ad"}
@@ -47,6 +50,7 @@
 .fa-heart::before{content:"\f004"}
 .fa-heart-pulse::before{content:"\f21e"}
 .fa-home::before{content:"\f015"}
+.fa-hourglass-half::before{content:"\f252"}
 .fa-image::before{content:"\f03e"}
 .fa-link::before{content:"\f0c1"}
 .fa-lock::before{content:"\f023"}
@@ -69,6 +73,7 @@
 .fa-sliders::before{content:"\f1de"}
 .fa-spinner::before{content:"\f110"}
 .fa-square::before{content:"\f0c8"}
+.fa-star::before{content:"\f005"}
 .fa-thumbtack::before{content:"\f08d"}
 .fa-times::before{content:"\f00d"}
 .fa-times-circle::before{content:"\f057"}

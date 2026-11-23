@@ -155,6 +155,9 @@ async function requireAdminUser(req, res, next) {
     }
 }
 
+// ================= Stars wallet / paid content (see stars.js) =================
+const stars = require('./stars').register({ app, supabase, validateTGData, isRealTgId, requireAdminUser, requireAdminPassword, bot });
+
 // ================= Telegram-native image hosting (replaces ImgBB) =================
 // ImgBB started rejecting every request from this deployment with "You have been forbidden
 // to use this website" (error 103) — a known ImgBB behavior of blacklisting cloud-hosting IP
@@ -1200,6 +1203,11 @@ app.post('/api/getPosts', async (req, res) => {
             followIds = await getFollowingIds(tgUser.id.toString());
             if (!followIds.length) return res.json([]);
         }
+        if (req.body.premium) {            // Premium tab: paid posts only, newest first
+            const { data: prem, error: pe } = await supabase.from('posts').select('*').gt('price', 0).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+            if (pe) throw pe;
+            return res.json(await enrichPosts(prem || []));
+        }
         const base = () => {
             let q = supabase.from('posts').select('*');
             if (followIds) q = q.in('author_id', followIds);
@@ -1532,7 +1540,7 @@ async function enrichAuthors(items) {
     }));
 }
 
-async function enrichPosts(posts) { return enrichAuthors(posts); }
+async function enrichPosts(posts) { return stars.paywall(await enrichAuthors(posts), 'post'); }
 
 // Secure endpoint to get User's Personal Posts (RLS Bypass)
 app.post('/api/getMyPosts', async (req, res) => {
@@ -1543,7 +1551,7 @@ app.post('/api/getMyPosts', async (req, res) => {
     try {
         const { data: posts, error } = await supabase.from('posts').select('*').eq('author_id', tgUser.id.toString()).order('created_at', { ascending: false });
         if (error) throw error;
-        res.json(posts || []);
+        res.json(await stars.paywall(posts || [], 'post'));
     } catch(e) {
         res.status(500).json({ error: e.message || e });
     }
@@ -1603,6 +1611,9 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
         const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgUser.id.toString());
         const level = user.is_verified ? 3 : getLevelData(refCount || 0).level;
 
+        const pi = await stars.parsePriceInput(req.body);
+        if (pi.error) return res.status(400).json({ error: pi.error });
+        if (pi.price && (!isRealTgId(tgUser.id) || !(imagesBase64 && imagesBase64.length))) return res.status(400).json({ error: 'A paid post needs at least one photo.' });
         let imageUrls = [];
         let uploadFailures = 0;
         if (imagesBase64 && imagesBase64.length > 0) {
@@ -1615,19 +1626,22 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
             }
         }
 
-        const { error } = await supabase.from('posts').insert([{
+        if (pi.price && !imageUrls.length) return res.status(500).json({ error: lastUploadErr || 'Photo upload failed — the storage channel is not working.' });
+        const { data: ins, error } = await supabase.from('posts').insert([{
             author_id: tgUser.id.toString(),
             author_name: user.name,
             type: 'user',
             text,
-            image_urls: imageUrls,
+            image_urls: pi.price ? [] : imageUrls,
+            ...(pi.price ? { price: pi.price, preview_url: pi.preview || null } : {}),
             likes_count: 0,
             likes_users: [],
             is_pinned: false,
             created_at: new Date().toISOString()
-        }]);
+        }]).select('id').single();
 
         if (error) throw error;
+        if (pi.price) await stars.savePaidAssets('post', ins.id, { image_urls: imageUrls });
 
         const response = { success: true };
         if (Math.random() < 0.05) enforcePostCap();   // cheap probabilistic check; housekeeping also runs every 6 h
@@ -1721,6 +1735,7 @@ app.post('/api/deletePost', async (req, res) => {
         const { error } = await supabase.from('posts').delete().eq('id', postId);
         if (error) throw error;
         await supabase.from('reports').delete().eq('post_id', postId).eq('content_type', 'post');
+        if (post.price > 0) stars.dropPaidAssets('post', postId);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
@@ -2235,7 +2250,7 @@ async function markFollowing(videos, initData) {
 
 async function enrichVideos(videos) {
     const list = await enrichAuthors(videos);
-    return list.map(v => ({ ...v, stream_url: `/api/videoStream/${v.id}` }));
+    return stars.paywall(list.map(v => ({ ...v, stream_url: `/api/videoStream/${v.id}` })), 'video');
 }
 
 // Paginated Shorts feed
@@ -2244,6 +2259,11 @@ app.post('/api/getShorts', async (req, res) => {
     const limit = Math.min(parseInt(req.body.limit) || 5, 20);
     const offset = (parseInt(page) - 1) * limit;
     try {
+        if (req.body.premium) {
+            const { data: prem, error: pe } = await supabase.from('videos').select('*').gt('price', 0).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+            if (pe) throw pe;
+            return res.json(await markFollowing(await enrichVideos(prem || []), req.body.initData));
+        }
         if (!authorId && !req.body.following && (req.body.exclude || req.body.cursor !== undefined || req.body.ranked)) {
             const rows = await rankedFeed('videos', req.body, limit, 120);
             return res.json(await markFollowing(await enrichVideos(rows), req.body.initData));
@@ -2308,7 +2328,7 @@ async function getCachedFileLink(fileId) {
 
 // Files are streamed THROUGH the server. A redirect to Telegram's file URL would hand every viewer the bot token
 // (https://api.telegram.org/file/bot<TOKEN>/...), which is full control of the bot.
-async function proxyTelegramFile(req, res, fileId, kind) {
+async function proxyTelegramFile(req, res, fileId, kind, priv) {
     try {
         let up;
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -2323,7 +2343,7 @@ async function proxyTelegramFile(req, res, fileId, kind) {
         for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified']) { const v = up.headers.get(h); if (v) res.set(h, v); }
         if (!res.get('Content-Type') || res.get('Content-Type') === 'application/octet-stream') res.set('Content-Type', kind === 'image' ? 'image/jpeg' : 'video/mp4');
         if (!res.get('Accept-Ranges')) res.set('Accept-Ranges', 'bytes');
-        res.set('Cache-Control', kind === 'image' ? 'public, max-age=31536000, immutable' : 'public, max-age=86400');   // a file_id never changes
+        res.set('Cache-Control', priv ? 'private, max-age=3600' : kind === 'image' ? 'public, max-age=31536000, immutable' : 'public, max-age=86400');   // a file_id never changes
         const body = Readable.fromWeb(up.body);
         req.on('close', () => body.destroy());
         body.on('error', () => res.end());
@@ -2336,6 +2356,9 @@ app.get('/api/tgVideo/:fileId', (req, res) => proxyTelegramFile(req, res, req.pa
 const videoFileIds = new Map();   // video id -> file_id (so Range requests don't hit the DB every time)
 app.get('/api/videoStream/:id', async (req, res) => {
     try {
+        const gate = await stars.canStreamVideo(req.params.id, req.query.t);       // paid videos need a signed token
+        if (!gate.ok) return res.status(403).send('Locked');
+        if (gate.paid) return proxyTelegramFile(req, res, gate.fileId, 'video', true);
         let fid = videoFileIds.get(req.params.id);
         if (!fid) {
             const { data: video } = await supabase.from('videos').select('file_id').eq('id', req.params.id).maybeSingle();
@@ -2357,6 +2380,9 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
     if (!videoBase64) return res.status(400).json({ error: "No video provided" });
     const STORAGE_CHANNEL_ID = await getStorageChannel();
     if (!STORAGE_CHANNEL_ID) return res.status(500).json({ error: "Storage channel is not set. Admin: open Admin panel → Storage Channel." });
+    const pi = await stars.parsePriceInput(req.body);
+    if (pi.error) return res.status(400).json({ error: pi.error });
+    if (pi.price && !isRealTgId(tgUser.id)) return res.status(403).json({ error: 'Open the app in Telegram to post paid reels.' });
 
     try {
         const base64Data = videoBase64.includes(',') ? videoBase64.split(',')[1] : videoBase64;
@@ -2378,20 +2404,22 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
         const fileId = sentMsg.video ? sentMsg.video.file_id : null;
         if (!fileId) return res.status(500).json({ error: "Upload to storage channel failed" });
 
-        const { error } = await supabase.from('videos').insert([{
+        const { data: vIns, error } = await supabase.from('videos').insert([{
             author_id: tgUser.id.toString(),
             author_name: authorName,
             type: 'user',
             caption: caption || '',
-            file_id: fileId,
+            file_id: pi.price ? 'paid' : fileId,
+            ...(pi.price ? { price: pi.price, preview_url: pi.preview || null } : {}),
             storage_chat_id: String(STORAGE_CHANNEL_ID),
             storage_message_id: sentMsg.message_id,
             owned_storage: true,
             likes_count: 0,
             likes_users: [],
             created_at: new Date().toISOString()
-        }]);
+        }]).select('id').single();
         if (error) throw error;
+        if (pi.price) await stars.savePaidAssets('video', vIns.id, { file_id: fileId });
 
         await enforceVideoCap();
         res.json({ success: true });
@@ -2424,6 +2452,7 @@ app.post('/api/deleteVideo', async (req, res) => {
             try { await bot.telegram.deleteMessage(video.storage_chat_id, video.storage_message_id); } catch (e) {}
         }
         await supabase.from('videos').delete().eq('id', videoId);
+        if (video.price > 0) stars.dropPaidAssets('video', videoId);
         await supabase.from('comments').delete().eq('post_id', videoId).eq('content_type', 'video');
         await supabase.from('reports').delete().eq('post_id', videoId).eq('content_type', 'video');
         res.json({ success: true });
