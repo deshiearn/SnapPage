@@ -15,6 +15,12 @@ function sxToast(msg) {
     t.innerHTML = msg; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), 2400);
 }
 window.sxToast = sxToast;
+// Stars need a real Telegram account: in a normal browser offer to open the app in Telegram
+function sxNeedTelegram() {
+    sxHaptic('light');
+    if (window.IS_GUEST && typeof openInTelegram === 'function') { if (confirm('Stars work inside Telegram. Open SnapPages in Telegram now?')) openInTelegram(); }
+    else tg.showAlert('Open SnapPages inside Telegram to use Stars.');
+}
 
 async function sxConfig() { if (!SX.cfg) { try { SX.cfg = await (await fetch('/api/stars/config')).json(); } catch (e) { SX.cfg = { enabled: true, packs: [50, 100, 250, 500, 1000], per_unit: 50, currency: 'USDT', fee: 10, min_price: 1, max_price: 5000, min_deposit: 10 }; } } return SX.cfg; }
 async function sxRefresh() {
@@ -61,7 +67,7 @@ function sxRenderTx() {
 }
 window.sxFilter = (k) => { sxTxFilter = k; document.querySelectorAll('#sxSeg button').forEach((b, i) => b.classList.toggle('on', ['all', 'in', 'out'][i] === k)); sxRenderTx(); sxHaptic('light'); };
 window.openWallet = async () => {
-    if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to use Stars.');
+    if (!isRealTgUser()) return sxNeedTelegram();
     openSheet('walletBg', 'walletSheet');
     sxPaintBalance();
     const d = await sxRefresh();
@@ -158,7 +164,7 @@ async function sxPaid(bal) {
 // ---------- Unlock ----------
 function sxFindItem(kind, id) { return document.querySelector(kind === 'video' ? `.rl-item[data-video-id="${id}"]` : `.post-card[data-pid="${id}"]`); }
 window.sxAskUnlock = async (kind, id, price) => {
-    if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to unlock paid content.');
+    if (!isRealTgUser()) return sxNeedTelegram();
     SX.target = price; SX.unlock = { kind, id, price };
     document.getElementById('unlockTitle').textContent = kind === 'video' ? 'Unlock Paid Reel' : 'Unlock Paid Post';
     document.getElementById('unlockSub').textContent = kind === 'video' ? 'Pay with Stars to watch this reel. You will be able to watch it any time.' : 'Pay with Stars to see the photos in this post. You will be able to see them any time.';
@@ -216,7 +222,7 @@ function sxAuthorName(btn) {
     const c = btn.closest('.post-card'); const h = c && c.querySelector('h3'); return h ? h.childNodes[0].textContent.trim() : '';
 }
 window.sxOpenTip = async (kind, id, name) => {
-    if (!isRealTgUser()) return tg.showAlert('Open SnapPages inside Telegram to send Stars.');
+    if (!isRealTgUser()) return sxNeedTelegram();
     SX.tip = { kind, id, amt: 10, show: true };
     document.getElementById('tipShow').classList.add('on');
     document.getElementById('tipRange').value = 29; sxSlide(29);
@@ -256,7 +262,7 @@ window.sxDoTip = async () => {
 const SXP = { pp: 0, vp: 0 };
 window.paidToggle = async (p) => {
     const on = document.getElementById(p + 'On').checked;
-    if (on && !isRealTgUser()) { document.getElementById(p + 'On').checked = false; return tg.showAlert('Open SnapPages inside Telegram to create paid content.'); }
+    if (on && !isRealTgUser()) { document.getElementById(p + 'On').checked = false; return sxNeedTelegram(); }
     document.getElementById(p + 'Box').classList.toggle('hidden', !on);
     if (on) { const cfg = await sxConfig(); const a = document.getElementById(p + 'Amt'); a.min = cfg.min_price; a.max = cfg.max_price; document.getElementById(p + 'Hint').textContent = `Viewers pay Stars to unlock it (${cfg.min_price}–${cfg.max_price}). You keep ${100 - Math.round(cfg.fee)}%.`; paidAmt(p); } else SXP[p] = 0;
     sxHaptic('light');

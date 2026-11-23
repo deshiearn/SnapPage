@@ -737,3 +737,5 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .sx-st{font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}.sx-st.pending{background:rgba(255,149,0,.15);color:#ff9500}.sx-st.paid{background:rgba(52,199,89,.15);color:#1fa34a}.sx-st.rejected{background:rgba(255,59,48,.14);color:#ff3b30}
 .sx-cta.off{background:rgba(120,120,128,.3);color:var(--app-hint,#8e8e93)}
 .sx-toast{white-space:nowrap;display:flex;align-items:center;gap:6px}
+.mt-support{display:inline-flex;align-items:center;gap:8px;margin-top:14px;color:var(--app-link,#007aff);font-weight:600;font-size:16px}
+.mt-support{display:flex!important;justify-content:center;margin-top:18px!important}

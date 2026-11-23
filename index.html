@@ -27,11 +27,14 @@
     </div>
 
     <!-- MAINTENANCE MODE OVERLAY -->
-    <div id="maintenanceOverlay" class="hidden fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6 text-center">
-        <i class="fas fa-tools text-5xl text-blue-500 mb-4"></i>
-        <h2 class="font-bold text-xl mb-2">We'll be right back</h2>
-        <p class="text-gray-500 text-sm mb-6">SnapPages is currently undergoing maintenance. Please check back shortly.</p>
-        <button onclick="location.reload()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold">Try Again</button>
+    <div id="maintenanceOverlay" class="hidden mt-overlay">
+        <div class="mt-box">
+            <div class="mt-gear"><i class="fas fa-gear"></i><i class="fas fa-gear mt-g2"></i></div>
+            <h2>Under Maintenance</h2>
+            <p id="mtMsg">SnapPages is currently undergoing maintenance. Please check back shortly.</p>
+            <button onclick="location.reload()">Try Again</button>
+            <a id="mtSupport" href="https://t.me/+lNYv0-1Y_Lo3NjVl" target="_blank" class="mt-support"><i class="fas fa-headset"></i> Contact Support</a>
+        </div>
     </div>
 
     <!-- Browser-only banner: shown when the app is opened outside Telegram -->

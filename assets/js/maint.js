@@ -2,15 +2,14 @@
 // ================= Maintenance mode: full-screen notice whenever the server says "503 + X-Maintenance" =================
 (function () {
     let shown = false, timer = null;
-    function show(msg) {
-        if (shown) { const p = document.getElementById('mtMsg'); if (p && msg) p.textContent = msg; return; }
-        shown = true;
-        const d = document.createElement('div'); d.id = 'mtOverlay'; d.className = 'mt-overlay';
-        d.innerHTML = '<div class="mt-box"><div class="mt-gear"><i class="fas fa-gear"></i><i class="fas fa-gear mt-g2"></i></div><h2>Under Maintenance</h2><p id="mtMsg"></p><button onclick="location.reload()">Try again</button></div>';
-        document.body.appendChild(d);
-        document.getElementById('mtMsg').textContent = msg || 'We will be back soon.';
+    function show(msg, support) {
+        const o = document.getElementById('maintenanceOverlay'); if (!o) return;
+        const p = document.getElementById('mtMsg'); if (p && msg) p.textContent = msg;
+        if (support) document.getElementById('mtSupport').href = support;
+        else fetch('/api/appStatus').then(r => r.json()).then(j => { if (j && j.supportLink) document.getElementById('mtSupport').href = j.supportLink; }).catch(() => {});
+        o.classList.remove('hidden'); shown = true;
         try { Telegram.WebApp.MainButton.hide(); } catch (e) {}
-        timer = setInterval(async () => {                       // come back automatically when maintenance ends
+        if (!timer) timer = setInterval(async () => {          // come back automatically when maintenance ends
             try { const s = await (await origFetch('/api/status', { cache: 'no-store' })).json(); if (!s.maintenance) location.reload(); } catch (e) {}
         }, 20000);
     }

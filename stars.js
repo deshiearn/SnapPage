@@ -9,7 +9,7 @@ const DEFAULTS = {
     xrocket_currency: 'USDT', stars_per_unit: '50', stars_fee_pct: '10', stars_min_price: '1', stars_max_price: '5000',
     stars_packs: '50,100,250,500,1000,2500', stars_min_deposit: '10',
     stars_topup_on: 'true', stars_payout_on: 'true', payout_per_unit: '100', payout_min: '500',
-    maintenance_on: 'false', maintenance_msg: 'We are making SnapPages better. Please come back in a little while.'
+    maintenance_mode: 'false', maintenance_msg: 'We are making SnapPages better. Please come back in a little while.'
 };
 const SETTING_KEYS = Object.keys(DEFAULTS);
 
@@ -20,7 +20,7 @@ function register(ctx) {
     // ---------- settings (cached 30 s) ----------
     let setCache = { ts: 0, v: { ...DEFAULTS } };
     async function getSettings(force) {
-        if (!force && Date.now() - setCache.ts < 30000) return setCache.v;
+        if (!force && Date.now() - setCache.ts < 6000) return setCache.v;
         try {
             const { data } = await supabase.from('app_settings').select('key, value').in('key', SETTING_KEYS);
             const v = { ...DEFAULTS };
@@ -51,14 +51,15 @@ function register(ctx) {
     }
     app.use('/api', async (req, res, next) => {
         try {
-            if (req.path.startsWith('/admin') || req.path === '/status' || req.path === '/stars/webhook') return next();
+            if (req.path.startsWith('/admin') || req.path === '/status' || req.path === '/appStatus' || req.path === '/stars/webhook') return next();
             const s = await getSettings();
-            if (s.maintenance_on !== 'true') return next();
+            if (s.maintenance_mode !== 'true') return next();
             if (await isAdminId(viewerId())) return next();
             res.set('X-Maintenance', '1').status(503).json({ maintenance: true, error: 'Maintenance', message: s.maintenance_msg });
         } catch (e) { next(); }
     });
-    app.get('/api/status', async (req, res) => { const s = await getSettings(); res.set('Cache-Control', 'no-store').json({ maintenance: s.maintenance_on === 'true', message: s.maintenance_msg }); });
+    app.get('/api/status', async (req, res) => { const s = await getSettings(); res.set('Cache-Control', 'no-store').json({ maintenance: s.maintenance_mode === 'true', message: s.maintenance_msg }); });
+    app.post('/api/status', async (req, res) => { const s = await getSettings(); res.set('Cache-Control', 'no-store').json({ maintenance: s.maintenance_mode === 'true', message: s.maintenance_msg, admin: await isAdminId(viewerId()) }); });
 
     const viewerId = () => {
         const c = viewerCtx.getStore(); if (!c || !c.initData) return null;
@@ -376,7 +377,7 @@ function register(ctx) {
                 if (k === 'xrocket_style' && !['auto', 'v1', 'legacy'].includes(v)) return res.status(400).json({ error: 'Bad API style' });
                 if (k === 'stars_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Stars per 1 unit must be > 0' });
                 if (k === 'stars_fee_pct' && !(num(v, -1) >= 0 && num(v, -1) <= 90)) return res.status(400).json({ error: 'Fee must be 0–90' });
-                if (['stars_topup_on', 'stars_payout_on', 'maintenance_on'].includes(k)) v = v === 'true' ? 'true' : 'false';
+                if (['stars_topup_on', 'stars_payout_on', 'maintenance_mode'].includes(k)) v = v === 'true' ? 'true' : 'false';
                 if (k === 'maintenance_msg') v = v.slice(0, 200);
                 if (k === 'payout_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Payout rate must be > 0' });
                 if (k === 'payout_min' && !(parseInt(v) >= 1)) return res.status(400).json({ error: 'Minimum payout must be >= 1' });
