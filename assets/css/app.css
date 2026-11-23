@@ -686,3 +686,11 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .react-opt.sx-react small{font-size:9px;font-weight:700;color:#c77700;line-height:1;margin-top:1px}
 .react-sep{width:1px;align-self:stretch;margin:6px 4px;background:rgba(120,120,128,.3);flex-shrink:0}
 #reactionPicker{max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:none}#reactionPicker::-webkit-scrollbar{display:none}
+
+/* wallet like Telegram iOS "Telegram Stars" */
+.sx-back{color:var(--app-link,#007aff);font-size:17px;display:flex;align-items:center;gap:6px;width:60px}
+.sx-balcard{padding:18px 16px 16px;text-align:center;border-radius:16px}
+.sx-bal{font-size:56px;font-weight:700;line-height:1.05;margin:2px 0 0;gap:10px}.sx-bal .sx-star{width:46px;height:46px}
+.sx-lbl{font-size:20px;color:var(--app-hint,#8e8e93);margin-bottom:16px}
+.sx-btnrow{display:flex;gap:10px}.sx-btnrow .sx-cta{flex:1;font-size:19px;padding:15px 8px;border-radius:14px;gap:8px}.sx-btnrow .sx-cta i{font-size:20px}
+.sx-sheet .tgi-scroll{padding-top:6px}
