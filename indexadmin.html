@@ -156,7 +156,7 @@
                     <label class="text-[11px] font-bold text-gray-400">DEPOSIT PACKS (comma separated)</label>
                     <input id="stPacks" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="50,100,250,500,1000,2500">
                     <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="stOn"> Paid content &amp; deposits enabled</label>
-                    <div class="flex gap-2"><button onclick="saveStars()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Save</button><button onclick="testStars()" class="px-4 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Test key</button></div>
+                    <div class="flex gap-2"><button onclick="saveStars()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">Save</button><button onclick="testStars()" class="px-3 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Test key</button><button onclick="testInvoice()" class="px-3 bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-bold">Test invoice</button></div>
                     <p id="stStatus" class="text-xs"></p>
                 </div>
                 <div class="bg-white p-4 rounded-2xl border space-y-2">
@@ -425,6 +425,12 @@
             const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false', stars_topup_on: stTopOn.checked ? 'true' : 'false', stars_payout_on: stPayOn.checked ? 'true' : 'false', maintenance_mode: stMaint.checked ? 'true' : 'false', maintenance_msg: stMaintMsg.value, payout_per_unit: stPoRate.value, payout_min: stPoMin.value } });
             stStatus.textContent = d.success ? 'Saved ✓' : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
             if (d.success) { stKey.value = ''; loadStars(); }
+        }
+        async function testInvoice() {
+            stStatus.textContent = 'Creating test invoice…'; stStatus.className = 'text-xs text-gray-500';
+            const d = await adminFetch('/api/admin/stars/testInvoice', {});
+            stStatus.innerHTML = d.success ? `Invoice created ✓ (API: ${d.style}) ${d.link ? `<a class="text-blue-600 underline" target="_blank" href="${d.link}">open link</a>` : '<b class="text-red-500">no pay link in the answer</b>'}<br><span class="text-gray-400 break-all">${d.raw}</span>` : (d.error || 'Failed');
+            stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
         }
         async function testStars() {
             stStatus.textContent = 'Testing…'; stStatus.className = 'text-xs text-gray-500';

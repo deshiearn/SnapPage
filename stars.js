@@ -255,10 +255,11 @@ function register(ctx) {
         for (const st of styles) {
             const base = st === 'legacy' && s.xrocket_style === 'auto' && /pay\.api\./.test(s.xrocket_base) ? 'https://pay.xrocket.tg' : trim(s.xrocket_base);
             const url = st === 'v1' ? `${base}/api/v1${p.v1}` : `${base}${p.legacy}`;
+            const payload = body && (body.v1 || body.legacy) ? body[st] : body;
             const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
             if (st === 'v1') headers.Authorization = `Bearer ${s.xrocket_key}`; else headers['Rocket-Pay-Key'] = s.xrocket_key;
             try {
-                const r = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(12000) });
+                const r = await fetch(url, { method, headers, body: payload ? JSON.stringify(payload) : undefined, signal: AbortSignal.timeout(12000) });
                 const j = await r.json().catch(() => ({}));
                 if (r.ok && j.success !== false) return { ok: true, data: j.data || j, style: st };
                 last = { ok: false, status: r.status, error: j.message || j.error || (Array.isArray(j.errors) ? JSON.stringify(j.errors) : '') || `HTTP ${r.status}` };
@@ -268,10 +269,14 @@ function register(ctx) {
         return last || { ok: false, error: 'xRocket unreachable' };
     }
     const pick = (o, keys) => { for (const k of keys) if (o && o[k] !== undefined && o[k] !== null) return o[k]; };
-    const invoiceLink = (d) => pick(d, ['link', 'payLink', 'pay_link', 'url', 'paymentLink']);
+    // Current API: d.links = { telegramBotLink, telegramMiniAppLink, webLink }. Legacy API: d.link
+    const invoiceLink = (d) => (d && d.links && (d.links.telegramBotLink || d.links.telegramMiniAppLink || d.links.webLink)) || pick(d, ['link', 'payLink', 'pay_link', 'paymentLink']) || (typeof d.url === 'string' ? d.url : undefined);
+    const invoiceWebLink = (d) => (d && d.links && (d.links.webLink || d.links.telegramMiniAppLink)) || null;
+    // List endpoints answer { items | data | invoices | results: [...] } or a bare array
+    const firstOf = (d) => Array.isArray(d) ? d[0] : (d && (['items', 'data', 'invoices', 'results'].map(k => d[k]).find(Array.isArray) || [])[0]);
     const invoicePaid = (d) => {
         const st = String(pick(d, ['status', 'state']) || '').toLowerCase();
-        return d.paid === true || ['paid', 'completed', 'success', 'succeeded'].includes(st) || (pick(d, ['activationsLeft']) === 0 && Number(pick(d, ['totalActivations', 'numPayments'])) > 0);
+        return d.paid === true || ['paid', 'completed', 'success', 'succeeded'].includes(st) || (pick(d, ['activationsLeft']) === 0 && Number(pick(d, ['totalActivations', 'numPayments'])) > 0);   // 'partially_paid' is NOT paid
     };
     const invoiceDead = (d) => ['expired', 'cancelled', 'canceled', 'failed'].includes(String(pick(d, ['status', 'state']) || '').toLowerCase());
 
@@ -288,8 +293,14 @@ function register(ctx) {
             const amount = Math.round((stars / cfg.per_unit) * 1e6) / 1e6;
             const { data: row, error: e1 } = await supabase.from('star_deposits').insert([{ user_id: uid, stars, amount, currency: s.xrocket_currency }]).select('id').single();
             if (e1) throw e1;
+            const host = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '';
+            const desc = `${stars} SnapPages Stars`, cid = `dep-${row.id}`;
             const r = await xr(s, 'POST', { v1: '/invoices', legacy: '/tg-invoices' }, {
-                amount, currency: s.xrocket_currency, numPayments: 1, description: `${stars} SnapPages Stars`, expiredIn: 3600, payload: `dep:${row.id}`, clientInvoiceId: `dep-${row.id}`
+                // current API (docs: InvoiceDto): priceAmount / priceCurrency / clientInvoiceId / expiresIn (ms) / callback / url
+                v1: { priceAmount: amount.toFixed(6).replace(/\.?0+$/, ''), priceCurrency: s.xrocket_currency, clientInvoiceId: cid, description: desc, expiresIn: 3600000,
+                      ...(host ? { callback: { callbackUrl: `${host}/api/stars/webhook`, payload: `dep:${row.id}` } } : {}), url: { successUrl: 'https://t.me/SnapPagesBot/app' } },
+                // legacy API
+                legacy: { amount, currency: s.xrocket_currency, numPayments: 1, description: desc, expiredIn: 3600, payload: `dep:${row.id}` }
             });
             const link = r.ok && invoiceLink(r.data);
             if (!link) {
@@ -297,8 +308,8 @@ function register(ctx) {
                 console.error('xRocket createInvoice failed:', JSON.stringify(r).slice(0, 400));
                 return res.status(502).json({ error: 'Could not create the payment. Please try again later.' });
             }
-            await supabase.from('star_deposits').update({ ext_id: String(pick(r.data, ['id', 'invoiceId']) || ''), pay_url: link }).eq('id', row.id);
-            res.json({ success: true, id: row.id, url: link, amount, currency: s.xrocket_currency });
+            await supabase.from('star_deposits').update({ ext_id: String(pick(r.data, ['id', 'invoiceId']) || (firstOf(r.data) && firstOf(r.data).id) || ''), pay_url: link }).eq('id', row.id);
+            res.json({ success: true, id: row.id, url: link, web: invoiceWebLink(r.data), amount, currency: s.xrocket_currency });
         } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
     });
 
@@ -306,7 +317,11 @@ function register(ctx) {
     async function verifyDeposit(dep) {
         if (!dep || dep.status !== 'pending' || !dep.ext_id) return dep && dep.status;
         const s = await getSettings(); if (!s.xrocket_key) return 'pending';
-        const r = await xr(s, 'GET', { v1: `/invoices/${encodeURIComponent(dep.ext_id)}`, legacy: `/tg-invoices/${encodeURIComponent(dep.ext_id)}` });
+        let r = await xr(s, 'GET', { v1: `/invoices/${encodeURIComponent(dep.ext_id)}`, legacy: `/tg-invoices/${encodeURIComponent(dep.ext_id)}` });
+        if (!r.ok && r.status === 404) {          // some deployments only expose the list endpoint: GET /invoices?ids=<id>
+            const l = await xr(s, 'GET', { v1: `/invoices?ids=${encodeURIComponent(dep.ext_id)}`, legacy: `/tg-invoices?ids=${encodeURIComponent(dep.ext_id)}` });
+            const one = l.ok && firstOf(l.data); if (one) r = { ok: true, data: one };
+        }
         if (!r.ok) return 'pending';
         if (invoicePaid(r.data)) {
             const { data } = await supabase.rpc('credit_deposit', { p_id: dep.id });
@@ -395,6 +410,18 @@ function register(ctx) {
         const r = await xr(s, 'GET', { v1: '/app-info', legacy: '/app/info' });
         if (!r.ok) return res.status(502).json({ error: `xRocket said: ${r.error || r.status}` });
         res.json({ success: true, style: r.style, info: r.data });
+    });
+    // Creates a real (unpaid) 1-minute-test invoice so the admin can see xRocket's exact answer or error
+    app.post('/api/admin/stars/testInvoice', requireAdminUser, requireAdminPassword, async (req, res) => {
+        const s = await getSettings(true);
+        if (!s.xrocket_key) return res.status(400).json({ error: 'Save the xRocket API key first.' });
+        const amount = Math.round((10 / num(s.stars_per_unit, 50)) * 1e6) / 1e6;
+        const r = await xr(s, 'POST', { v1: '/invoices', legacy: '/tg-invoices' }, {
+            v1: { priceAmount: String(amount), priceCurrency: s.xrocket_currency, clientInvoiceId: 'test-' + Date.now(), description: 'SnapPages test invoice', expiresIn: 300000 },
+            legacy: { amount, currency: s.xrocket_currency, numPayments: 1, description: 'SnapPages test invoice', expiredIn: 300 }
+        });
+        if (!r.ok) return res.status(502).json({ error: `xRocket said: ${r.error || r.status}` });
+        res.json({ success: true, style: r.style, link: invoiceLink(r.data) || null, raw: JSON.stringify(r.data).slice(0, 400) });
     });
     app.post('/api/admin/stars/grant', requireAdminUser, requireAdminPassword, async (req, res) => {
         const uid = String(req.body.userId || '').trim(), amt = parseInt(req.body.amount) || 0;

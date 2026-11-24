@@ -84,6 +84,7 @@ function renderShortItem(v) {
         <div class="rl-tap" onclick="handleShortTap(event, '${v.id}')"></div>
 
         ${v.price > 0 && v.locked ? sxLockedReelHtml(v) : ''}
+        ${v.price > 0 && !v.locked && mine ? sxOwnerReelTag(v) : ''}
         <div class="rl-rail">
             <div class="rl-avwrap" onclick="openProfile('${v.author_id}')">
                 <img src="${avatar}" class="rl-av" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=U'">
