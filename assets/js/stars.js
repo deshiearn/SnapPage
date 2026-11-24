@@ -213,6 +213,12 @@ function sxLockedReelHtml(v) {
         <div class="sx-lockc"><span class="sx-tag" style="position:static">${sxStar('sx-inl')} Paid reel</span>
         <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</span></div></div>`;
 }
+function sxOwnerStrip(post) {
+    return `<div class="sx-own"><span>${sxStar('sx-inl')} <b>Paid post</b> \u00b7 ${sxNum(post.price)} Stars</span><small>${sxNum(post.unlock_count || 0)} unlocked \u00b7 only you see it free, everyone else pays to unlock</small></div>`;
+}
+function sxOwnerReelTag(v) {
+    return `<div class="sx-owntag">${sxStar('sx-inl')} Paid reel \u00b7 ${sxNum(v.price)} \u00b7 ${sxNum(v.unlock_count || 0)} unlocked</div>`;
+}
 const sxPriceBadge = (price) => price > 0 ? `<span class="sx-pbadge">${sxStar('sx-inl')} ${sxNum(price)}</span>` : '';
 
 // ---------- Tips (Star reactions) ----------

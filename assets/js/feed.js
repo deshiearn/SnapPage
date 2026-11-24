@@ -98,6 +98,8 @@ function buildPostCardHtml(post) {
 
     const price = post.price || 0;
     let imgHtml = price > 0 && post.locked ? sxLockedPostHtml(post) : postImagesHtml(imageUrls);
+    // The creator always sees their own paid media; make clear that everyone else has to pay
+    if (price > 0 && !post.locked && currentUser && String(post.author_id) === String(currentUser.tg_id)) imgHtml = sxOwnerStrip(post) + imgHtml;
 
     const isRich = post.rich && post.rich.blocks && post.rich.blocks.length;
     const captionHtml = animateEmojis(formatCaption(post.text, post.author_level || 1, post.entities));
