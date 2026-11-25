@@ -203,15 +203,22 @@ function sxReveal(kind, id, d) {
 
 // ---------- locked media UIs ----------
 function sxLockedPostHtml(post) {
+    if (post.tg_paid) return `<div class="mb-3 sx-lockbox sx-tgpaid" onclick="tg.openTelegramLink('${post.tg_link}')"><div class="sx-card2" style="margin:auto"><div class="sx-lockic"><i class="fas fa-lock"></i></div><h4>Paid in Telegram</h4><p>This channel post costs ${sxStar('sx-inl')} <b>${sxNum(post.price)}</b> Stars. Unlock it in the channel.</p><button class="sx-cta">Open in Telegram</button></div></div>`;
     const prev = post.preview_url ? `<img src="${post.preview_url}" class="sx-prev" alt="">` : '<div class="sx-prev sx-noprev"></div>';
     return `<div class="mb-3 sx-lockbox" onclick="sxAskUnlock('post','${post.id}',${post.price})">${prev}<i class="sx-dust"></i>
         <span class="sx-tag">${sxStar('sx-inl')} Paid</span>
         <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(post.price)}</span></div>`;
 }
 function sxLockedReelHtml(v) {
-    return `<div class="sx-lock" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}<i class="sx-dust"></i>
-        <div class="sx-lockc"><span class="sx-tag" style="position:static">${sxStar('sx-inl')} Paid reel</span>
-        <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</span></div></div>`;
+    const who = escapeHtml(v.author_name || 'Creator');
+    return `<div class="sx-lock sx-lock2" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}<i class="sx-dust"></i>
+        <div class="sx-lockc"><div class="sx-card2">
+            <div class="sx-lockic"><i class="fas fa-lock"></i></div>
+            <h4>Paid Reel</h4>
+            <p>Unlock this reel from <b>${who}</b> with Telegram Stars. One-time payment, watch anytime.</p>
+            <button class="sx-cta">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</button>
+            <small>${sxNum(v.unlock_count || 0)} unlocked so far</small>
+        </div></div></div>`;
 }
 function sxOwnerStrip(post) {
     return `<div class="sx-own"><span>${sxStar('sx-inl')} <b>Paid post</b> \u00b7 ${sxNum(post.price)} Stars</span><small>${sxNum(post.unlock_count || 0)} unlocked \u00b7 only you see it free, everyone else pays to unlock</small></div>`;

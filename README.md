@@ -191,3 +191,9 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 - **Star reactions** appear first in a post's reaction row (the ⭐ total), followed by the other reactions.
 - **Admin → Stars → Switches & maintenance**: turn Top Up or Payout on/off, and switch the whole app into **Maintenance mode** (users see a notice; admins keep working).
 - **SQL**: run `sql/17_stars_top_senders.sql` and `sql/18_stars_payouts.sql` after `16`.
+
+### Stage G — Stories, reels & channels
+- **Stories** (iOS style): glass header/pills, swipe-down to close, emoji reactions (❤️🔥😂😮😢👏) with flying-emoji animation, owner sees views + reactions; auto-advances to the next story/user. Run `sql/19_story_reactions.sql`.
+- **Reels**: auto-next at the end (last reel replays); while a comment/options/tip/unlock sheet is open the reel loops instead of advancing. Paid-reel lock page is a blurred-preview glass card.
+- **Telegram paid posts**: a channel post with Stars paid media is mirrored as a paid post (price = star_count); media can't be re-hosted by bots, so the card opens the message in Telegram to unlock.
+- **Post as channel**: composer / reel upload has a "Post as" list (yourself or a linked channel you own); the post appears under that channel. Paid posts are always published as yourself.

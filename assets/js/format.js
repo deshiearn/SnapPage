@@ -158,6 +158,7 @@ function updateComposerMeta() {
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 260) + 'px';        // grows with the text
     const n = ta.value.length, cnt = document.getElementById('cmpCount');
     cnt.textContent = n + '/1000'; cnt.classList.toggle('warn', n > 900);
+    renderPostAs('post', 'postAsBox');
     const u = currentUser || {};
     document.getElementById('cmpAvatar').src = u.photo_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(u.name || 'U');
     document.getElementById('cmpName').textContent = u.name || 'You';
@@ -194,6 +195,20 @@ postBtn.addEventListener('click', () => submitPost());
 
 // Instant posting: the composer closes at once and the post shows up in the feed right away
 // (dimmed, "Posting…") while the upload runs in the background.
+window.POST_AS = { post: null, vid: null };
+window.renderPostAs = (key, boxId) => {
+    const box = document.getElementById(boxId); if (!box) return;
+    const chs = (currentUser && currentUser.channels) || [];
+    if (!chs.length) { box.classList.add('hidden'); window.POST_AS[key] = null; return; }
+    if (window.POST_AS[key] && !chs.some(c => String(c.id) === String(window.POST_AS[key]))) window.POST_AS[key] = null;
+    const sel = window.POST_AS[key];
+    const me = { id: '', name: (currentUser && currentUser.name) || 'Me', photo: (currentUser && currentUser.photo_url) || '' };
+    const opts = [me, ...chs.map(c => ({ id: String(c.id), name: c.name || c.title || 'Channel', photo: c.photo || '' }))];
+    box.classList.remove('hidden');
+    box.innerHTML = '<p class="tgi-head" style="margin-top:0">Post as</p><div class="tgi-card">' + opts.map(o =>
+        `<button class="tgi-row pas-row" onclick="setPostAs('${key}','${boxId}','${o.id}')"><img class="pas-ava" src="${escapeHtml(o.photo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(o.name))}" onerror="this.src='https://ui-avatars.com/api/?name=U'"><span class="tgi-label">${escapeHtml(o.name)}${o.id ? ' <small style="opacity:.55">Channel</small>' : ''}</span><i class="fas fa-check pas-ck ${String(sel || '') === o.id ? 'on' : ''}"></i></button>`).join('') + '</div>';
+};
+window.setPostAs = (key, boxId, id) => { window.POST_AS[key] = id || null; renderPostAs(key, boxId); try { tg.HapticFeedback.selectionChanged(); } catch (e) {} };
 async function submitPost() {
     const text = document.getElementById('postText').value;
     if (!text.trim() && imagesArray.length === 0) return;
@@ -224,7 +239,7 @@ async function submitPost() {
         const url = editId ? '/api/editPost' : '/api/createPost';
         const payload = editId
             ? { initData: tgAuth(), postId: editId, text, imageUrls: images }
-            : { initData: tgAuth(), text, imagesBase64: images, ...paid };
+            : { initData: tgAuth(), text, imagesBase64: images, asChannel: window.POST_AS.post, ...paid };
         const res = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
         const data = await res.json();
         if (!(data && data.success)) throw new Error((data && data.error) || (editId ? 'Update failed' : 'Creation failed'));
