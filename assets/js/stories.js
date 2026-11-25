@@ -137,6 +137,8 @@ window.openStoryViewer = (groupIdx) => {
 window.closeStoryViewer = () => {
     clearTimeout(sv.timer);
     try { document.getElementById('storyVid').pause(); } catch (e) {}
+    svCloseTray(); document.getElementById('svInsights').classList.add('hidden');
+    const stg = document.getElementById('svStage'); stg.style.transform = ''; stg.style.opacity = '';
     closeModal('storyViewer');
     renderStoriesBar();
 };
@@ -146,6 +148,13 @@ function showStory() {
     const st = g && g.stories[sv.i];
     if (!st) { closeStoryViewer(); return; }
     markSeen(st.id);
+    svCloseTray(); svRefreshReact(st);
+    const stage = document.getElementById('svStage');
+    stage.classList.remove('swap'); void stage.offsetWidth; stage.classList.add('swap');
+    if (!g.isMe) fetch('/api/viewStory', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), id: st.id }) }).catch(() => {});
+    document.getElementById('svReactBar').classList.toggle('hidden', !!g.isMe);
+    document.getElementById('svInsightBtn').classList.toggle('hidden', !g.isMe);
+    if (g.isMe) svLoadCounts(st);
     const vid = document.getElementById('storyVid'), img = document.getElementById('storyImg');
     const isVid = st.media_type === 'video' && st.video_url;
     vid.classList.toggle('hidden', !isVid); img.classList.toggle('hidden', !!isVid);
@@ -209,16 +218,29 @@ function prevStory() {
 // Tap left third = back, right = next; press-and-hold pauses
 (() => {
     const zone = document.getElementById('storyZone');
-    zone.addEventListener('pointerdown', () => { sv.downAt = Date.now(); pauseStory(); });
+    const stage = document.getElementById('svStage');
+    let y0 = 0, dy = 0, dragging = false;
+    zone.addEventListener('pointerdown', (e) => { sv.downAt = Date.now(); y0 = e.clientY; dy = 0; dragging = false; pauseStory(); });
+    zone.addEventListener('pointermove', (e) => {
+        if (!sv.downAt) return;
+        dy = e.clientY - y0;
+        if (dy > 12) { dragging = true; stage.classList.add('drag'); const k = Math.min(1, dy / 400); stage.style.transform = `translateY(${dy}px) scale(${1 - k * .08})`; stage.style.opacity = 1 - k * .5; }
+    });
     zone.addEventListener('pointerup', (e) => {
-        const held = Date.now() - sv.downAt;
+        const held = Date.now() - sv.downAt; sv.downAt = 0;
+        if (dragging) {
+            stage.classList.remove('drag');
+            if (dy > 120) { closeStoryViewer(); } else { stage.style.transform = ''; stage.style.opacity = ''; resumeStory(); }
+            dragging = false; return;
+        }
         if (held < 220) {
             const x = e.clientX / window.innerWidth;
             resumeStory();
+            if (svTrayOpen()) { svCloseTray(); return; }
             x < 0.33 ? prevStory() : nextStory();
         } else resumeStory();
     });
-    zone.addEventListener('pointercancel', resumeStory);
+    zone.addEventListener('pointercancel', () => { sv.downAt = 0; stage.classList.remove('drag'); stage.style.transform = ''; stage.style.opacity = ''; resumeStory(); });
 })();
 
 window.deleteCurrentStory = async () => {
@@ -232,3 +254,53 @@ window.deleteCurrentStory = async () => {
         loadStories();
     });
 };
+
+// ---------- Reactions & activity ----------
+const SV_EMOJI = ['❤️', '🔥', '😂', '😮', '😢', '👏'];
+const svTrayOpen = () => document.getElementById('svTray').classList.contains('open');
+function svCurrent() { const g = storyGroups[sv.g]; return g && g.stories[sv.i]; }
+function svCloseTray() { const t = document.getElementById('svTray'); if (t.classList.contains('open')) { t.classList.remove('open'); resumeStory(); } }
+window.svToggleTray = () => {
+    const t = document.getElementById('svTray'), st = svCurrent();
+    if (t.classList.contains('open')) return svCloseTray();
+    t.innerHTML = SV_EMOJI.map(e => `<button class="${st && st.my_reaction === e ? 'sel' : ''}" onclick="svReact('${e}')">${e}</button>`).join('');
+    pauseStory(); t.classList.add('open');
+    try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
+};
+function svRefreshReact(st) {
+    const mine = document.getElementById('svMine'), h = document.getElementById('svHeart');
+    mine.innerText = st.my_reaction || '🙂';
+    h.classList.toggle('on', st.my_reaction === '❤️');
+}
+function svFly(emoji) {
+    const box = document.getElementById('svFly');
+    for (let k = 0; k < 7; k++) {
+        const el = document.createElement('i');
+        el.textContent = emoji; el.style.left = (30 + Math.random() * 40) + '%'; el.style.setProperty('--dx', ((Math.random() - .5) * 120) + 'px');
+        el.style.animationDelay = (k * 70) + 'ms'; box.appendChild(el); setTimeout(() => el.remove(), 1700);
+    }
+}
+window.svReact = async (emoji) => {
+    const st = svCurrent(); if (!st) return;
+    const off = st.my_reaction === emoji && svTrayOpen() === false && emoji === '❤️';   // heart button toggles off
+    const next = off ? null : emoji;
+    st.my_reaction = next; svRefreshReact(st); svCloseTray();
+    if (next) { svFly(next); try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+    try { await fetch('/api/reactStory', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), id: st.id, emoji: next }) }); } catch (e) {}
+};
+function svLoadCounts(st) {
+    document.getElementById('svReactN').innerText = st.reaction_count || 0;
+    document.getElementById('svViewN').innerText = '…';
+    fetch('/api/storyInsights', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), id: st.id }) })
+        .then(r => r.json()).then(d => { st._ins = d; if (svCurrent() === st) { document.getElementById('svViewN').innerText = (d.views || []).length; document.getElementById('svReactN').innerText = d.reactions || 0; } }).catch(() => {});
+}
+window.svOpenInsights = () => {
+    const st = svCurrent(); if (!st) return;
+    pauseStory();
+    const v = (st._ins && st._ins.views) || [];
+    document.getElementById('svInsightList').innerHTML = v.length ? v.map(u =>
+        `<div class="sv-row"><img src="${escapeHtml(u.photo || 'https://ui-avatars.com/api/?name=U')}" onerror="this.src='https://ui-avatars.com/api/?name=U'"><span>${escapeHtml(u.name)}</span>${u.emoji ? `<b>${u.emoji}</b>` : ''}</div>`).join('')
+        : '<div class="sv-empty">No views yet</div>';
+    document.getElementById('svInsights').classList.remove('hidden');
+};
+window.svCloseInsights = () => { document.getElementById('svInsights').classList.add('hidden'); resumeStory(); };

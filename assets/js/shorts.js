@@ -125,7 +125,9 @@ window.rlScrub = (e, el) => {
 window.rlEnded = (v) => {
     // keep people watching: roll straight on to the next reel, or replay if this is the last one
     const item = v.closest('.rl-item'), next = item.nextElementSibling;
-    if (next && next.classList.contains('rl-item')) next.scrollIntoView({ behavior: 'smooth' });
+    // a comment / options / tip / unlock sheet is open → stay on this reel and loop it
+    const busy = openModalsStack.some(m => m !== '__shorts__');
+    if (!busy && next && next.classList.contains('rl-item')) next.scrollIntoView({ behavior: 'smooth' });
     else { v.currentTime = 0; v.play().catch(() => {}); }
 };
 window.rlFollow = async (btn, authorId) => {
@@ -399,6 +401,7 @@ function vuReset() {
     vuEl('vuProgress').classList.add('hidden'); vuEl('vuBar').style.width = '0%';
     vuEl('videoCaptionText').value = ''; vuEl('vuCount').textContent = '0/300'; vuEl('videoFileName').textContent = '';
     vuEl('submitVideoBtn').disabled = true; vuEl('submitVideoBtn').textContent = 'Share'; vuEl('videoUploadInput').value = '';
+    renderPostAs('vid', 'vidAsBox');
 }
 vuEl('videoUploadInput').addEventListener('change', function (e) {
     const file = e.target.files[0];
@@ -411,7 +414,7 @@ vuEl('videoUploadInput').addEventListener('change', function (e) {
     pv.classList.remove('hidden'); pv.play().catch(() => {});
     vuEl('vuEmpty').classList.add('hidden'); vuEl('vuMeta').classList.remove('hidden'); vuEl('vuChange').classList.remove('hidden'); vuEl('pickVideoBtn').classList.add('has');
     vuEl('videoFileName').textContent = file.name;
-    vuEl('submitVideoBtn').disabled = false;
+    vuEl('submitVideoBtn').disabled = false; renderPostAs('vid', 'vidAsBox');
 });
 vuEl('videoCaptionText').addEventListener('input', (e) => { vuEl('vuCount').textContent = e.target.value.length + '/300'; });
 
@@ -433,9 +436,9 @@ vuEl('submitVideoBtn').addEventListener('click', async () => {
     btn.disabled = true; btn.textContent = 'Preparing…';
     vuEl('vuProgress').classList.remove('hidden');
     try {
-        const paid = await paidVideoFields();
+        const paid = await paidVideoFields();   // (channel to post as is read from POST_AS.vid)
         const videoBase64 = await fileToDataUrl(selectedVideoFile);        // read only now, so choosing a clip costs no memory
-        const data = await postJsonWithProgress('/api/createVideo', JSON.stringify({ initData: tgAuth(), caption: vuEl('videoCaptionText').value, videoBase64, ...paid }), (f) => {
+        const data = await postJsonWithProgress('/api/createVideo', JSON.stringify({ initData: tgAuth(), caption: vuEl('videoCaptionText').value, videoBase64, asChannel: window.POST_AS && window.POST_AS.vid, ...paid }), (f) => {
             const pct = Math.round(f * 100);
             vuEl('vuBar').style.width = pct + '%'; vuEl('vuPct').textContent = pct + '%';
             btn.textContent = f >= 1 ? 'Processing…' : pct + '%';

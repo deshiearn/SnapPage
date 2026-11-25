@@ -1,5 +1,5 @@
 /* Slim Font Awesome: only the icons this app uses, self-hosted & subsetted */
-@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=f3a2128c) format("woff")}
+@font-face{font-family:"FA";font-style:normal;font-weight:900;font-display:swap;src:url(../fonts/fa-solid.woff?h=c7baaf38) format("woff")}
 @font-face{font-family:"FAR";font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/fa-regular.woff?h=744ac024) format("woff")}
 .fa,.fas,.fa-solid,.far,.fa-regular{display:inline-block;font-style:normal;font-variant:normal;line-height:1;text-rendering:auto;-webkit-font-smoothing:antialiased}
 .fa,.fas,.fa-solid{font-family:"FA";font-weight:900}
@@ -23,6 +23,7 @@
 .fa-chevron-down::before{content:"\f078"}
 .fa-chevron-left::before{content:"\f053"}
 .fa-chevron-right::before{content:"\f054"}
+.fa-chevron-up::before{content:"\f077"}
 .fa-circle-minus::before{content:"\f056"}
 .fa-circle-notch::before{content:"\f1ce"}
 .fa-circle-plus::before{content:"\f055"}

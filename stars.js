@@ -97,6 +97,10 @@ function register(ctx) {
             const out = { ...i, locked: !unlocked, unlocked };
             if (kind === 'video') { out.file_id = null; out.stream_url = unlocked && me ? `/api/videoStream/${id}?t=${signStream(id, me)}` : null; }
             else out.image_urls = unlocked ? ((assets[id] && assets[id].image_urls) || []) : [];
+            if (kind === 'post' && i.type === 'channel' && i.src_msg_id) {   // paid post mirrored from a Telegram channel: unlock happens in Telegram
+                out.locked = true; out.unlocked = false; out.image_urls = []; out.tg_paid = true;
+                out.tg_link = `https://t.me/c/${String(i.author_id).replace(/^-100/, '')}/${i.src_msg_id}`;
+            }
             if (!unlocked && kind === 'post') out.text = i.text ? String(i.text).slice(0, 60) : i.text;   // only a teaser of the caption
             return out;
         });
@@ -175,6 +179,7 @@ function register(ctx) {
         const type = req.body.type === 'video' ? 'video' : 'post', id = String(req.body.id || '');
         if (!id) return res.status(400).json({ error: 'Missing id' });
         try {
+            if (type === 'post') { const { data: pc } = await supabase.from('posts').select('type').eq('id', id).maybeSingle(); if (pc && pc.type === 'channel') return res.status(400).json({ error: 'This post is paid inside Telegram — unlock it in the channel.' }); }
             const s = await getSettings();
             const { data, error } = await supabase.rpc('unlock_content', { p_user: uid, p_type: type, p_id: id, p_fee: Math.round(num(s.stars_fee_pct, 10)) });
             if (error) throw error;

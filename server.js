@@ -839,7 +839,7 @@ bot.on('channel_post', async (ctx) => {
     if (isServiceUpdate) return;
 
     // Only these content types are synced — no documents, polls, stickers, voice notes, etc.
-    const hasSupportedContent = (msg.text && !msg.photo && !msg.video) || msg.photo || msg.video || msg.rich_message;
+    const hasSupportedContent = (msg.text && !msg.photo && !msg.video) || msg.photo || msg.video || msg.rich_message || msg.paid_media;
     if (!hasSupportedContent) return;
 
     // Skip banned channels entirely
@@ -920,12 +920,18 @@ bot.on('channel_post', async (ctx) => {
 
             let imageUrls = [];
             let rich = null;
+            let paidStars = 0;
             let textContent = msg.text || msg.caption || '';
             let entities = msg.entities || msg.caption_entities || null;
             if (msg.rich_message) {
                 // Newer Telegram post formats (tables, slideshows, lists…) → keep the block tree for rich rendering
                 const r = richToApp(msg.rich_message);
                 rich = r.rich; imageUrls = r.images; textContent = r.text; entities = null;
+            } else if (msg.paid_media) {
+                // Telegram paid (Stars) media: bots only get the price, never the files — mirror it as a paid post
+                paidStars = Math.max(1, Number(msg.paid_media.star_count) || 1);
+                textContent = msg.caption || '';
+                entities = msg.caption_entities || null;
             } else if (msg.photo) {
                 // Already hosted on Telegram — just reference the file_id, no re-upload needed.
                 imageUrls.push(tgImageUrl(msg.photo[msg.photo.length - 1].file_id));
@@ -943,8 +949,9 @@ bot.on('channel_post', async (ctx) => {
                 likes_count: 0,
                 likes_users: [],
                 is_pinned: false,
+                ...(paidStars ? { price: paidStars } : {}),
                 created_at: new Date().toISOString()
-            }, ['rich', 'src_msg_id']);
+            }, ['rich', 'src_msg_id', 'price']);
 
             await enforcePostCap();
             if (insP) notifyAdminsChannelContent('post', insP.id, msg.chat.title, textContent);
@@ -1622,6 +1629,15 @@ app.post('/api/getReferStats', async (req, res) => {
 });
 
 // Create Post (images hosted directly on Telegram; RLS Bypass)
+// Who a post is published as: the user, or one of the channels they own (verified server-side)
+async function resolvePostAs(tgUser, asChannel, userName) {
+    const me = tgUser.id.toString();
+    if (!asChannel || String(asChannel) === me) return { id: me, name: userName, type: 'user' };
+    const { data: u } = await supabase.from('users').select('channels').eq('tg_id', me).maybeSingle();
+    const ch = u && Array.isArray(u.channels) && u.channels.find(c => String(c.id) === String(asChannel));
+    if (!ch) return { error: "You don't own that channel." };
+    return { id: String(ch.id), name: ch.name || ch.title || 'Channel', type: 'channel', channel: true };
+}
 app.post('/api/createPost', uploadGate, async (req, res) => {
     const { initData, text, imagesBase64 } = req.body;
     const tgUser = validateTGData(initData);
@@ -1634,8 +1650,11 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
         const { count: refCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', tgUser.id.toString());
         const level = user.is_verified ? 3 : getLevelData(refCount || 0).level;
 
+        const asW = await resolvePostAs(tgUser, req.body.asChannel, user.name);
+        if (asW.error) return res.status(403).json({ error: asW.error });
         const pi = await stars.parsePriceInput(req.body);
         if (pi.error) return res.status(400).json({ error: pi.error });
+        if (pi.price && asW.channel) return res.status(400).json({ error: 'Paid posts are published as yourself, not as a channel.' });
         if (pi.price && (!isRealTgId(tgUser.id) || !(imagesBase64 && imagesBase64.length))) return res.status(400).json({ error: 'A paid post needs at least one photo.' });
         let imageUrls = [];
         let uploadFailures = 0;
@@ -1651,9 +1670,9 @@ app.post('/api/createPost', uploadGate, async (req, res) => {
 
         if (pi.price && !imageUrls.length) return res.status(500).json({ error: lastUploadErr || 'Photo upload failed — the storage channel is not working.' });
         const { data: ins, error } = await supabase.from('posts').insert([{
-            author_id: tgUser.id.toString(),
-            author_name: user.name,
-            type: 'user',
+            author_id: asW.id,
+            author_name: asW.name,
+            type: asW.type,
             text,
             image_urls: pi.price ? [] : imageUrls,
             ...(pi.price ? { price: pi.price, preview_url: pi.preview || null } : {}),
@@ -2406,6 +2425,7 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
     const pi = await stars.parsePriceInput(req.body);
     if (pi.error) return res.status(400).json({ error: pi.error });
     if (pi.price && !isRealTgId(tgUser.id)) return res.status(403).json({ error: 'Open the app in Telegram to post paid reels.' });
+    if (pi.price && req.body.asChannel && String(req.body.asChannel) !== tgUser.id.toString()) return res.status(400).json({ error: 'Paid reels are published as yourself, not as a channel.' });
 
     try {
         const base64Data = videoBase64.includes(',') ? videoBase64.split(',')[1] : videoBase64;
@@ -2423,10 +2443,12 @@ app.post('/api/createVideo', uploadGate, async (req, res) => {
         const fileId = sentMsg.video ? sentMsg.video.file_id : null;
         if (!fileId) return res.status(500).json({ error: "Upload to storage channel failed" });
 
+        const asW = await resolvePostAs(tgUser, req.body.asChannel, authorName);
+        if (asW.error) return res.status(403).json({ error: asW.error });
         const { data: vIns, error } = await supabase.from('videos').insert([{
-            author_id: tgUser.id.toString(),
-            author_name: authorName,
-            type: 'user',
+            author_id: asW.id,
+            author_name: asW.name,
+            type: asW.type,
             caption: caption || '',
             file_id: pi.price ? 'paid' : fileId,
             ...(pi.price ? { price: pi.price, preview_url: pi.preview || null } : {}),
@@ -3090,6 +3112,16 @@ app.post('/api/getStories', async (req, res) => {
         const rank = g => g.author_id === me ? 0 : (following.has(g.author_id) ? 1 : 2);
         list.sort((a, b) => rank(a) - rank(b) || b.latest - a.latest);
         const top = list.slice(0, 40);
+        // my reactions + counts (tables from sql/19; ignore if not created yet)
+        try {
+            const ids = top.flatMap(g => g.stories.map(x => x.id));
+            if (ids.length) {
+                const { data: rx } = await supabase.from('story_reactions').select('story_id, user_id, emoji').in('story_id', ids);
+                const by = new Map();
+                (rx || []).forEach(r => { const o = by.get(r.story_id) || { n: 0, mine: null }; o.n++; if (r.user_id === me) o.mine = r.emoji; by.set(r.story_id, o); });
+                top.forEach(g => g.stories.forEach(x => { const o = by.get(x.id); x.my_reaction = o ? o.mine : null; x.reaction_count = o ? o.n : 0; }));
+            }
+        } catch (e) {}
         const enriched = await enrichAuthors(top.map(g => ({ type: 'user', author_id: g.author_id, author_name: g.author_name })));
         res.json(top.map((g, i) => ({
             author_id: g.author_id, author_name: g.author_name,
@@ -3144,6 +3176,47 @@ app.post('/api/createStory', uploadGate, async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message || String(e) });
     }
+});
+
+const STORY_EMOJI = ['❤️','🔥','😂','😮','😢','👏'];
+app.post('/api/reactStory', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        const me = tgUser.id.toString(), id = Number(req.body.id), emoji = req.body.emoji;
+        if (!id) return res.status(400).json({ error: "Bad story" });
+        if (!emoji) { await supabase.from('story_reactions').delete().match({ story_id: id, user_id: me }); return res.json({ success: true, emoji: null }); }
+        if (!STORY_EMOJI.includes(emoji)) return res.status(400).json({ error: "Bad reaction" });
+        const { error } = await supabase.from('story_reactions').upsert({ story_id: id, user_id: me, emoji }, { onConflict: 'story_id,user_id' });
+        if (error) return res.status(500).json({ error: "Run sql/19_story_reactions.sql in Supabase first." });
+        res.json({ success: true, emoji });
+    } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+});
+app.post('/api/viewStory', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        await supabase.from('story_views').upsert({ story_id: Number(req.body.id), user_id: tgUser.id.toString() }, { onConflict: 'story_id,user_id', ignoreDuplicates: true });
+        res.json({ success: true });
+    } catch (e) { res.json({ success: false }); }
+});
+app.post('/api/storyInsights', async (req, res) => {
+    const tgUser = validateTGData(req.body.initData);
+    if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
+    try {
+        const me = tgUser.id.toString(), id = Number(req.body.id);
+        const { data: st } = await supabase.from('stories').select('author_id').eq('id', id).maybeSingle();
+        if (!st || st.author_id !== me) return res.status(403).json({ error: "Not your story" });
+        const [{ data: vw }, { data: rx }] = await Promise.all([
+            supabase.from('story_views').select('user_id').eq('story_id', id).limit(200),
+            supabase.from('story_reactions').select('user_id, emoji').eq('story_id', id).limit(200)
+        ]);
+        const ids = [...new Set([...(vw || []).map(v => v.user_id), ...(rx || []).map(r => r.user_id)])];
+        const meta = ids.length ? await getUserMetaBatch(ids) : {};
+        const info = uid => { const m = (meta && meta[uid]) || {}; return { id: uid, name: m.name || 'User', photo: m.photo_url || m.photo || '' }; };
+        const emojiBy = new Map((rx || []).map(r => [r.user_id, r.emoji]));
+        res.json({ views: (vw || []).map(v => ({ ...info(v.user_id), emoji: emojiBy.get(v.user_id) || null })), reactions: (rx || []).length });
+    } catch (e) { res.json({ views: [], reactions: 0 }); }
 });
 
 app.post('/api/deleteStory', async (req, res) => {
