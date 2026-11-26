@@ -462,3 +462,17 @@ vuEl('submitVideoBtn').addEventListener('click', async () => {
 });
 
 window.goBackFromShorts = () => { if (typeof exitShorts === 'function') exitShorts(); else switchTab('home'); };
+
+// Pause the reel on screen while the upload page is open; resume it (if still on reels) when it closes
+let rlHeld = null;
+window.rlHold = (on) => {
+    const feed = document.getElementById('shortsFeed');
+    if (on) {
+        rlHeld = null;
+        if (!shortsActive) return;
+        feed.querySelectorAll('video').forEach(v => { if (!v.paused) { rlHeld = v; } v.pause(); });
+    } else {
+        const v = rlHeld; rlHeld = null;
+        if (v && shortsActive && document.body.contains(v)) v.play().catch(() => {});
+    }
+};
