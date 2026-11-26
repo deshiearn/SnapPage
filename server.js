@@ -697,6 +697,24 @@ async function insertTolerant(table, row, optionalCols) {
 }
 
 // ================= Channel sync: info refresh, edits, deletions =================
+// Channel avatars are served by channel id (always resolved fresh from Telegram), so they never go stale like a stored file_id
+const channelPhotoUrl = (id, ver) => `/api/channelPhoto/${id}?v=${encodeURIComponent(ver || '1')}`;
+const channelPhotoCache = new Map();   // id -> { fid, exp }
+app.get('/api/channelPhoto/:id', async (req, res) => {
+    try {
+        const id = String(req.params.id);
+        if (!/^-?\d+$/.test(id)) return res.status(404).end();
+        const map = await getChannelMap();
+        if (!map.has(id)) return res.status(404).end();
+        let c = channelPhotoCache.get(id);
+        if (!c || c.exp < Date.now()) {
+            const chat = await bot.telegram.getChat(id);
+            if (!chat.photo) return res.status(404).end();
+            c = { fid: chat.photo.small_file_id, exp: Date.now() + 6 * 3600e3 }; channelPhotoCache.set(id, c);
+        }
+        await proxyTelegramFile(req, res, c.fid, 'image');
+    } catch (e) { if (!res.headersSent) res.status(404).end(); }
+});
 async function refreshChannelInfo(channelId) {
     try {
         const chat = await bot.telegram.getChat(channelId);
@@ -705,7 +723,7 @@ async function refreshChannelInfo(channelId) {
         if (!hit) return;
         const { data: owner } = await supabase.from('users').select('tg_id, channels').eq('tg_id', hit.owner.tg_id).maybeSingle();
         if (!owner || !Array.isArray(owner.channels)) return;
-        const photo = chat.photo ? tgImageUrl(chat.photo.small_file_id) : null;
+        const photo = chat.photo ? channelPhotoUrl(channelId, chat.photo.small_file_unique_id) : null;
         let changed = false;
         const channels = owner.channels.map(c => {
             if (String(c.id) !== String(channelId)) return c;
@@ -766,6 +784,7 @@ async function syncChannels(force) {
     finally { syncRunning = false; }
 }
 setInterval(() => syncChannels(true), 60 * 60 * 1000);
+setTimeout(() => syncChannels(true), 25 * 1000);   // after every deploy: refresh channel names/avatars once
 
 bot.on('edited_channel_post', async (ctx) => {
     const msg = ctx.update.edited_channel_post;
@@ -2015,7 +2034,7 @@ app.post('/api/addChannel', async (req, res) => {
 
         let photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.title || 'C')}`;
         if (chat.photo) {
-            photoUrl = tgImageUrl(chat.photo.small_file_id);
+            photoUrl = channelPhotoUrl(chat.id, chat.photo.small_file_unique_id);
         }
 
         const cleanUsername = chat.username || 'private';

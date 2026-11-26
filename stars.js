@@ -245,10 +245,25 @@ function register(ctx) {
         if (!po || po.status !== 'pending') return { ok: false, error: 'not pending' };
         const s = await getSettings(true);
         const cid = `payout-${po.id}`, desc = `SnapPages withdrawal #${po.id}`;
-        const r = await xr(s, 'POST', { v1: '/payouts', legacy: '/app/transfer' }, {
-            v1: { targetType: 'telegram_user_id', target: String(po.user_id), asset: po.currency || s.xrocket_currency, amount: Number(po.amount), description: desc, clientPayoutId: cid },
-            legacy: { tgUserId: Number(po.user_id), currency: po.currency || s.xrocket_currency, amount: Number(po.amount), transferId: cid, description: desc }
-        });
+        const cur = po.currency || s.xrocket_currency, amt = Number(po.amount), uidn = Number(po.user_id);
+        // The exact field names differ between xRocket API generations — try the likely shapes, newest first, and keep every answer for the admin
+        const attempts = [];
+        if (s.xrocket_style !== 'legacy') {
+            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), asset: cur, amount: amt, description: desc, clientPayoutId: cid }]);
+            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), currency: cur, amount: String(amt), description: desc, clientPayoutId: cid }]);
+            attempts.push(['v1', '/payouts', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
+            attempts.push(['v1', '/transfers', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
+        }
+        if (s.xrocket_style !== 'v1') attempts.push(['legacy', '/app/transfer', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
+        let r = { ok: false }; const errs = [];
+        for (const [st, path, body] of attempts) {
+            r = await xr(s, 'POST', { v1: path, legacy: path }, body, st);
+            if (r.ok) break;
+            errs.push(`${st}${path}: ${r.status || ''} ${r.error || ''}`.trim());
+            if (/duplicate|already/i.test(String(r.error || ''))) break;
+            if (/insufficient|not enough|balance/i.test(String(r.error || ''))) break;   // retrying other shapes will not help
+        }
+        if (!r.ok) r.error = errs.join(' | ');
         const dup = r && /duplicate|already/i.test(String(r.error || ''));            // the first attempt went through
         const failed = r.ok && r.data && String(r.data.status || '').toLowerCase() === 'failed';
         if ((r.ok && !failed) || dup) {
@@ -256,7 +271,7 @@ function register(ctx) {
             if (data && data.ok && bot && isRealTgId(po.user_id)) bot.telegram.sendMessage(po.user_id, `\u2705 Your withdrawal of ${po.stars} Stars (${po.amount} ${po.currency || ''}) was sent to your xRocket wallet.`).catch(() => {});
             return { ok: true };
         }
-        const msg = ('auto-send failed: ' + (r.error || r.status || 'unknown')).slice(0, 200);
+        const msg = ('auto-send failed: ' + (r.error || r.status || 'unknown')).slice(0, 480);
         console.error('xRocket payout failed:', JSON.stringify(r).slice(0, 400));
         await supabase.from('star_payouts').update({ admin_note: msg }).eq('id', po.id).eq('status', 'pending');
         return { ok: false, error: msg };
@@ -294,9 +309,10 @@ function register(ctx) {
             if (st === 'v1') headers.Authorization = `Bearer ${s.xrocket_key}`; else headers['Rocket-Pay-Key'] = s.xrocket_key;
             try {
                 const r = await fetch(url, { method, headers, body: payload ? JSON.stringify(payload) : undefined, signal: AbortSignal.timeout(12000) });
-                const j = await r.json().catch(() => ({}));
+                const raw = await r.text().catch(() => ''); let j = {}; try { j = JSON.parse(raw); } catch (e) {}
                 if (r.ok && j.success !== false) return { ok: true, data: j.data || j, style: st };
-                last = { ok: false, status: r.status, error: j.message || j.error || (Array.isArray(j.errors) ? JSON.stringify(j.errors) : '') || `HTTP ${r.status}` };
+                const em = j.message || j.error || (Array.isArray(j.errors) ? JSON.stringify(j.errors) : '');
+                last = { ok: false, status: r.status, error: (Array.isArray(em) ? em.join('; ') : (typeof em === 'object' && em ? JSON.stringify(em) : em)) || (raw ? raw.replace(/\s+/g, ' ').slice(0, 160) : '') || `HTTP ${r.status}` };
                 if (![401, 403, 404, 405].includes(r.status)) break;      // real error: do not retry on the other API
             } catch (e) { last = { ok: false, error: e.message || String(e) }; }
         }

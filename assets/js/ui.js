@@ -95,6 +95,7 @@ window.openModal = (id) => {
         openModalsStack.push(id);
         tg.BackButton.show();
         mbOpen(id);
+        if (id === 'videoUploadModal' && window.rlHold) rlHold(true);   // reels pause while the upload page is open
     }
 
     if(id === 'postModal') {
@@ -122,6 +123,7 @@ window.closeModal = (id) => {
         el.classList.add('hidden');
         openModalsStack = openModalsStack.filter(m => m !== id);
         mbClose(id);
+        if (id === 'videoUploadModal' && window.rlHold) rlHold(false);
 
         // If all modals are closed, hide Telegram's Native BackButton
         syncBackButton();
