@@ -197,3 +197,8 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 - **Reels**: auto-next at the end (last reel replays); while a comment/options/tip/unlock sheet is open the reel loops instead of advancing. Paid-reel lock page is a blurred-preview glass card.
 - **Telegram paid posts**: a channel post with Stars paid media is mirrored as a paid post (price = star_count); media can't be re-hosted by bots, so the card opens the message in Telegram to unlock.
 - **Post as channel**: composer / reel upload has a "Post as" list (yourself or a linked channel you own); the post appears under that channel. Paid posts are always published as yourself.
+
+### Stage H — xRocket auto deposit & auto payout
+- Deposit check now uses `GET /invoice?invoiceId=` (current API) with older paths as fallbacks; unpaid invoices are re-checked every minute server-side, so Stars are credited even if the app is closed.
+- **Auto payout**: a withdrawal is sent immediately to the user's xRocket account by Telegram ID (`POST /payouts`, legacy `/app/transfer`, idempotent id `payout-<id>`). On failure it stays pending, is retried every minute for 24 h, and Admin → Stars has "Send via xRocket". Toggle: Admin → Stars → "Auto payout". Keep enough balance in the xRocket app wallet.
+- Reels never auto-advance while any sheet/picker is open; paid reel lock page + unlock sheet restyled like Telegram paid media.

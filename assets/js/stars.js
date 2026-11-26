@@ -100,7 +100,6 @@ window.sxDoPayout = async () => {
     const c = SX.cfg || {}, stars = parseInt(document.getElementById('poAmt').value) || 0, dest = document.getElementById('poDest').value.trim();
     if (stars < c.payout_min) return tg.showAlert(`Minimum withdrawal is ${sxNum(c.payout_min)} Stars.`);
     if (stars > (SX.balance || 0)) return tg.showAlert('You do not have that many Stars.');
-    if (dest.length < 4) return tg.showAlert('Enter where we should send the payment.');
     const go = document.getElementById('poGo'); go.disabled = true; go.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
     const d = await sxPost('/api/stars/payout', { stars, dest });
     go.disabled = false; go.textContent = 'Withdraw';
@@ -108,7 +107,7 @@ window.sxDoPayout = async () => {
     try { localStorage.setItem('sxDest', dest); } catch (e) {}
     SX.balance = d.balance; sxPaintBalance(); sxHaptic('ok'); sxBurst(go, 18);
     setTimeout(() => closeSheet('payoutBg', 'payoutSheet'), 400);
-    setTimeout(() => { sxToast(`${sxStar('sx-inl')} Withdrawal requested`); openWallet(); }, 600);
+    setTimeout(() => { sxToast(d.auto ? `${sxStar('sx-inl')} Sent to your xRocket wallet` : `${sxStar('sx-inl')} Withdrawal requested`); openWallet(); }, 600);
 };
 window.sxResume = async (id) => { const d = await sxPost('/api/stars/checkDeposit', { id }); if (d.status === 'paid') { sxPaid(); } else sxToast(d.status === 'expired' ? 'Invoice expired' : 'Not paid yet'); };
 
@@ -169,9 +168,12 @@ window.sxAskUnlock = async (kind, id, price) => {
     document.getElementById('unlockTitle').textContent = kind === 'video' ? 'Unlock Paid Reel' : 'Unlock Paid Post';
     document.getElementById('unlockSub').textContent = kind === 'video' ? 'Pay with Stars to watch this reel. You will be able to watch it any time.' : 'Pay with Stars to see the photos in this post. You will be able to see them any time.';
     const go = document.getElementById('unlockGo'); go.innerHTML = `Unlock for ${sxStar('sx-inl')} ${sxNum(price)}`; go.disabled = false;
-    document.getElementById('unlockBal').textContent = SX.balance === null ? '' : `Your balance is ${sxNum(SX.balance)} Stars`;
+    document.getElementById('unlockBal').innerHTML = SX.balance === null ? '–' : `${sxStar('sx-inl')} ${sxNum(SX.balance)}`;
+    document.getElementById('unlockPrice').textContent = sxNum(price); document.getElementById('unlockPriceRow').innerHTML = `${sxStar('sx-inl')} ${sxNum(price)}`;
+    const srcEl = document.querySelector(`.rl-item[data-video-id="${id}"] .sx-prev, [data-post-id="${id}"] .sx-prev`), pv = document.getElementById('unlockPrev');
+    pv.style.backgroundImage = srcEl && srcEl.src ? `url("${srcEl.src}")` : '';
     openSheet('unlockBg', 'unlockSheet'); sxHaptic('light');
-    sxRefresh().then(() => { document.getElementById('unlockBal').textContent = `Your balance is ${sxNum(SX.balance)} Stars`; });
+    sxRefresh().then(() => { document.getElementById('unlockBal').innerHTML = `${sxStar('sx-inl')} ${sxNum(SX.balance)}`; });
 };
 window.sxDoUnlock = async () => {
     const u = SX.unlock; if (!u) return;
@@ -210,15 +212,12 @@ function sxLockedPostHtml(post) {
         <span class="sx-pill">${sxStar('sx-inl')} Unlock for ${sxNum(post.price)}</span></div>`;
 }
 function sxLockedReelHtml(v) {
-    const who = escapeHtml(v.author_name || 'Creator');
-    return `<div class="sx-lock sx-lock2" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}<i class="sx-dust"></i>
-        <div class="sx-lockc"><div class="sx-card2">
-            <div class="sx-lockic"><i class="fas fa-lock"></i></div>
-            <h4>Paid Reel</h4>
-            <p>Unlock this reel from <b>${who}</b> with Telegram Stars. One-time payment, watch anytime.</p>
-            <button class="sx-cta">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</button>
-            <small>${sxNum(v.unlock_count || 0)} unlocked so far</small>
-        </div></div></div>`;
+    return `<div class="sx-lock sx-lock3" onclick="sxAskUnlock('video','${v.id}',${v.price})">${v.preview_url ? `<img src="${v.preview_url}" class="sx-prev" alt="">` : ''}<i class="sx-dust"></i>
+        <div class="sx-lockc sx-c3">
+            <div class="sx-eye"><i class="fas fa-eye-slash"></i></div>
+            <button class="sx-capsule">${sxStar('sx-inl')} Unlock for ${sxNum(v.price)}</button>
+            <small>Paid reel \u00b7 ${sxNum(v.unlock_count || 0)} unlocked</small>
+        </div></div>`;
 }
 function sxOwnerStrip(post) {
     return `<div class="sx-own"><span>${sxStar('sx-inl')} <b>Paid post</b> \u00b7 ${sxNum(post.price)} Stars</span><small>${sxNum(post.unlock_count || 0)} unlocked \u00b7 only you see it free, everyone else pays to unlock</small></div>`;

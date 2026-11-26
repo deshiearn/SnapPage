@@ -8,7 +8,7 @@ const DEFAULTS = {
     stars_enabled: 'true', xrocket_key: '', xrocket_base: 'https://pay.api.xrocket.exchange', xrocket_style: 'auto',
     xrocket_currency: 'USDT', stars_per_unit: '50', stars_fee_pct: '10', stars_min_price: '1', stars_max_price: '5000',
     stars_packs: '50,100,250,500,1000,2500', stars_min_deposit: '10',
-    stars_topup_on: 'true', stars_payout_on: 'true', payout_per_unit: '100', payout_min: '500',
+    stars_topup_on: 'true', stars_payout_on: 'true', stars_payout_auto: 'true', payout_per_unit: '100', payout_min: '500',
     maintenance_mode: 'false', maintenance_msg: 'We are making SnapPages better. Please come back in a little while.'
 };
 const SETTING_KEYS = Object.keys(DEFAULTS);
@@ -227,15 +227,44 @@ function register(ctx) {
         try {
             const s = await getSettings(), cfg = publicConfig(s);
             if (!cfg.payout_on) return res.status(503).json({ error: 'Withdrawals are paused for now. Please try again later.' });
-            const stars = parseInt(req.body.stars) || 0, dest = String(req.body.dest || '').trim().slice(0, 120);
+            const stars = parseInt(req.body.stars) || 0; let dest = String(req.body.dest || '').trim().slice(0, 120);
             if (stars < cfg.payout_min) return res.status(400).json({ error: `Minimum withdrawal is ${cfg.payout_min} Stars.` });
-            if (dest.length < 4) return res.status(400).json({ error: 'Enter where to send the payment (xRocket / wallet).' });
+            if (!dest) dest = 'xRocket \u00b7 Telegram ID ' + uid;
             const amount = Math.floor((stars / cfg.payout_per_unit) * 100) / 100;
             const { data, error } = await supabase.rpc('request_payout', { p_user: uid, p_stars: stars, p_amount: amount, p_currency: s.xrocket_currency, p_dest: dest });
             if (error) throw error;
             if (!data.ok) return res.status(data.error === 'insufficient' ? 402 : 400).json({ error: data.error === 'too_many' ? 'You already have 3 pending withdrawals.' : data.error, ...(await balanceOf(uid)) });
-            res.json({ success: true, id: data.id, balance: data.balance, amount, currency: s.xrocket_currency });
+            let auto = false;
+            if (s.stars_payout_auto !== 'false' && s.xrocket_key && isRealTgId(uid)) auto = (await autoPayout(data.id)).ok;   // instant xRocket transfer; falls back to manual review
+            res.json({ success: true, id: data.id, balance: data.balance, amount, currency: s.xrocket_currency, auto });
         } catch (e) { res.status(500).json({ error: (/star_payouts|request_payout|schema cache/i.test(e.message || '') ? 'Withdrawals are not set up yet. Admin: run sql/18_stars_payouts.sql.' : (e.message || String(e))) }); }
+    });
+    // Sends the money straight to the user's xRocket account (by Telegram ID). Idempotent thanks to the fixed client id.
+    async function autoPayout(id) {
+        const { data: po } = await supabase.from('star_payouts').select('*').eq('id', id).maybeSingle();
+        if (!po || po.status !== 'pending') return { ok: false, error: 'not pending' };
+        const s = await getSettings(true);
+        const cid = `payout-${po.id}`, desc = `SnapPages withdrawal #${po.id}`;
+        const r = await xr(s, 'POST', { v1: '/payouts', legacy: '/app/transfer' }, {
+            v1: { targetType: 'telegram_user_id', target: String(po.user_id), asset: po.currency || s.xrocket_currency, amount: Number(po.amount), description: desc, clientPayoutId: cid },
+            legacy: { tgUserId: Number(po.user_id), currency: po.currency || s.xrocket_currency, amount: Number(po.amount), transferId: cid, description: desc }
+        });
+        const dup = r && /duplicate|already/i.test(String(r.error || ''));            // the first attempt went through
+        const failed = r.ok && r.data && String(r.data.status || '').toLowerCase() === 'failed';
+        if ((r.ok && !failed) || dup) {
+            const { data } = await supabase.rpc('resolve_payout', { p_id: po.id, p_action: 'paid', p_note: 'Sent automatically via xRocket' });
+            if (data && data.ok && bot && isRealTgId(po.user_id)) bot.telegram.sendMessage(po.user_id, `\u2705 Your withdrawal of ${po.stars} Stars (${po.amount} ${po.currency || ''}) was sent to your xRocket wallet.`).catch(() => {});
+            return { ok: true };
+        }
+        const msg = ('auto-send failed: ' + (r.error || r.status || 'unknown')).slice(0, 200);
+        console.error('xRocket payout failed:', JSON.stringify(r).slice(0, 400));
+        await supabase.from('star_payouts').update({ admin_note: msg }).eq('id', po.id).eq('status', 'pending');
+        return { ok: false, error: msg };
+    }
+    app.post('/api/admin/stars/payoutAuto', requireAdminUser, requireAdminPassword, async (req, res) => {
+        const r = await autoPayout(parseInt(req.body.id) || 0);
+        if (!r.ok) return res.status(502).json({ error: r.error });
+        res.json({ success: true });
     });
     app.post('/api/admin/stars/payouts', requireAdminUser, requireAdminPassword, async (req, res) => {
         const { data, error } = await supabase.from('star_payouts').select('*').order('created_at', { ascending: false }).limit(40);
@@ -254,11 +283,11 @@ function register(ctx) {
     // ---------- xRocket client ----------
     // Two API generations exist. 'auto' tries the current one (Bearer token) and falls back to the legacy one (Rocket-Pay-Key).
     const trim = (u) => String(u || '').replace(/\/+$/, '');
-    async function xr(s, method, p, body) {
-        const styles = s.xrocket_style === 'auto' ? ['v1', 'legacy'] : [s.xrocket_style];
+    async function xr(s, method, p, body, only) {
+        const styles = only ? [only] : (s.xrocket_style === 'auto' ? ['v1', 'legacy'] : [s.xrocket_style]);
         let last = null;
         for (const st of styles) {
-            const base = st === 'legacy' && s.xrocket_style === 'auto' && /pay\.api\./.test(s.xrocket_base) ? 'https://pay.xrocket.tg' : trim(s.xrocket_base);
+            const base = st === 'legacy' && /pay\.api\./.test(s.xrocket_base) ? 'https://pay.xrocket.tg' : trim(s.xrocket_base);
             const url = st === 'v1' ? `${base}/api/v1${p.v1}` : `${base}${p.legacy}`;
             const payload = body && (body.v1 || body.legacy) ? body[st] : body;
             const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
@@ -318,15 +347,26 @@ function register(ctx) {
         } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
     });
 
+    // Current API: GET /invoice?invoiceId=… (or ?clientInvoiceId=…) per the docs; older paths kept as fallbacks. Legacy API: /tg-invoices/{id}
+    async function lookupInvoice(s, dep) {
+        const id = encodeURIComponent(dep.ext_id), cid = encodeURIComponent('dep-' + dep.id);
+        const tries = [];
+        if (s.xrocket_style !== 'legacy') ['v1'].forEach(st => [`/invoice?invoiceId=${id}`, `/invoice?clientInvoiceId=${cid}`, `/invoices/${id}`, `/invoices?ids=${id}`].forEach(p => tries.push([st, p])));
+        if (s.xrocket_style !== 'v1') tries.push(['legacy', `/tg-invoices/${id}`]);
+        let last = { ok: false };
+        for (const [st, p] of tries) {
+            const r = await xr(s, 'GET', { v1: p, legacy: p }, null, st);
+            if (r.ok) { const d = Array.isArray(r.data) || (r.data && (r.data.items || r.data.invoices || r.data.results)) ? firstOf(r.data) : r.data; if (d && typeof d === 'object') return { ok: true, data: d }; }
+            last = r;
+            if (r.status && ![400, 401, 403, 404, 405].includes(r.status)) break;
+        }
+        return last;
+    }
     // Never trusts the caller: re-reads the invoice from xRocket and credits only if xRocket says it is paid. Idempotent (credit_deposit).
     async function verifyDeposit(dep) {
         if (!dep || dep.status !== 'pending' || !dep.ext_id) return dep && dep.status;
         const s = await getSettings(); if (!s.xrocket_key) return 'pending';
-        let r = await xr(s, 'GET', { v1: `/invoices/${encodeURIComponent(dep.ext_id)}`, legacy: `/tg-invoices/${encodeURIComponent(dep.ext_id)}` });
-        if (!r.ok && r.status === 404) {          // some deployments only expose the list endpoint: GET /invoices?ids=<id>
-            const l = await xr(s, 'GET', { v1: `/invoices?ids=${encodeURIComponent(dep.ext_id)}`, legacy: `/tg-invoices?ids=${encodeURIComponent(dep.ext_id)}` });
-            const one = l.ok && firstOf(l.data); if (one) r = { ok: true, data: one };
-        }
+        const r = await lookupInvoice(s, dep);
         if (!r.ok) return 'pending';
         if (invoicePaid(r.data)) {
             const { data } = await supabase.rpc('credit_deposit', { p_id: dep.id });
@@ -364,6 +404,10 @@ function register(ctx) {
             const s = await getSettings(); if (!s.xrocket_key) return;
             const { data } = await supabase.from('star_deposits').select('*').eq('status', 'pending').gt('created_at', new Date(Date.now() - 3 * 3600e3).toISOString()).limit(15);
             for (const d of data || []) await verifyDeposit(d);
+            if (s.stars_payout_auto !== 'false') {      // retry payouts whose first automatic send failed (safe: fixed client id)
+                const { data: pp } = await supabase.from('star_payouts').select('id').eq('status', 'pending').like('admin_note', 'auto-send failed%').gt('created_at', new Date(Date.now() - 24 * 3600e3).toISOString()).limit(3);
+                for (const x of pp || []) await autoPayout(x.id);
+            }
             await supabase.from('star_deposits').update({ status: 'expired' }).eq('status', 'pending').lt('created_at', new Date(Date.now() - 3 * 3600e3).toISOString());
         } catch (e) {}
     }, 60 * 1000);
@@ -397,7 +441,7 @@ function register(ctx) {
                 if (k === 'xrocket_style' && !['auto', 'v1', 'legacy'].includes(v)) return res.status(400).json({ error: 'Bad API style' });
                 if (k === 'stars_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Stars per 1 unit must be > 0' });
                 if (k === 'stars_fee_pct' && !(num(v, -1) >= 0 && num(v, -1) <= 90)) return res.status(400).json({ error: 'Fee must be 0–90' });
-                if (['stars_topup_on', 'stars_payout_on', 'maintenance_mode'].includes(k)) v = v === 'true' ? 'true' : 'false';
+                if (['stars_topup_on', 'stars_payout_on', 'stars_payout_auto', 'maintenance_mode'].includes(k)) v = v === 'true' ? 'true' : 'false';
                 if (k === 'maintenance_msg') v = v.slice(0, 200);
                 if (k === 'payout_per_unit' && !(num(v, 0) > 0)) return res.status(400).json({ error: 'Payout rate must be > 0' });
                 if (k === 'payout_min' && !(parseInt(v) >= 1)) return res.status(400).json({ error: 'Minimum payout must be >= 1' });

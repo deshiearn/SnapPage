@@ -122,11 +122,14 @@ window.rlScrub = (e, el) => {
     const r = el.getBoundingClientRect();
     if (v.duration) v.currentTime = Math.max(0, Math.min(1, (pt.clientX - r.left) / r.width)) * v.duration;
 };
+// true while any sheet / page / picker (comments, 3-dot options, likes, tips, unlock…) is open on top of the reels
+window.rlBusy = () => openModalsStack.some(m => m !== '__shorts__') ||
+    !!document.querySelector('.blur-bg:not(.hidden), #reactionPicker:not(.hidden), #lightbox:not(.hidden), #storyViewer:not(.hidden), .bottom-sheet.open');
 window.rlEnded = (v) => {
     // keep people watching: roll straight on to the next reel, or replay if this is the last one
     const item = v.closest('.rl-item'), next = item.nextElementSibling;
     // a comment / options / tip / unlock sheet is open → stay on this reel and loop it
-    const busy = openModalsStack.some(m => m !== '__shorts__');
+    const busy = rlBusy();
     if (!busy && next && next.classList.contains('rl-item')) next.scrollIntoView({ behavior: 'smooth' });
     else { v.currentTime = 0; v.play().catch(() => {}); }
 };
