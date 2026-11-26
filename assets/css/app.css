@@ -816,3 +816,20 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .pas-ava{width:30px;height:30px;border-radius:9999px;object-fit:cover;margin-right:12px;flex:none}
 .pas-ck{color:#0a84ff;opacity:0;transform:scale(.4);transition:all .25s cubic-bezier(.3,1.6,.5,1)}
 .pas-ck.on{opacity:1;transform:none}
+
+/* Telegram-style paid reel: blurred media, dust, glass capsule */
+.sx-lock3 .sx-prev{filter:blur(34px) saturate(1.3) brightness(.8);transform:scale(1.25);width:100%;height:100%;object-fit:cover}
+.sx-lock3{background:radial-gradient(circle at 50% 35%,#3a3f5c,#14151c)}
+.sx-c3{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.sx-eye{width:64px;height:64px;border-radius:9999px;background:rgba(255,255,255,.14);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;animation:sxPulse 2.6s ease-in-out infinite}
+.sx-capsule{height:46px;padding:0 24px;border-radius:9999px;background:rgba(0,0,0,.5);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.18);color:#fff;font-weight:600;font-size:17px;display:flex;align-items:center;gap:7px;transition:transform .15s;animation:sxCardIn .5s cubic-bezier(.2,1.2,.3,1)}
+.sx-capsule:active{transform:scale(.95)}
+.sx-c3 small{color:rgba(255,255,255,.7);font-size:13px}
+.sx-uprev{position:relative;width:132px;height:132px;margin:2px auto 12px;border-radius:22px;overflow:hidden;background:#2b2d38 center/cover;box-shadow:0 8px 28px rgba(0,0,0,.3)}
+.sx-uprev::before{content:"";position:absolute;inset:0;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.sx-uprev .sx-dust{opacity:.6}
+.sx-ubadge{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:4px 12px;border-radius:9999px;background:rgba(0,0,0,.55);color:#fff;font-size:15px;z-index:2}
+.sx-urows{margin:6px 16px 14px!important}
+.sx-urow{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;font-size:16px}
+.sx-urow+.sx-urow{border-top:.5px solid rgba(128,128,128,.3)}
+.sx-urow span{opacity:.65}

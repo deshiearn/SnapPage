@@ -163,6 +163,7 @@
                     <h4 class="font-bold text-sm"><i class="fas fa-power-off text-red-500"></i> Switches &amp; maintenance</h4>
                     <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="stTopOn"> Top Up (add Stars) is ON</label>
                     <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="stPayOn"> Payout (withdraw) is ON</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="stPayAuto"> Auto payout via xRocket</label>
                     <label class="flex items-center gap-2 text-sm font-bold text-red-600"><input type="checkbox" id="stMaint"> MAINTENANCE MODE — whole app (admins can still use it)</label>
                     <input id="stMaintMsg" maxlength="200" class="w-full bg-gray-50 border rounded-lg p-2 text-sm outline-none" placeholder="Message users will see">
                     <div class="grid grid-cols-2 gap-2">
@@ -404,7 +405,7 @@
             stCur.value = s.xrocket_currency; stPer.value = s.stars_per_unit; stBase.value = s.xrocket_base; stStyle.value = s.xrocket_style;
             stFee.value = s.stars_fee_pct; stMinDep.value = s.stars_min_deposit; stMinP.value = s.stars_min_price; stMaxP.value = s.stars_max_price;
             stPacks.value = s.stars_packs; stOn.checked = s.stars_enabled !== 'false'; stHook.textContent = d.webhook;
-            stTopOn.checked = s.stars_topup_on !== 'false'; stPayOn.checked = s.stars_payout_on !== 'false'; stMaint.checked = s.maintenance_mode === 'true'; stMaintMsg.value = s.maintenance_msg; stPoRate.value = s.payout_per_unit; stPoMin.value = s.payout_min;
+            stTopOn.checked = s.stars_topup_on !== 'false'; stPayOn.checked = s.stars_payout_on !== 'false'; stPayAuto.checked = s.stars_payout_auto !== 'false'; stMaint.checked = s.maintenance_mode === 'true'; stMaintMsg.value = s.maintenance_msg; stPoRate.value = s.payout_per_unit; stPoMin.value = s.payout_min;
             loadPayouts();
             stRecent.innerHTML = d.recent.map(r => `<div class="flex justify-between"><span>#${r.id} · ${r.user_id}</span><span>${r.stars} ⭐ · <b>${r.status}</b></span></div>`).join('') || '<span class="text-gray-400">None yet</span>';
         }
@@ -412,7 +413,14 @@
             const l = await adminFetch('/api/admin/stars/payouts', {});
             if (!Array.isArray(l)) { stPayouts.innerHTML = '<span class="text-red-500">' + ((l && l.error) || 'Run sql/18_stars_payouts.sql') + '</span>'; return; }
             const col = { pending: 'text-orange-500', paid: 'text-green-600', rejected: 'text-red-500' };
-            stPayouts.innerHTML = l.map(p => `<div class="border rounded-lg p-2"><div class="flex justify-between"><b>#${p.id} · ${p.name || p.user_id}</b><b class="${col[p.status]}">${p.status}</b></div><div>${p.stars} ⭐ → ${p.amount} ${p.currency || ''}</div><div class="break-all text-gray-500">${p.destination || ''}</div>${p.status === 'pending' ? `<div class="flex gap-2 mt-1"><button onclick="resolvePayout(${p.id},'paid')" class="flex-1 bg-green-600 text-white rounded py-1 font-bold">Mark paid</button><button onclick="resolvePayout(${p.id},'rejected')" class="flex-1 bg-red-500 text-white rounded py-1 font-bold">Reject + refund</button></div>` : (p.admin_note ? `<div class="text-gray-400">${p.admin_note}</div>` : '')}</div>`).join('') || '<span class="text-gray-400">No requests yet</span>';
+            stPayouts.innerHTML = l.map(p => `<div class="border rounded-lg p-2"><div class="flex justify-between"><b>#${p.id} · ${p.name || p.user_id}</b><b class="${col[p.status]}">${p.status}</b></div><div>${p.stars} ⭐ → ${p.amount} ${p.currency || ''}</div><div class="break-all text-gray-500">${p.destination || ''}</div>${p.status === 'pending' ? `<div class="flex gap-2 mt-1"><button onclick="autoPay(${p.id})" class="flex-1 bg-blue-600 text-white rounded py-1 font-bold">Send via xRocket</button><button onclick="resolvePayout(${p.id},'paid')" class="flex-1 bg-green-600 text-white rounded py-1 font-bold">Mark paid</button><button onclick="resolvePayout(${p.id},'rejected')" class="flex-1 bg-red-500 text-white rounded py-1 font-bold">Reject + refund</button></div>` : (p.admin_note ? `<div class="text-gray-400">${p.admin_note}</div>` : '')}${p.status === 'pending' && p.admin_note ? `<div class="text-red-500 mt-1">${p.admin_note}</div>` : ''}</div>`).join('') || '<span class="text-gray-400">No requests yet</span>';
+        }
+        async function autoPay(id) {
+            if (!confirm('Send this payout to the user via xRocket now?')) return;
+            stStatus.textContent = 'Sending…'; stStatus.className = 'text-xs text-gray-500';
+            const d = await adminFetch('/api/admin/stars/payoutAuto', { id });
+            stStatus.textContent = d.success ? 'Sent ✓' : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
+            loadPayouts(); loadStars();
         }
         async function resolvePayout(id, action) {
             const note = action === 'rejected' ? (prompt('Reason (shown to the user, optional):') || '') : (prompt('Note, e.g. transaction link (optional):') || '');
@@ -422,7 +430,7 @@
             loadPayouts(); loadStars();
         }
         async function saveStars() {
-            const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false', stars_topup_on: stTopOn.checked ? 'true' : 'false', stars_payout_on: stPayOn.checked ? 'true' : 'false', maintenance_mode: stMaint.checked ? 'true' : 'false', maintenance_msg: stMaintMsg.value, payout_per_unit: stPoRate.value, payout_min: stPoMin.value } });
+            const d = await adminFetch('/api/admin/stars/save', { settings: { xrocket_key: stKey.value, xrocket_currency: stCur.value, stars_per_unit: stPer.value, xrocket_base: stBase.value, xrocket_style: stStyle.value, stars_fee_pct: stFee.value, stars_min_deposit: stMinDep.value, stars_min_price: stMinP.value, stars_max_price: stMaxP.value, stars_packs: stPacks.value, stars_enabled: stOn.checked ? 'true' : 'false', stars_topup_on: stTopOn.checked ? 'true' : 'false', stars_payout_on: stPayOn.checked ? 'true' : 'false', stars_payout_auto: stPayAuto.checked ? 'true' : 'false', maintenance_mode: stMaint.checked ? 'true' : 'false', maintenance_msg: stMaintMsg.value, payout_per_unit: stPoRate.value, payout_min: stPoMin.value } });
             stStatus.textContent = d.success ? 'Saved ✓' : (d.error || 'Failed'); stStatus.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
             if (d.success) { stKey.value = ''; loadStars(); }
         }
