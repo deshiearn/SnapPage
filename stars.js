@@ -248,11 +248,10 @@ function register(ctx) {
         const cur = po.currency || s.xrocket_currency, amt = Number(po.amount), uidn = Number(po.user_id);
         // The exact field names differ between xRocket API generations — try the likely shapes, newest first, and keep every answer for the admin
         const attempts = [];
+        const amtStr = String(Number(amt.toFixed(8)));          // docs: amount is a STRING, e.g. "1.23"
         if (s.xrocket_style !== 'legacy') {
-            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), asset: cur, amount: amt, description: desc, clientPayoutId: cid }]);
-            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), currency: cur, amount: String(amt), description: desc, clientPayoutId: cid }]);
-            attempts.push(['v1', '/payouts', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
-            attempts.push(['v1', '/transfers', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
+            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), asset: cur, amount: amtStr, description: desc, clientPayoutId: cid }]);
+            attempts.push(['v1', '/payouts', { targetType: 'telegram_user_id', target: String(po.user_id), asset: cur, amount: amtStr }]);   // minimal body
         }
         if (s.xrocket_style !== 'v1') attempts.push(['legacy', '/app/transfer', { tgUserId: uidn, currency: cur, amount: amt, transferId: cid, description: desc }]);
         let r = { ok: false }; const errs = [];
@@ -311,8 +310,8 @@ function register(ctx) {
                 const r = await fetch(url, { method, headers, body: payload ? JSON.stringify(payload) : undefined, signal: AbortSignal.timeout(12000) });
                 const raw = await r.text().catch(() => ''); let j = {}; try { j = JSON.parse(raw); } catch (e) {}
                 if (r.ok && j.success !== false) return { ok: true, data: j.data || j, style: st };
-                const em = j.message || j.error || (Array.isArray(j.errors) ? JSON.stringify(j.errors) : '');
-                last = { ok: false, status: r.status, error: (Array.isArray(em) ? em.join('; ') : (typeof em === 'object' && em ? JSON.stringify(em) : em)) || (raw ? raw.replace(/\s+/g, ' ').slice(0, 160) : '') || `HTTP ${r.status}` };
+                const em = (j.errors ? JSON.stringify(j.errors) : '') || j.detail || j.message || j.error || (Array.isArray(j.errors) ? JSON.stringify(j.errors) : '');
+                last = { ok: false, status: r.status, error: (Array.isArray(em) ? em.join('; ') : (typeof em === 'object' && em ? JSON.stringify(em) : em)) || (raw ? raw.replace(/\s+/g, ' ').slice(0, 300) : '') || `HTTP ${r.status}` };
                 if (![401, 403, 404, 405].includes(r.status)) break;      // real error: do not retry on the other API
             } catch (e) { last = { ok: false, error: e.message || String(e) }; }
         }
@@ -367,7 +366,7 @@ function register(ctx) {
     async function lookupInvoice(s, dep) {
         const id = encodeURIComponent(dep.ext_id), cid = encodeURIComponent('dep-' + dep.id);
         const tries = [];
-        if (s.xrocket_style !== 'legacy') ['v1'].forEach(st => [`/invoice?invoiceId=${id}`, `/invoice?clientInvoiceId=${cid}`, `/invoices/${id}`, `/invoices?ids=${id}`].forEach(p => tries.push([st, p])));
+        if (s.xrocket_style !== 'legacy') ['v1'].forEach(st => [`/invoices?ids=${id}`, `/invoice?invoiceId=${id}`, `/invoice?clientInvoiceId=${cid}`, `/invoices/${id}`].forEach(p => tries.push([st, p])));
         if (s.xrocket_style !== 'v1') tries.push(['legacy', `/tg-invoices/${id}`]);
         let last = { ok: false };
         for (const [st, p] of tries) {

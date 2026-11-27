@@ -709,11 +709,11 @@ app.get('/api/channelPhoto/:id', async (req, res) => {
         let c = channelPhotoCache.get(id);
         if (!c || c.exp < Date.now()) {
             const chat = await bot.telegram.getChat(id);
-            if (!chat.photo) return res.status(404).end();
+            if (!chat.photo) return res.redirect(302, `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.title || 'C')}`);
             c = { fid: chat.photo.small_file_id, exp: Date.now() + 6 * 3600e3 }; channelPhotoCache.set(id, c);
         }
         await proxyTelegramFile(req, res, c.fid, 'image');
-    } catch (e) { if (!res.headersSent) res.status(404).end(); }
+    } catch (e) { console.error('channelPhoto failed:', e.message || e); if (!res.headersSent) res.status(404).end(); }
 });
 async function refreshChannelInfo(channelId) {
     try {
@@ -723,7 +723,7 @@ async function refreshChannelInfo(channelId) {
         if (!hit) return;
         const { data: owner } = await supabase.from('users').select('tg_id, channels').eq('tg_id', hit.owner.tg_id).maybeSingle();
         if (!owner || !Array.isArray(owner.channels)) return;
-        const photo = chat.photo ? channelPhotoUrl(channelId, chat.photo.small_file_unique_id) : null;
+        const photo = channelPhotoUrl(channelId, chat.photo ? chat.photo.small_file_unique_id : 'np');
         let changed = false;
         const channels = owner.channels.map(c => {
             if (String(c.id) !== String(channelId)) return c;
@@ -1520,7 +1520,7 @@ async function getChannelMap() {
     const { data } = await supabase.from('users').select('tg_id, channels, is_verified').not('channels', 'is', null);
     const map = new Map();
     (data || []).forEach(owner => {
-        (owner.channels || []).forEach(ch => map.set(String(ch.id), { ch, owner: { tg_id: owner.tg_id, is_verified: !!owner.is_verified } }));
+        (owner.channels || []).forEach(ch => { ch = { ...ch, photo: `/api/channelPhoto/${ch.id}?v=2` }; map.set(String(ch.id), { ch, owner: { tg_id: owner.tg_id, is_verified: !!owner.is_verified } }); });
     });
     channelMapCache = { exp: Date.now() + TTL.channels, map };
     return map;
