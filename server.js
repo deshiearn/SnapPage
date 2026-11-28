@@ -568,7 +568,7 @@ async function notifyAdminsChannelContent(kind, id, channelTitle, text) {
         const table = kind === 'video' ? 'videos' : 'posts';
         const { data: row } = await supabase.from(table).select('author_id').eq('id', id).maybeSingle();
         if (!row) return;
-        const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+        const { data: allUsers } = await fetchUsersWithChannels('tg_id, channels');
         const ids = new Set((allUsers || [])
             .filter(u => Array.isArray(u.channels) && u.channels.some(c => String(c.id) === String(row.author_id)))
             .map(u => String(u.tg_id)));
@@ -733,7 +733,8 @@ async function healChannel(channelId) {
         if (!owner) return false;
         const channels = Array.isArray(owner.channels) ? owner.channels.slice() : [];
         if (!channels.some(c => String(c.id) === channelId)) channels.push({ id: channelId, name: chat.title, username: chat.username || 'private', photo: channelPhotoUrl(channelId, chat.photo ? chat.photo.small_file_unique_id : 'np'), verified: false });
-        await supabase.from('users').update({ channels }).eq('tg_id', owner.tg_id);
+        const { error: upErr } = await supabase.from('users').update({ channels }).eq('tg_id', owner.tg_id);
+        if (upErr) { console.error('healChannel: save failed:', upErr.message || upErr); return false; }
         channelMapCache.exp = 0; invalidateAuthorCaches();
         console.log(`healChannel: re-attached ${channelId} to ${owner.tg_id}`);
         return true;
@@ -896,7 +897,7 @@ bot.on('channel_post', async (ctx) => {
     const { data: bannedChannel } = await supabase.from('banned_channels').select('channel_id').eq('channel_id', channelId).maybeSingle();
     if (bannedChannel) return;
 
-    const { data: users, error } = await supabase.from('users').select('tg_id, channels');
+    const { data: users, error } = await fetchUsersWithChannels('tg_id, channels');
     if (error) { console.error('channel_post: users query failed:', error.message || error); return; }
 
     let isRegistered = false;
@@ -911,7 +912,7 @@ bot.on('channel_post', async (ctx) => {
     });
 
     if (!isRegistered && await healChannel(channelId)) {
-        const { data: again } = await supabase.from('users').select('tg_id, channels').not('channels', 'is', null);
+        const { data: again } = await fetchUsersWithChannels('tg_id, channels');
         (again || []).forEach(u => { if (Array.isArray(u.channels) && u.channels.some(c => String(c.id) === String(channelId))) { isRegistered = true; registeredOwner = u; } });
     }
 
@@ -1557,9 +1558,21 @@ function invalidateAuthorCaches() {
 }
 
 // channelId -> { ch, owner:{tg_id,is_verified} }  — one query per 30s instead of one per request
+// Supabase returns at most 1000 rows per request — page through so owners are never cut off as the user table grows
+async function fetchUsersWithChannels(cols) {
+    const out = []; let from = 0;
+    for (let i = 0; i < 50; i++) {
+        const { data, error } = await supabase.from('users').select(cols).not('channels', 'is', null).order('tg_id').range(from, from + 999);
+        if (error) return { data: null, error };
+        (data || []).forEach(u => { if (Array.isArray(u.channels) && u.channels.length) out.push(u); });
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return { data: out, error: null };
+}
 async function getChannelMap() {
     if (channelMapCache.exp > Date.now()) return channelMapCache.map;
-    const { data, error } = await supabase.from('users').select('tg_id, channels, is_verified').not('channels', 'is', null);
+    const { data, error } = await fetchUsersWithChannels('tg_id, channels, is_verified');
     if (error || !data) {                       // never replace a good map with an empty one because of a hiccup
         console.error('getChannelMap failed:', error && (error.message || error));
         if (channelMapCache.map.size) { channelMapCache.exp = Date.now() + 5000; return channelMapCache.map; }
@@ -2656,7 +2669,7 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
         const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
         const { count: totalPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true });
         const { count: totalVideos } = await supabase.from('videos').select('*', { count: 'exact', head: true });
-        const { data: allUsers } = await supabase.from('users').select('channels').not('channels', 'is', null);
+        const { data: allUsers } = await fetchUsersWithChannels('channels');
         const totalChannels = (allUsers || []).reduce((sum, u) => sum + ((u.channels && u.channels.length) || 0), 0);
         const { count: totalReports } = await supabase.from('reports').select('*', { count: 'exact', head: true });
 
@@ -2832,7 +2845,7 @@ async function banChannelInternal(channelId) {
     await supabase.from('posts').delete().eq('author_id', channelId.toString());
     await supabase.from('videos').delete().eq('author_id', channelId.toString()); // channel-owned messages, never delete the source message
     // strip the channel out of every user's channels array
-    const { data: allUsers } = await supabase.from('users').select('tg_id, channels');
+    const { data: allUsers } = await fetchUsersWithChannels('tg_id, channels');
     for (const owner of (allUsers || [])) {
         if (!owner.channels || !owner.channels.some(c => String(c.id) === String(channelId))) continue;
         const updated = owner.channels.filter(c => String(c.id) !== String(channelId));
@@ -2925,7 +2938,7 @@ app.post('/api/admin/setBadge', requireAdminUser, requireAdminPassword, async (r
             }
             const cleanUsername = cleanInput.replace('@', '').toLowerCase();
 
-            const { data: allUsers, error: fetchErr } = await supabase.from('users').select('tg_id, channels');
+            const { data: allUsers, error: fetchErr } = await fetchUsersWithChannels('tg_id, channels');
             if (fetchErr) throw fetchErr;
 
             let matched = false;
