@@ -1957,17 +1957,23 @@ app.post('/api/trackViews', async (req, res) => {
 // { userId: emoji } — one reaction per person, and picking one replaces a previous like/reaction.
 const REACTION_EMOJIS = ['😂', '😮', '😢', '🔥', '👍', '🎉', '🥰', '💎', '🤯'];
 // Premium custom-emoji reactions come from a Telegram custom emoji pack (key format "ce:<custom_emoji_id>")
-const PREMIUM_PACK = process.env.PREMIUM_EMOJI_PACK || 'DurovSkins';
+const PREMIUM_PACKS = (process.env.PREMIUM_EMOJI_PACKS || process.env.PREMIUM_EMOJI_PACK || 'DurovSkins,GoldUtyaEmoji').split(',').map(x => x.trim()).filter(Boolean);
 let premiumPackCache = { exp: 0, list: [] };
 async function getPremiumPack() {
     if (premiumPackCache.exp > Date.now()) return premiumPackCache.list;
     try {
-        const set = await bot.telegram.getStickerSet(PREMIUM_PACK);
-        const list = (set.stickers || []).filter(st => st.custom_emoji_id).slice(0, 16).map(st => ({
-            key: 'ce:' + st.custom_emoji_id, emoji: st.emoji || '⭐',
-            img: tgImageUrl((st.is_animated || st.is_video) ? (st.thumbnail && st.thumbnail.file_id) : st.file_id)
-        })).filter(x => x.img && !x.img.endsWith('undefined'));
-        premiumPackCache = { exp: Date.now() + 6 * 3600e3, list };
+        const list = [];
+        for (const name of PREMIUM_PACKS) {
+            try {
+                const set = await bot.telegram.getStickerSet(name);
+                (set.stickers || []).filter(st => st.custom_emoji_id).slice(0, 16).forEach(st => list.push({
+                    key: 'ce:' + st.custom_emoji_id, emoji: st.emoji || '⭐', pack: name,
+                    img: tgImageUrl((st.is_animated || st.is_video) ? (st.thumbnail && st.thumbnail.file_id) : st.file_id)
+                }));
+            } catch (e) { console.error('premium emoji pack failed:', name, e.message || e); }
+        }
+        const ok = list.filter(x => x.img && !x.img.endsWith('undefined'));
+        premiumPackCache = { exp: Date.now() + (ok.length ? 6 * 3600e3 : 60e3), list: ok };
     } catch (e) { console.error('premium emoji pack failed:', e.message || e); premiumPackCache.exp = Date.now() + 60e3; }
     return premiumPackCache.list;
 }

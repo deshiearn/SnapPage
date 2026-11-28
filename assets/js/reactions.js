@@ -38,7 +38,7 @@ function showReactionPicker(btn) {
     const r = btn.getBoundingClientRect();
     const w = p.offsetWidth || 260;
     p.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
-    p.style.top = Math.max(8, r.top - 58) + 'px';
+    p.style.top = Math.max(8, r.top - p.offsetHeight - 8) + 'px';
     try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
 }
 
