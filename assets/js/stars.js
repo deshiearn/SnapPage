@@ -140,7 +140,7 @@ window.sxBuy = async (stars) => {
     const body = document.getElementById('addStarsBody');
     body.innerHTML = `<div class="sx-wait"><div class="sx-bigstar">${sxStar()}<i class="sx-sp s1"></i><i class="sx-sp s2"></i><i class="sx-sp s3"></i></div><p class="sx-h">Creating invoice…</p></div>`;
     const d = await sxPost('/api/stars/createDeposit', { stars });
-    if (!d.success) { tg.showAlert(d.error || 'Could not start the payment.'); return openAddStars(); }
+    if (!d.success) { tg.showAlert((d.error || 'Could not start the payment.') + (d.detail ? '\n\n' + d.detail : '')); return openAddStars(); }
     body.innerHTML = `<div class="sx-wait"><div class="sx-bigstar">${sxStar()}<i class="sx-sp s1"></i><i class="sx-sp s2"></i><i class="sx-sp s3"></i></div>
         <p class="sx-h">${sxNum(stars)} Stars</p><p class="sx-p">${d.amount} ${d.currency}</p>
         <button class="sx-cta" onclick="sxOpenPay('${encodeURIComponent(d.url)}')">Pay with xRocket</button>
