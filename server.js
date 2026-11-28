@@ -2676,25 +2676,22 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
         const mem = process.memoryUsage();
         const ramUsedMB = Math.round(mem.rss / 1024 / 1024);
 
-        // Posts created per day for the last 7 days (for the activity chart)
+        // Per-day series for the dashboard chart (posts / reels / new users), 7, 14 or 30 days
+        const days = [7, 14, 30].includes(parseInt(req.body.days)) ? parseInt(req.body.days) : 14;
         const since = new Date();
-        since.setDate(since.getDate() - 6);
+        since.setDate(since.getDate() - (days - 1));
         since.setHours(0, 0, 0, 0);
-        const { data: recentPosts } = await supabase.from('posts').select('created_at').gte('created_at', since.toISOString());
-
+        const sinceIso = since.toISOString();
+        const [rp, rv, ru] = await Promise.all([
+            supabase.from('posts').select('created_at').gte('created_at', sinceIso).limit(20000),
+            supabase.from('videos').select('created_at').gte('created_at', sinceIso).limit(20000),
+            supabase.from('users').select('created_at').gte('created_at', sinceIso).limit(20000)
+        ]);
         const dayLabels = [];
-        const dayCounts = {};
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-            dayLabels.push(key);
-            dayCounts[key] = 0;
-        }
-        (recentPosts || []).forEach(p => {
-            const key = (p.created_at || '').slice(0, 10);
-            if (dayCounts[key] !== undefined) dayCounts[key]++;
-        });
+        for (let i = days - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); dayLabels.push(d.toISOString().slice(0, 10)); }
+        const bucket = (rows) => { const m = {}; dayLabels.forEach(k => m[k] = 0); (rows || []).forEach(r => { const k = (r.created_at || '').slice(0, 10); if (m[k] !== undefined) m[k]++; }); return dayLabels.map(k => m[k]); };
+        const series = { labels: dayLabels, posts: bucket(rp.data), reels: bucket(rv.data), users: bucket(ru.data) };
+        const dayCounts = null;
 
         res.json({
             totalUsers: totalUsers || 0,
@@ -2704,7 +2701,8 @@ app.post('/api/admin/dashboard', requireAdminUser, requireAdminPassword, async (
             totalReports: totalReports || 0,
             ramUsedMB,
             uptimeSeconds: Math.round(process.uptime()),
-            activity: { labels: dayLabels, counts: dayLabels.map(k => dayCounts[k]) }
+            series,
+            activity: { labels: dayLabels, counts: series.posts }
         });
     } catch (e) {
         res.status(500).json({ error: e.message || e });
