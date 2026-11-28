@@ -704,8 +704,7 @@ app.get('/api/channelPhoto/:id', async (req, res) => {
     try {
         const id = String(req.params.id);
         if (!/^-?\d+$/.test(id)) return res.status(404).end();
-        const map = await getChannelMap();
-        if (!map.has(id)) return res.status(404).end();
+        if (!id.startsWith('-100')) return res.status(404).end();      // only channels/supergroups; the bot can only read chats it belongs to
         let c = channelPhotoCache.get(id);
         if (!c || c.exp < Date.now()) {
             const chat = await bot.telegram.getChat(id);
@@ -1423,6 +1422,12 @@ async function resolveFollowee(targetId) {
     const { data: u } = await supabase.from('users').select('tg_id, name, username, photo_url, is_verified').eq('tg_id', targetId).maybeSingle();
     if (u) return { type: 'user', owners: [String(u.tg_id)], name: u.name, username: u.username, photo: u.photo_url, verified: !!u.is_verified, ownerVerified: !!u.is_verified, ownerId: String(u.tg_id) };
     const hit = (await getChannelMap()).get(String(targetId));
+    if (!hit && /^-?\d{6,}$/.test(String(targetId))) {      // channel missing from the owner list: still show a profile built from its posts
+        const { data: pr } = await supabase.from('posts').select('author_name').eq('author_id', String(targetId)).eq('type', 'channel').limit(1);
+        const { data: vr } = pr && pr.length ? { data: null } : await supabase.from('videos').select('author_name').eq('author_id', String(targetId)).eq('type', 'channel').limit(1);
+        const row = (pr && pr[0]) || (vr && vr[0]);
+        if (row) return { type: 'channel', owners: [], name: row.author_name || 'Channel', username: '', photo: `/api/channelPhoto/${targetId}?v=2`, verified: false, ownerVerified: false, ownerId: '' };
+    }
     if (hit) return { type: 'channel', owners: [String(hit.owner.tg_id)], name: hit.ch.title || hit.ch.name || 'Channel', username: hit.ch.username || '', photo: hit.ch.photo || '', verified: !!hit.ch.verified || hit.owner.is_verified, ownerVerified: hit.owner.is_verified, ownerId: String(hit.owner.tg_id) };
     return null;
 }
@@ -1517,7 +1522,11 @@ function invalidateAuthorCaches() {
 // channelId -> { ch, owner:{tg_id,is_verified} }  — one query per 30s instead of one per request
 async function getChannelMap() {
     if (channelMapCache.exp > Date.now()) return channelMapCache.map;
-    const { data } = await supabase.from('users').select('tg_id, channels, is_verified').not('channels', 'is', null);
+    const { data, error } = await supabase.from('users').select('tg_id, channels, is_verified').not('channels', 'is', null);
+    if (error || !data) {                       // never replace a good map with an empty one because of a hiccup
+        console.error('getChannelMap failed:', error && (error.message || error));
+        if (channelMapCache.map.size) { channelMapCache.exp = Date.now() + 5000; return channelMapCache.map; }
+    }
     const map = new Map();
     (data || []).forEach(owner => {
         (owner.channels || []).forEach(ch => { ch = { ...ch, photo: `/api/channelPhoto/${ch.id}?v=2` }; map.set(String(ch.id), { ch, owner: { tg_id: owner.tg_id, is_verified: !!owner.is_verified } }); });
