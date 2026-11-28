@@ -8,11 +8,17 @@ window.openProfile = async (authorId) => {
     // If another sheet (comments / options) is open on top of the feed, close it first
     openSheet('profileModalBg', 'profileSheet');
     try {
-        const res = await fetch('/api/getProfile', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ initData: tgAuth(), authorId })
-        });
-        const p = await res.json();
+        let p = null, lastErr = '';
+        for (let t = 0; t < 3 && !(p && p.id); t++) {        // the server may be waking up / redeploying: retry quietly
+            try {
+                const res = await fetch('/api/getProfile', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ initData: tgAuth(), authorId }) });
+                p = await res.json(); if (p && p.error) lastErr = p.error;
+                if (p && p.id) break;
+                if (res.status === 404) break;
+            } catch (e) { lastErr = 'Connection problem'; }
+            await new Promise(r => setTimeout(r, 1200));
+        }
+        if (p && !p.id && lastErr) throw new Error(lastErr);
         if (!p || !p.id) throw new Error(p && p.error || 'Profile not found');
         currentProfile = p;
         renderProfile(p);
