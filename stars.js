@@ -344,18 +344,29 @@ function register(ctx) {
             if (e1) throw e1;
             const host = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '';
             const desc = `${stars} SnapPages Stars`, cid = `dep-${row.id}`;
-            const r = await xr(s, 'POST', { v1: '/invoices', legacy: '/tg-invoices' }, {
-                // current API (docs: InvoiceDto): priceAmount / priceCurrency / clientInvoiceId / expiresIn (ms) / callback / url
-                v1: { priceAmount: amount.toFixed(6).replace(/\.?0+$/, ''), priceCurrency: s.xrocket_currency, clientInvoiceId: cid, description: desc, expiresIn: 3600000,
-                      ...(host ? { callback: { callbackUrl: `${host}/api/stars/webhook`, payload: `dep:${row.id}` } } : {}), url: { successUrl: 'https://t.me/SnapPagesBot/app' } },
-                // legacy API
-                legacy: { amount, currency: s.xrocket_currency, numPayments: 1, description: desc, expiredIn: 3600, payload: `dep:${row.id}` }
-            });
+            // The exact body differs between xRocket API generations / validation rules: try the likely shapes and keep every answer
+            const amtStr = amount.toFixed(6).replace(/\.?0+$/, '');
+            const cb = host ? { callback: { callbackUrl: `${host}/api/stars/webhook`, payload: { dep: row.id } } } : {};
+            const bodies = [];
+            if (s.xrocket_style !== 'legacy') {
+                bodies.push(['v1', { priceAmount: amtStr, priceCurrency: s.xrocket_currency, clientInvoiceId: cid, description: desc, expiresIn: 3600000, ...cb }]);
+                bodies.push(['v1', { priceAmount: amtStr, priceCurrency: s.xrocket_currency, clientInvoiceId: cid, description: desc }]);
+                bodies.push(['v1', { priceAmount: Number(amtStr), priceCurrency: s.xrocket_currency, clientInvoiceId: cid }]);
+            }
+            if (s.xrocket_style !== 'v1') bodies.push(['legacy', { amount, currency: s.xrocket_currency, numPayments: 1, description: desc, expiredIn: 3600, payload: `dep:${row.id}` }]);
+            let r = { ok: false }; const errs = [];
+            for (const [st, body] of bodies) {
+                r = await xr(s, 'POST', { v1: '/invoices', legacy: '/tg-invoices' }, { v1: body, legacy: body }, st);
+                if (r.ok && invoiceLink(r.data)) break;
+                errs.push(`${st}: ${r.status || ''} ${r.error || (r.ok ? 'no payment link in reply' : '')}`.trim());
+                if (r.status === 401 || r.status === 403) break;
+            }
+            if (!r.ok || !invoiceLink(r.data)) r.error = errs.join(' | ');
             const link = r.ok && invoiceLink(r.data);
             if (!link) {
                 await supabase.from('star_deposits').update({ status: 'expired' }).eq('id', row.id);
-                console.error('xRocket createInvoice failed:', JSON.stringify(r).slice(0, 400));
-                return res.status(502).json({ error: 'Could not create the payment. Please try again later.' });
+                console.error('xRocket createInvoice failed:', String(r.error || '').slice(0, 600));
+                return res.status(502).json({ error: 'Could not create the payment. Please try again later.', detail: String(r.error || '').slice(0, 220) });
             }
             await supabase.from('star_deposits').update({ ext_id: String(pick(r.data, ['id', 'invoiceId']) || (firstOf(r.data) && firstOf(r.data).id) || ''), pay_url: link }).eq('id', row.id);
             res.json({ success: true, id: row.id, url: link, web: invoiceWebLink(r.data), amount, currency: s.xrocket_currency });
