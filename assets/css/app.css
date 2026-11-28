@@ -833,3 +833,12 @@ body.lite .sx-bigstar,body.lite .sx-dust{animation:none}
 .sx-urow{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;font-size:16px}
 .sx-urow+.sx-urow{border-top:.5px solid rgba(128,128,128,.3)}
 .sx-urow span{opacity:.65}
+
+/* premium custom-emoji reactions */
+img.ce{width:1.25em;height:1.25em;object-fit:contain;vertical-align:-.25em;display:inline-block}
+.react-opt.ce-opt img.ce{width:30px;height:30px}
+.react-opt.ce-opt.locked img.ce{opacity:.45;filter:grayscale(.6)}
+.react-emoji img.ce{width:1.3em;height:1.3em}
+#reactionPicker{max-width:calc(100vw - 16px);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+#reactionPicker::-webkit-scrollbar{display:none}
+#reactionPicker .react-opt{flex:none}

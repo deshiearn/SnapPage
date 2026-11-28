@@ -91,7 +91,7 @@ function renderShortItem(v) {
                 ${showFollow ? `<button class="rl-plus" onclick="event.stopPropagation();rlFollow(this,'${v.author_id}')" aria-label="Follow"><i class="fas fa-plus"></i></button>` : ''}
             </div>
             <button onclick="likeVideo(this, '${v.id}')" data-react="video" data-id="${v.id}" class="react-btn rl-btn">
-                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i>
+                <span class="react-emoji text-2xl ${myReaction ? '' : 'hidden'}">${typeof rg === 'function' ? rg(myReaction) : myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i>
                 <span class="like-count">${shortLikeCount}</span>
                 <span class="rl-react-row" data-react-row="video:${v.id}" data-tips="${v.tip_total || 0}">${buildReactionRowHtml('video', v.id, v.likes_count || 0, v.reactions || {}, false, v.tip_total)}</span>
             </button>

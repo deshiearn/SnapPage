@@ -2,6 +2,16 @@
 // ================= Reactions: long-press the Like button =================
 const REACTIONS = ['❤️', '😂', '😮', '😢', '🔥', '👍', '🎉', '🥰', '💎', '🤯'];
 const REACTION_LEVEL = { '🎉': 2, '🥰': 2, '💎': 3, '🤯': 3 };   // premium reactions unlock by levelling up
+// Premium custom-emoji reactions (pack loaded from the server); key "ce:<id>"
+let PREMIUM = [];
+const PREMIUM_MAP = {};
+const rg = (e) => (e && e.startsWith('ce:') && PREMIUM_MAP[e]) ? `<img class="ce" src="${PREMIUM_MAP[e].img}" alt="${PREMIUM_MAP[e].emoji}">` : (e && e.startsWith('ce:') ? '⭐' : (e || ''));
+const rgText = (e) => (e && e.startsWith('ce:')) ? ((PREMIUM_MAP[e] && PREMIUM_MAP[e].emoji) || '⭐') : e;
+const canPremiumReact = () => { const u = (window.tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {}; return !!u.is_premium || ((currentUser && currentUser.level) || 1) >= 3; };
+async function loadPremiumEmoji() {
+    try { PREMIUM = await (await fetch('/api/premiumEmoji')).json(); if (!Array.isArray(PREMIUM)) PREMIUM = []; PREMIUM.forEach(x => PREMIUM_MAP[x.key] = x); } catch (e) { PREMIUM = []; }
+}
+loadPremiumEmoji();
 let pressTimer = null, longPressed = false, pickerTarget = null;
 
 function hideReactionPicker() {
@@ -21,7 +31,9 @@ function showReactionPicker(btn) {
         return need > lv
             ? `<button class="react-opt locked" style="animation-delay:${i * 40}ms" onclick="tg.showAlert('Unlocks at Level ${need} — invite friends to level up!')">${e}<i class="fas fa-lock"></i></button>`
             : `<button class="react-opt" style="animation-delay:${i * 40}ms" onclick="pickReaction('${e}')">${e}</button>`;
-    }).join('');
+    }).join('') + (PREMIUM.length ? '<i class="react-sep"></i>' + PREMIUM.map((x, i) => canPremiumReact()
+        ? `<button class="react-opt ce-opt" style="animation-delay:${(i + 10) * 40}ms" onclick="pickReaction('${x.key}')"><img class="ce" src="${x.img}" alt="${x.emoji}"></button>`
+        : `<button class="react-opt ce-opt locked" style="animation-delay:${(i + 10) * 40}ms" onclick="tg.showAlert('Premium reactions are for Telegram Premium users or Level 3.')"><img class="ce" src="${x.img}" alt=""><i class="fas fa-lock"></i></button>`).join('') : '');
     p.classList.remove('hidden');
     const r = btn.getBoundingClientRect();
     const w = p.offsetWidth || 260;
@@ -44,12 +56,12 @@ function buildReactionRowHtml(kind, id, hearts, reactions, hasHearted, tips) {
     tips = Number(tips) || 0;
     if (kind === 'video') {
         // compact stack for the Shorts side column (Stars always first)
-        return (tips > 0 ? '⭐' : '') + chips.slice(0, tips > 0 ? 2 : 3).map(([e]) => e).join('');
+        return (tips > 0 ? '⭐' : '') + chips.slice(0, tips > 0 ? 2 : 3).map(([e]) => rgText(e)).join('');
     }
     const star = tips > 0 ? `<button class="react-chip sx-tipchip" onclick="sxChipTip(this,'${kind}','${id}')">${sxStar('sx-inl')}<b>${sxNum(tips)}</b></button>` : '';
     return star + chips.map(([e, n]) => {
         const isMine = e === '❤️' ? hasHearted : e === mine;
-        return `<button class="react-chip ${isMine ? 'mine' : ''}" onclick="chipReact('${kind}','${id}','${e}')"><span>${e}</span><b>${n}</b></button>`;
+        return `<button class="react-chip ${isMine ? 'mine' : ''}" onclick="chipReact('${kind}','${id}','${e}')"><span>${rg(e)}</span><b>${n}</b></button>`;
     }).join('');
 }
 
@@ -65,7 +77,7 @@ function syncReactionUI(kind, id, data) {
         const mine = currentUser && data.reactions ? data.reactions[currentUser.tg_id] : '';
         const big = kind === 'video' ? ' text-2xl' : '';
         if (mine) {
-            emo.textContent = mine; emo.classList.remove('hidden'); icon.classList.add('hidden');
+            emo.innerHTML = rg(mine); emo.classList.remove('hidden'); icon.classList.add('hidden');
         } else {
             emo.classList.add('hidden'); icon.classList.remove('hidden');
             icon.className = (data.hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart') + big;

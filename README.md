@@ -205,3 +205,6 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 
 ### Admin panel v2
 iOS-style admin: translucent header, pill tabs, icon stat tiles, dependency-free SVG activity chart (Posts / Reels / New users, 7/14/30 days, touch tooltip). `/api/admin/dashboard` accepts `{days}` and returns `series`.
+
+### Premium reactions
+Custom-emoji reactions come from the Telegram pack `DurovSkins` (env `PREMIUM_EMOJI_PACK` to change). Usable by Telegram Premium users or Level 3; others see them locked. Footer shows `SnapPagesBot · Version <package version> (<build>)`.
