@@ -133,7 +133,7 @@ function buildPostCardHtml(post) {
             <div class="react-row flex flex-wrap gap-1.5 mb-2" data-react-row="post:${post.id}" data-tips="${post.tip_total || 0}">${buildReactionRowHtml('post', post.id, post.likes_count || 0, post.reactions || {}, hasLiked, post.tip_total)}</div>
             <div class="flex justify-between text-gray-500 text-sm pt-3 border-t">
                 <button onclick="likePost(this, '${post.id}')" data-react="post" data-id="${post.id}" class="react-btn ${hasLiked || myReaction ? 'text-red-500 font-bold' : ''} hover:text-red-500 flex items-center gap-1">
-                    <span class="react-emoji ${myReaction ? '' : 'hidden'}">${myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> ${t('like')} (<span class="like-count">${likeCount}</span>)
+                    <span class="react-emoji ${myReaction ? '' : 'hidden'}">${typeof rg === 'function' ? rg(myReaction) : myReaction}</span><i class="${myReaction ? 'hidden ' : ''}${hasLiked ? 'fas fa-heart text-red-500' : 'far fa-heart'}"></i> ${t('like')} (<span class="like-count">${likeCount}</span>)
                 </button>
                 <button onclick="openComments('${post.id}')" class="hover:text-blue-500 flex items-center gap-1"><i class="fas fa-comment"></i> ${t('comment')}</button>
                 <button onclick="sharePostDirectly('${post.id}')" class="hover:text-green-500 flex items-center gap-1"><i class="fas fa-share"></i> ${t('share')}</button>

@@ -1956,12 +1956,32 @@ app.post('/api/trackViews', async (req, res) => {
 // ❤️ is the classic like (likes_users). Every other emoji is stored in the "reactions" JSON column as
 // { userId: emoji } — one reaction per person, and picking one replaces a previous like/reaction.
 const REACTION_EMOJIS = ['😂', '😮', '😢', '🔥', '👍', '🎉', '🥰', '💎', '🤯'];
+// Premium custom-emoji reactions come from a Telegram custom emoji pack (key format "ce:<custom_emoji_id>")
+const PREMIUM_PACK = process.env.PREMIUM_EMOJI_PACK || 'DurovSkins';
+let premiumPackCache = { exp: 0, list: [] };
+async function getPremiumPack() {
+    if (premiumPackCache.exp > Date.now()) return premiumPackCache.list;
+    try {
+        const set = await bot.telegram.getStickerSet(PREMIUM_PACK);
+        const list = (set.stickers || []).filter(st => st.custom_emoji_id).slice(0, 16).map(st => ({
+            key: 'ce:' + st.custom_emoji_id, emoji: st.emoji || '⭐',
+            img: tgImageUrl((st.is_animated || st.is_video) ? (st.thumbnail && st.thumbnail.file_id) : st.file_id)
+        })).filter(x => x.img && !x.img.endsWith('undefined'));
+        premiumPackCache = { exp: Date.now() + 6 * 3600e3, list };
+    } catch (e) { console.error('premium emoji pack failed:', e.message || e); premiumPackCache.exp = Date.now() + 60e3; }
+    return premiumPackCache.list;
+}
+app.get('/api/premiumEmoji', async (req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.json(await getPremiumPack()); });
+const canUsePremiumReaction = async (tgUser) => !!tgUser.is_premium || (await levelOfUser(tgUser.id)) >= 3;
 app.post('/api/react', async (req, res) => {
     const { initData, contentType = 'post', id, emoji } = req.body;
     const tgUser = validateTGData(initData);
     if (!tgUser) return res.status(403).json({ error: "Unauthorized" });
-    if (!REACTION_EMOJIS.includes(emoji)) return res.status(400).json({ error: "Unknown reaction" });
-    if (emoji !== '❤️' && !allowedReactions(await levelOfUser(tgUser.id)).includes(emoji)) return res.status(403).json({ error: "This reaction unlocks at a higher level — invite friends to level up!" });
+    if (typeof emoji === 'string' && emoji.startsWith('ce:')) {
+        if (!(await getPremiumPack()).some(x => x.key === emoji)) return res.status(400).json({ error: "Unknown reaction" });
+        if (!(await canUsePremiumReaction(tgUser))) return res.status(403).json({ error: "Premium reactions are for Telegram Premium users or Level 3." });
+    } else if (!REACTION_EMOJIS.includes(emoji)) return res.status(400).json({ error: "Unknown reaction" });
+    if (!String(emoji).startsWith('ce:') && emoji !== '❤️' && !allowedReactions(await levelOfUser(tgUser.id)).includes(emoji)) return res.status(403).json({ error: "This reaction unlocks at a higher level — invite friends to level up!" });
     try {
         const table = contentType === 'video' ? 'videos' : 'posts';
         const { data: row, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
@@ -3141,10 +3161,11 @@ app.post('/api/admin/wipeDatabase', requireAdminUser, requireAdminPassword, asyn
 // because every file URL carries ?v=<deploy id>, so a new deploy automatically busts the cache.
 const fs = require('fs');
 const ASSET_VERSION = (process.env.RENDER_GIT_COMMIT || String(Date.now())).slice(0, 8);
+const APP_VERSION = `${require('./package.json').version} (${ASSET_VERSION})`;
 let indexHtmlCache = null;
 function getIndexHtml() {
     if (!indexHtmlCache) {
-        indexHtmlCache = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace(/__V__/g, ASSET_VERSION);
+        indexHtmlCache = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace(/__V__/g, ASSET_VERSION).replace(/__VER__/g, APP_VERSION);
     }
     return indexHtmlCache;
 }
