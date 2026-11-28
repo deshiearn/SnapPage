@@ -9,17 +9,16 @@
     <link rel="stylesheet" href="/assets/css/icons.css?v=__V__">
     <link rel="stylesheet" href="/assets/css/tailwind.css?v=__V__">
     <link rel="stylesheet" href="/assets/css/admin.css?v=__V__">
-    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=c7baaf38" as="font" type="font/woff" crossorigin>
+    <link rel="preload" href="/assets/fonts/fa-solid.woff?h=5b0ab836" as="font" type="font/woff" crossorigin>
 
 </head>
 <body class="bg-gray-100 text-gray-900 font-sans">
 
-    <div class="p-4 shadow-sm flex items-center justify-between bg-white border-b sticky top-0 z-10">
-        <div class="flex items-center gap-3">
-            <button onclick="history.back()"><i class="fas fa-arrow-left text-xl"></i></button>
-            <h2 class="font-bold text-lg text-red-600">Admin Controls</h2>
-        </div>
-    </div>
+    <header class="ad-nav">
+        <button onclick="history.back()" class="ad-back" aria-label="Back"><i class="fas fa-chevron-left"></i></button>
+        <div class="ad-navtitle"><b>Admin</b><span>SnapPages control center</span></div>
+        <span class="ad-live"><i></i>Live</span>
+    </header>
 
     <!-- Password Gate -->
     <div id="adminLoginGate" class="flex flex-col items-center justify-center p-6 gap-3" style="min-height: 80vh;">
@@ -33,7 +32,7 @@
 
     <!-- Admin Content -->
     <div id="adminPanelContent" class="hidden">
-        <div class="flex border-b bg-white sticky top-[60px] z-10">
+        <div class="ad-tabs">
             <button class="admin-tab-btn active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">Dashboard</button>
             <button class="admin-tab-btn" data-tab="manage" onclick="switchAdminTab('manage')">Manage</button>
             <button class="admin-tab-btn" data-tab="broadcast" onclick="switchAdminTab('broadcast')">Broadcast</button>
@@ -47,34 +46,27 @@
 
             <!-- DASHBOARD TAB -->
             <div id="admin-tab-dashboard" class="admin-tab-content active space-y-4">
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-white p-3 rounded-xl border text-center">
-                        <div class="text-xs text-gray-500 font-bold">Total Active Users</div>
-                        <div id="adminStatUsers" class="text-2xl font-bold">0</div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl border text-center">
-                        <div class="text-xs text-gray-500 font-bold">Total Posts</div>
-                        <div id="adminStatPosts" class="text-2xl font-bold">0</div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl border text-center">
-                        <div class="text-xs text-gray-500 font-bold">Total Channels</div>
-                        <div id="adminStatChannels" class="text-2xl font-bold">0</div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl border text-center">
-                        <div class="text-xs text-gray-500 font-bold">Total Reports</div>
-                        <div id="adminStatReports" class="text-2xl font-bold text-red-500">0</div>
-                    </div>
+                <div class="ad-tiles">
+                    <div class="ad-tile"><span class="ad-ic" style="--c:#0a84ff"><i class="fas fa-users"></i></span><b id="adminStatUsers">0</b><small>Active users</small></div>
+                    <div class="ad-tile"><span class="ad-ic" style="--c:#30d158"><i class="fas fa-newspaper"></i></span><b id="adminStatPosts">0</b><small>Posts</small></div>
+                    <div class="ad-tile"><span class="ad-ic" style="--c:#bf5af2"><i class="fas fa-tower-broadcast"></i></span><b id="adminStatChannels">0</b><small>Channels</small></div>
+                    <div class="ad-tile"><span class="ad-ic" style="--c:#ff453a"><i class="fas fa-flag"></i></span><b id="adminStatReports">0</b><small>Reports</small></div>
                 </div>
-                <div class="bg-white p-3 rounded-xl border">
-                    <div class="flex justify-between text-xs font-bold text-gray-500 mb-1"><span>Server State</span></div>
-                    <div class="flex justify-between text-sm">
-                        <span>RAM Used: <b id="adminStatRam">0 MB</b></span>
-                        <span>Uptime: <b id="adminStatUptime">0s</b></span>
+
+                <div class="ad-card">
+                    <div class="ad-chead">
+                        <div><h4>Activity</h4><p id="adChartSum">—</p></div>
+                        <div class="ad-seg" id="adRange"><button data-v="7">7D</button><button data-v="14" class="on">14D</button><button data-v="30">30D</button></div>
                     </div>
+                    <div class="ad-seg ad-seg2" id="adMetric"><button data-v="posts" class="on">Posts</button><button data-v="reels">Reels</button><button data-v="users">New users</button></div>
+                    <div id="adChart" class="ad-chart"></div>
                 </div>
-                <div class="bg-white p-3 rounded-xl border">
-                    <h4 class="font-bold text-sm mb-2">User Activity (Posts, last 7 days)</h4>
-                    <canvas id="adminActivityChart" height="160"></canvas>
+
+                <div class="ad-card">
+                    <h4 class="ad-h">Server</h4>
+                    <div class="ad-row"><span>Memory</span><b id="adminStatRam">0 MB</b></div>
+                    <div class="bar" style="margin:6px 0 12px"><i id="adRamBar"></i></div>
+                    <div class="ad-row"><span>Uptime</span><b id="adminStatUptime">0s</b></div>
                 </div>
             </div>
 
@@ -489,7 +481,7 @@
             return chartLoading;
         }
         async function loadAdminDashboard() {
-            const data = await adminFetch('/api/admin/dashboard');
+            const data = await adminFetch('/api/admin/dashboard', { days: adDays });
             if (!data || data.error) return;
             document.getElementById('adminStatUsers').innerText = data.totalUsers;
             document.getElementById('adminStatPosts').innerText = data.totalPosts;
@@ -500,17 +492,52 @@
             const uptimeM = Math.floor((data.uptimeSeconds % 3600) / 60);
             document.getElementById('adminStatUptime').innerText = `${uptimeH}h ${uptimeM}m`;
 
-            try { await loadChartLib(); } catch (e) { return; }
-            const ctx = document.getElementById('adminActivityChart');
-            if (adminActivityChartInstance) adminActivityChartInstance.destroy();
-            adminActivityChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.activity.labels.map(l => l.slice(5)),
-                    datasets: [{ label: 'Posts', data: data.activity.counts, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', fill: true, tension: 0.3 }]
-                },
-                options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-            });
+            const ram = Math.min(100, Math.round((data.ramUsedMB / 512) * 100));
+            const rb = document.getElementById('adRamBar'); rb.style.width = ram + '%'; rb.className = ram > 85 ? 'bad' : ram > 65 ? 'warn' : '';
+            adSeries = data.series || { labels: data.activity.labels, posts: data.activity.counts, reels: [], users: [] };
+            drawAdChart();
+        }
+
+        // ---- Activity chart: dependency-free SVG (smooth area line, grid, touch tooltip) ----
+        let adSeries = null, adMetric = 'posts', adDays = 14;
+        const AD_COL = { posts: '#30d158', reels: '#bf5af2', users: '#0a84ff' };
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('#adRange button, #adMetric button'); if (!b) return;
+            const isRange = !!b.closest('#adRange');
+            b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+            if (isRange) { adDays = parseInt(b.dataset.v); loadAdminDashboard(); } else { adMetric = b.dataset.v; drawAdChart(); }
+        });
+        function drawAdChart() {
+            const box = document.getElementById('adChart'); if (!box || !adSeries) return;
+            const ys = adSeries[adMetric] || [], xs = adSeries.labels || [], n = ys.length;
+            const total = ys.reduce((a, b) => a + b, 0), half = Math.floor(n / 2);
+            const prev = ys.slice(0, half).reduce((a, b) => a + b, 0), cur = ys.slice(half).reduce((a, b) => a + b, 0);
+            const delta = prev ? Math.round(((cur - prev) / prev) * 100) : (cur ? 100 : 0);
+            document.getElementById('adChartSum').innerHTML = `<b>${total}</b> in ${n} days · <span style="color:${delta >= 0 ? '#30d158' : '#ff453a'}">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span>`;
+            if (!n) { box.innerHTML = '<p class="text-xs text-gray-400 text-center py-8">No data yet</p>'; return; }
+            const W = 340, H = 170, L = 26, R = 8, T = 12, B = 22, col = AD_COL[adMetric];
+            const max = Math.max(4, ...ys), top = Math.ceil(max / 4) * 4;
+            const X = i => L + (n === 1 ? (W - L - R) / 2 : i * (W - L - R) / (n - 1)), Y = v => T + (1 - v / top) * (H - T - B);
+            let d = `M${X(0)},${Y(ys[0])}`;
+            for (let i = 1; i < n; i++) { const cx = (X(i - 1) + X(i)) / 2; d += ` C${cx},${Y(ys[i - 1])} ${cx},${Y(ys[i])} ${X(i)},${Y(ys[i])}`; }
+            const area = `${d} L${X(n - 1)},${H - B} L${X(0)},${H - B} Z`;
+            let grid = '';
+            for (let g = 0; g <= 4; g++) { const v = top / 4 * g, y = Y(v); grid += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="gl"/><text x="${L - 5}" y="${y + 3}" text-anchor="end" class="gt">${Math.round(v)}</text>`; }
+            const step = n > 20 ? 5 : n > 10 ? 3 : 1;
+            let xl = ''; xs.forEach((l, i) => { if (i % step === 0 || (i === n - 1 && (n - 1) % step >= 2)) xl += `<text x="${X(i)}" y="${H - 6}" text-anchor="middle" class="gt">${l.slice(8)}/${l.slice(5, 7)}</text>`; });
+            box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="ad-svg"><defs><linearGradient id="adg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".35"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+                ${grid}${xl}<path d="${area}" fill="url(#adg)" class="ad-area"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linecap="round" class="ad-line" pathLength="1"/>
+                <line id="adCur" y1="${T}" y2="${H - B}" class="cur" style="opacity:0"/><circle id="adDot" r="4.5" fill="${col}" stroke="var(--card)" stroke-width="2" style="opacity:0"/></svg><div id="adTip" class="ad-tip"></div>`;
+            const svg = box.querySelector('svg'), tip = box.querySelector('#adTip'), curL = svg.querySelector('#adCur'), dot = svg.querySelector('#adDot');
+            const move = (ev) => {
+                const r = svg.getBoundingClientRect(), px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left) / r.width * W;
+                let i = Math.round((px - L) / ((W - L - R) / Math.max(n - 1, 1))); i = Math.max(0, Math.min(n - 1, i));
+                curL.setAttribute('x1', X(i)); curL.setAttribute('x2', X(i)); curL.style.opacity = 1; dot.setAttribute('cx', X(i)); dot.setAttribute('cy', Y(ys[i])); dot.style.opacity = 1;
+                tip.innerHTML = `<b>${ys[i]}</b> ${adMetric === 'users' ? 'new users' : adMetric}<small>${xs[i]}</small>`; tip.style.opacity = 1;
+                tip.style.left = Math.max(40, Math.min(r.width - 40, X(i) / W * r.width)) + 'px';
+            };
+            const end = () => { curL.style.opacity = 0; dot.style.opacity = 0; tip.style.opacity = 0; };
+            svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move); svg.addEventListener('pointerleave', end); svg.addEventListener('pointerup', () => setTimeout(end, 1200));
         }
 
         async function loadAdminReports() {

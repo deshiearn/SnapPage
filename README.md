@@ -202,3 +202,6 @@ Create Post and New Reel now follow the Telegram iOS look: nav bar (Cancel · ti
 - Deposit check now uses `GET /invoice?invoiceId=` (current API) with older paths as fallbacks; unpaid invoices are re-checked every minute server-side, so Stars are credited even if the app is closed.
 - **Auto payout**: a withdrawal is sent immediately to the user's xRocket account by Telegram ID (`POST /payouts`, legacy `/app/transfer`, idempotent id `payout-<id>`). On failure it stays pending, is retried every minute for 24 h, and Admin → Stars has "Send via xRocket". Toggle: Admin → Stars → "Auto payout". Keep enough balance in the xRocket app wallet.
 - Reels never auto-advance while any sheet/picker is open; paid reel lock page + unlock sheet restyled like Telegram paid media.
+
+### Admin panel v2
+iOS-style admin: translucent header, pill tabs, icon stat tiles, dependency-free SVG activity chart (Posts / Reels / New users, 7/14/30 days, touch tooltip). `/api/admin/dashboard` accepts `{days}` and returns `series`.
