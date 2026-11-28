@@ -714,6 +714,31 @@ app.get('/api/channelPhoto/:id', async (req, res) => {
         await proxyTelegramFile(req, res, c.fid, 'image');
     } catch (e) { console.error('channelPhoto failed:', e.message || e); if (!res.headersSent) res.status(404).end(); }
 });
+// A channel that already has posts in the app but is no longer in any user's list (lost registration) is re-attached
+// to the app user who administers it on Telegram (creator first). Never touches channels that never had content.
+async function healChannel(channelId) {
+    try {
+        channelId = String(channelId);
+        const { data: had } = await supabase.from('posts').select('id').eq('author_id', channelId).eq('type', 'channel').limit(1);
+        const { data: hadV } = (had && had.length) ? { data: [1] } : await supabase.from('videos').select('id').eq('author_id', channelId).eq('type', 'channel').limit(1);
+        if (!(had && had.length) && !(hadV && hadV.length)) return false;
+        const { data: banned } = await supabase.from('banned_channels').select('channel_id').eq('channel_id', channelId).maybeSingle();
+        if (banned) return false;
+        const chat = await bot.telegram.getChat(channelId);
+        const admins = await bot.telegram.getChatAdministrators(channelId);
+        const ids = admins.filter(a => !a.user.is_bot).sort((a, b) => (a.status === 'creator' ? -1 : 0) - (b.status === 'creator' ? -1 : 0)).map(a => String(a.user.id));
+        if (!ids.length) return false;
+        const { data: us } = await supabase.from('users').select('tg_id, channels').in('tg_id', ids);
+        const owner = ids.map(id => (us || []).find(u => String(u.tg_id) === id)).find(Boolean);
+        if (!owner) return false;
+        const channels = Array.isArray(owner.channels) ? owner.channels.slice() : [];
+        if (!channels.some(c => String(c.id) === channelId)) channels.push({ id: channelId, name: chat.title, username: chat.username || 'private', photo: channelPhotoUrl(channelId, chat.photo ? chat.photo.small_file_unique_id : 'np'), verified: false });
+        await supabase.from('users').update({ channels }).eq('tg_id', owner.tg_id);
+        channelMapCache.exp = 0; invalidateAuthorCaches();
+        console.log(`healChannel: re-attached ${channelId} to ${owner.tg_id}`);
+        return true;
+    } catch (e) { console.error('healChannel failed:', channelId, e.message || e); return false; }
+}
 async function refreshChannelInfo(channelId) {
     try {
         const chat = await bot.telegram.getChat(channelId);
@@ -750,6 +775,13 @@ async function syncChannels(force) {
         const map = await getChannelMap();
         const ids = [...map.keys()].slice(0, 40);
         for (const id of ids) { await refreshChannelInfo(id); await sleep(60); }
+        // channels that have posts but lost their owner link → re-attach (see healChannel)
+        try {
+            const { data: rp } = await supabase.from('posts').select('author_id').eq('type', 'channel').order('created_at', { ascending: false }).limit(300);
+            const { data: rv } = await supabase.from('videos').select('author_id').eq('type', 'channel').order('created_at', { ascending: false }).limit(100);
+            const orphans = [...new Set([...(rp || []), ...(rv || [])].map(r => String(r.author_id)))].filter(id => !map.has(id)).slice(0, 10);
+            for (const id of orphans) { await healChannel(id); await sleep(100); }
+        } catch (e) { console.error('orphan channel check failed:', e.message || e); }
 
         const storage = await getStorageChannel();
         if (!storage) return;
@@ -865,7 +897,7 @@ bot.on('channel_post', async (ctx) => {
     if (bannedChannel) return;
 
     const { data: users, error } = await supabase.from('users').select('tg_id, channels');
-    if (error) return;
+    if (error) { console.error('channel_post: users query failed:', error.message || error); return; }
 
     let isRegistered = false;
     let registeredOwner = null;
@@ -877,6 +909,11 @@ bot.on('channel_post', async (ctx) => {
             }
         }
     });
+
+    if (!isRegistered && await healChannel(channelId)) {
+        const { data: again } = await supabase.from('users').select('tg_id, channels').not('channels', 'is', null);
+        (again || []).forEach(u => { if (Array.isArray(u.channels) && u.channels.some(c => String(c.id) === String(channelId))) { isRegistered = true; registeredOwner = u; } });
+    }
 
     // Self-heal stale cached channel info (e.g. it was private when added, is public now) —
     // Telegram includes the channel's current username/title on every channel_post.
